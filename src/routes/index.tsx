@@ -38,7 +38,8 @@ function Index() {
       setResult(data as PipelineResponse);
       setShowInput(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed");
+      console.error("Analysis failed:", e);
+      setError("Analysis failed. Please retry.");
     } finally {
       setLoading(false);
     }
