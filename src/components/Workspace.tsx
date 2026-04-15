@@ -299,6 +299,93 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     { key: "signals", label: "Signals" },
   ];
 
+  type TopTab = "structure" | "text" | "signals" | "origin";
+
+  const topTabs: { key: TopTab; label: string }[] = [
+    { key: "structure", label: "Structure" },
+    { key: "text", label: "Text" },
+    { key: "signals", label: "Signals" },
+    { key: "origin", label: "Origin" },
+  ];
+
+  const [mobileTab, setMobileTab] = useState<TopTab>("structure");
+
+  // Node list used in both mobile Structure tab and desktop left panel
+  const nodeList = (
+    <div className="p-1.5 space-y-0.5">
+      {allNodes.map((node, idx) => {
+        const isSelected = node.node_id === selectedNodeId;
+        const isBlockedNode = node.blocked_flags.length > 0;
+        const isPipelineSelected = selectedIds.has(node.node_id);
+        return (
+          <button
+            key={node.node_id}
+            type="button"
+            onClick={() => { setSelectedNodeId(node.node_id); setShowOrigin(false); }}
+            className={`w-full text-left rounded-md px-3 py-2 transition-colors group ${
+              isSelected
+                ? "bg-gold/10 border border-gold/30"
+                : "hover:bg-surface-raised border border-transparent"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-mono ${isSelected ? "text-gold" : "text-muted-foreground"}`}>
+                {String(idx + 1).padStart(2, "0")}
+              </span>
+              <span className={`flex-1 text-xs leading-snug line-clamp-2 ${
+                isSelected ? "text-foreground" : "text-secondary-foreground"
+              }`}>
+                {node.source_text.slice(0, 80)}{node.source_text.length > 80 ? "…" : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 mt-1 ml-6">
+              {isBlockedNode && (
+                <span className="text-[9px] text-destructive font-medium">BLOCKED</span>
+              )}
+              {!isBlockedNode && isPipelineSelected && (
+                <span className="text-[9px] text-gold-muted font-medium">SELECTED</span>
+              )}
+              {!isBlockedNode && !isPipelineSelected && (
+                <span className="text-[9px] text-muted-foreground">EXCLUDED</span>
+              )}
+              {node.tags.slice(0, 2).map(t => (
+                <span key={t} className="text-[9px] text-muted-foreground bg-secondary rounded px-1">{t}</span>
+              ))}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // Detail content for a selected node given a detail tab
+  const renderNodeDetail = (tab: DetailTab) => {
+    if (!currentNode) {
+      return (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          Select a node in the Structure tab first
+        </div>
+      );
+    }
+    return (
+      <div className="p-4 pb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
+        </div>
+        {tab === "structure" && <StructureTab node={currentNode} />}
+        {tab === "text" && <TextTab node={currentNode} />}
+        {tab === "signals" && (
+          <SignalsTab
+            node={currentNode}
+            verification={verificationMap.get(currentNode.node_id)}
+            selectionStatus={selectedIds.has(currentNode.node_id) ? "selected" : "excluded"}
+          />
+        )}
+        <DebugJson data={currentNode} />
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col md:h-full">
       {/* Summary bar */}
@@ -335,63 +422,57 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         </div>
       )}
 
-      {/* Desktop: side-by-side | Mobile: stacked */}
-      <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+      {/* ─── MOBILE: top-level tabs replace entire content ─── */}
+      <div className="md:hidden">
+        {/* Tab bar */}
+        <div className="flex border-b border-border bg-surface/30">
+          {topTabs.map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setMobileTab(tab.key)}
+              className={`flex-1 px-2 py-2.5 text-xs font-medium transition-colors relative ${
+                mobileTab === tab.key
+                  ? "text-gold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {mobileTab === tab.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold rounded-t" />
+              )}
+            </button>
+          ))}
+        </div>
 
+        {/* Tab content — full page, no inner scroll */}
+        {mobileTab === "structure" && nodeList}
+        {mobileTab === "text" && renderNodeDetail("text")}
+        {mobileTab === "signals" && renderNodeDetail("signals")}
+        {mobileTab === "origin" && (
+          <div className="p-4 pb-8">
+            <div className="text-sm font-medium text-foreground mb-4">Origin Signals</div>
+            <OriginPanel origin={data.origin} />
+            <DebugJson data={data.origin} />
+          </div>
+        )}
+      </div>
+
+      {/* ─── DESKTOP: side-by-side layout ─── */}
+      <div className="hidden md:flex flex-1 flex-row overflow-hidden">
         {/* Left: Structure tree */}
-        <div className="md:w-72 lg:w-80 border-b md:border-b-0 md:border-r border-border bg-surface/50 md:overflow-y-auto shrink-0">
+        <div className="w-72 lg:w-80 border-r border-border bg-surface/50 overflow-y-auto shrink-0">
           <div className="px-3 py-2 border-b border-border/50">
             <span className="text-[10px] font-semibold text-gold-muted uppercase tracking-widest">Structure</span>
           </div>
-          <div className="p-1.5 space-y-0.5">
-            {allNodes.map((node, idx) => {
-              const isSelected = node.node_id === selectedNodeId;
-              const isBlockedNode = node.blocked_flags.length > 0;
-              const isPipelineSelected = selectedIds.has(node.node_id);
-              return (
-                <button
-                  key={node.node_id}
-                  type="button"
-                  onClick={() => { setSelectedNodeId(node.node_id); setShowOrigin(false); }}
-                  className={`w-full text-left rounded-md px-3 py-2 transition-colors group ${
-                    isSelected
-                      ? "bg-gold/10 border border-gold/30"
-                      : "hover:bg-surface-raised border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-mono ${isSelected ? "text-gold" : "text-muted-foreground"}`}>
-                      {String(idx + 1).padStart(2, "0")}
-                    </span>
-                    <span className={`flex-1 text-xs leading-snug line-clamp-2 ${
-                      isSelected ? "text-foreground" : "text-secondary-foreground"
-                    }`}>
-                      {node.source_text.slice(0, 80)}{node.source_text.length > 80 ? "…" : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-1 ml-6">
-                    {isBlockedNode && (
-                      <span className="text-[9px] text-destructive font-medium">BLOCKED</span>
-                    )}
-                    {!isBlockedNode && isPipelineSelected && (
-                      <span className="text-[9px] text-gold-muted font-medium">SELECTED</span>
-                    )}
-                    {!isBlockedNode && !isPipelineSelected && (
-                      <span className="text-[9px] text-muted-foreground">EXCLUDED</span>
-                    )}
-                    {node.tags.slice(0, 2).map(t => (
-                      <span key={t} className="text-[9px] text-muted-foreground bg-secondary rounded px-1">{t}</span>
-                    ))}
-                  </div>
-                </button>
-              );
-            })}
+          {nodeList}
 
-            {/* Origin row */}
+          {/* Origin row */}
+          <div className="p-1.5">
             <button
               type="button"
               onClick={() => { setSelectedNodeId(null); setShowOrigin(true); }}
-              className={`w-full text-left rounded-md px-3 py-2 mt-2 transition-colors border ${
+              className={`w-full text-left rounded-md px-3 py-2 mt-1 transition-colors border ${
                 showOrigin
                   ? "bg-gold/10 border-gold/30"
                   : "hover:bg-surface-raised border-transparent"
@@ -413,17 +494,17 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         </div>
 
         {/* Right: Detail panel */}
-        <div className="flex-1 flex flex-col md:overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {showOrigin ? (
-            <div className="p-4 md:flex-1 md:overflow-y-auto">
+            <div className="p-4 flex-1 overflow-y-auto">
               <div className="text-sm font-medium text-foreground mb-4">Origin Signals</div>
               <OriginPanel origin={data.origin} />
               <DebugJson data={data.origin} />
             </div>
           ) : currentNode ? (
             <>
-              {/* Tabs */}
-              <div className="flex border-b border-border bg-surface/30 sticky top-0 z-10 md:static">
+              {/* Desktop detail tabs */}
+              <div className="flex border-b border-border bg-surface/30">
                 {tabs.map(tab => (
                   <button
                     key={tab.key}
@@ -446,9 +527,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                   <span className="text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
                 </div>
               </div>
-
-              {/* Tab content */}
-              <div className="p-4 pb-8 md:flex-1 md:overflow-y-auto">
+              <div className="p-4 pb-8 flex-1 overflow-y-auto">
                 {activeTab === "structure" && <StructureTab node={currentNode} />}
                 {activeTab === "text" && <TextTab node={currentNode} />}
                 {activeTab === "signals" && (
@@ -470,4 +549,5 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       </div>
     </div>
   );
+
 }
