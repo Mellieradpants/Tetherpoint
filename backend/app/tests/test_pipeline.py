@@ -529,12 +529,12 @@ class TestComplexHTMLIntegration:
 
     # -- Verification: court/PACER routing --------------------------------
 
-    def test_court_pacer_routing(self):
-        """The Supreme Court paragraph should route to PACER or Supreme Court opinions."""
+    def test_court_routing(self):
+        """The Supreme Court paragraph should route to court record systems."""
         all_systems = []
         for nr in self.result.verification.node_results:
             all_systems.extend(nr.expected_record_systems)
-        assert any("PACER" in s or "Supreme Court" in s for s in all_systems)
+        assert any(s in ("CourtListener", "GovInfo", "PACER", "Supreme Court opinions", "Westlaw") for s in all_systems)
 
     # -- Verification: multiple assertion types detected ------------------
 
