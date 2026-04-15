@@ -82,8 +82,29 @@ paths:
                     type: string
                     enum: [ok]
 
+  securitySchemes:
+    analyzeSecret:
+      type: apiKey
+      in: header
+      name: x-analyze-secret
+      description: >
+        Shared secret for server-to-backend authentication.
+        All /analyze requests must include this header.
+
 components:
   schemas:
+
+    # -----------------------------------------------------------------------
+    # Error response (401, 400, 413, 429)
+    # -----------------------------------------------------------------------
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message
 
     # -----------------------------------------------------------------------
     # Request
