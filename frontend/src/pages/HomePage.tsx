@@ -1,55 +1,101 @@
-import { useState } from "react";
-import { InputForm } from "../components/InputForm";
-import { ResultsView } from "../components/ResultsView";
-import { AnalyzeRequest, PipelineResponse } from "../types";
+import * as React from "react";
 
 export function HomePage() {
-  const [result, setResult] = useState<PipelineResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [content, setContent] = React.useState("");
+  const [result, setResult] = React.useState<unknown>(null);
+  const [loading, setLoading] = React.useState(false);
 
-  const handleSubmit = async (request: AnalyzeRequest) => {
+  async function handleAnalyze() {
+    if (!content.trim()) return;
+
     setLoading(true);
-    setError(null);
     setResult(null);
+
     try {
-  const response = await fetch(
-  "https://anchored-flow-stack.onrender.com/analyze",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-analyze-secret": "Apple_Banana_Bridge_123",
-    },
-    body: JSON.stringify(request),
-  }
-);    
+      const response = await fetch(
+        "https://anchored-flow-stack.onrender.com/analyze",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-analyze-secret": "Apple_Banana_Bridge!123",
+          },
+          body: JSON.stringify({
+            content,
+            content_type: "text",
+            options: {
+              run_meaning: true,
+              run_origin: true,
+              run_verification: true,
+            },
+          }),
+        }
+      );
 
-if (!response.ok) {
-  throw new Error("Analysis failed");
-}
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
 
-const data = await response.json();
+      const data = await response.json();
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      console.error(err);
+      setResult({ error: "Failed to analyze" });
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="home-page">
-      <header>
-        <h1>Tetherpoint</h1>
-        <p className="subtitle">Source-anchored parsing stack</p>
-      </header>
+    <div
+      style={{
+        maxWidth: "700px",
+        margin: "0 auto",
+        padding: "40px 20px",
+        fontFamily: "system-ui",
+      }}
+    >
+      <h1 style={{ marginBottom: "20px" }}>Tetherpoint Analyzer</h1>
 
-      <InputForm onSubmit={handleSubmit} loading={loading} />
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Paste text here..."
+        style={{
+          width: "100%",
+          height: "150px",
+          padding: "10px",
+          fontSize: "14px",
+          marginBottom: "20px",
+        }}
+      />
 
-      {error && <div className="error-banner">{error}</div>}
+      <button
+        type="button"
+        onClick={handleAnalyze}
+        style={{
+          padding: "10px 20px",
+          fontSize: "14px",
+          cursor: "pointer",
+        }}
+      >
+        {loading ? "Analyzing..." : "Analyze"}
+      </button>
 
-      {result && <ResultsView data={result} />}
+      {result !== null && (
+        <pre
+          style={{
+            marginTop: "20px",
+            background: "#111",
+            color: "#0f0",
+            padding: "15px",
+            overflowX: "auto",
+            fontSize: "12px",
+          }}
+        >
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
