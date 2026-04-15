@@ -32,12 +32,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PipelineResponse"
+        "400":
+          description: Invalid input (empty content)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid x-analyze-secret header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Content exceeds 500 KB limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Validation error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ValidationError"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+        - analyzeSecret: []
 
   /health:
     get:
