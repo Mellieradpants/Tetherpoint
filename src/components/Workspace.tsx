@@ -544,6 +544,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {/* Tab content — full page, no inner scroll */}
         {mobileTab === "structure" && nodeList}
         {mobileTab === "text" && renderNodeDetail("text")}
+        {mobileTab === "meaning" && renderNodeDetail("meaning")}
         {mobileTab === "signals" && renderNodeDetail("signals")}
         {mobileTab === "origin" && (
           <div className="px-5 py-6 pb-12">
