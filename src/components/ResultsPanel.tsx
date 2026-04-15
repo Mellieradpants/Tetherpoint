@@ -30,12 +30,26 @@ interface VerificationNode {
   verification_notes: string;
 }
 
+interface OriginSignal {
+  signal: string;
+  value: string;
+  category: string | null;
+}
+
+interface OriginData {
+  status: string;
+  origin_identity_signals: OriginSignal[];
+  origin_metadata_signals: OriginSignal[];
+  distribution_signals: OriginSignal[];
+  evidence_trace: unknown[];
+}
+
 interface PipelineResponse {
   input: Record<string, unknown>;
   structure: { nodes: StructureNode[]; node_count: number };
   selection: { selected_nodes: StructureNode[]; excluded_nodes: StructureNode[]; selection_log: string[] };
   meaning: Record<string, unknown>;
-  origin: Record<string, unknown>;
+  origin: OriginData;
   verification: { status: string; node_results: VerificationNode[] };
   output: Record<string, unknown>;
   errors: Array<Record<string, unknown>>;
