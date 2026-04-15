@@ -423,6 +423,14 @@ export function Workspace({ data }: { data: PipelineResponse }) {
   const currentNode = allNodes.find(n => n.node_id === selectedNodeId) || null;
   const outputData = data.output as Record<string, unknown>;
 
+  const TAB_TEST_IDS: Record<string, string> = {
+    structure: "tab-structure",
+    text: "tab-text",
+    meaning: "tab-meaning",
+    signals: "tab-verification",
+    origin: "tab-origin",
+  };
+
   const tabs: { key: DetailTab; label: string }[] = [
     { key: "structure", label: "Structure" },
     { key: "text", label: "Text" },
@@ -561,11 +569,16 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       {/* ─── MOBILE: top-level tabs replace entire content ─── */}
       <div className="md:hidden">
         {/* Tab bar */}
-        <div className="flex border-b-2 border-border bg-surface/50 shadow-sm">
+        <div role="tablist" aria-label="Analysis tabs" className="flex border-b-2 border-border bg-surface/50 shadow-sm">
           {topTabs.map(tab => (
             <button
               key={tab.key}
               type="button"
+              role="tab"
+              id={`mobile-${TAB_TEST_IDS[tab.key]}`}
+              aria-selected={mobileTab === tab.key}
+              aria-controls={`mobile-tabpanel-${tab.key}`}
+              data-testid={TAB_TEST_IDS[tab.key]}
               onClick={() => setMobileTab(tab.key)}
               className={`flex-1 px-2 py-3 text-sm font-medium transition-colors relative ${
                 mobileTab === tab.key
@@ -582,6 +595,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         </div>
 
         {/* Tab content — full page, no inner scroll */}
+        <div role="tabpanel" id={`mobile-tabpanel-${mobileTab}`} aria-labelledby={`mobile-${TAB_TEST_IDS[mobileTab]}`} data-testid={`tabpanel-${mobileTab}`}>
         {mobileTab === "structure" && nodeList}
         {mobileTab === "text" && renderNodeDetail("text")}
         {mobileTab === "meaning" && renderNodeDetail("meaning")}
@@ -593,6 +607,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             <DebugJson data={data.origin} />
           </div>
         )}
+        </div>
       </div>
 
       {/* ─── DESKTOP: side-by-side layout ─── */}
@@ -641,11 +656,16 @@ export function Workspace({ data }: { data: PipelineResponse }) {
           ) : currentNode ? (
             <>
               {/* Desktop detail tabs */}
-              <div className="flex border-b border-border bg-surface/30">
+              <div role="tablist" aria-label="Node detail tabs" className="flex border-b border-border bg-surface/30">
                 {tabs.map(tab => (
                   <button
                     key={tab.key}
                     type="button"
+                    role="tab"
+                    id={`desktop-${TAB_TEST_IDS[tab.key]}`}
+                    aria-selected={activeTab === tab.key}
+                    aria-controls={`desktop-tabpanel-${tab.key}`}
+                    data-testid={TAB_TEST_IDS[tab.key]}
                     onClick={() => setActiveTab(tab.key)}
                     className={`px-4 py-2.5 text-xs font-medium transition-colors relative ${
                       activeTab === tab.key
@@ -664,7 +684,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                   <span className="text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
                 </div>
               </div>
-              <div className="p-4 pb-8 flex-1 overflow-y-auto">
+              <div role="tabpanel" id={`desktop-tabpanel-${activeTab}`} aria-labelledby={`desktop-${TAB_TEST_IDS[activeTab]}`} data-testid={`tabpanel-${activeTab}`} className="p-4 pb-8 flex-1 overflow-y-auto">
                 {activeTab === "structure" && <StructureTab node={currentNode} />}
                 {activeTab === "text" && <TextTab node={currentNode} />}
                 {activeTab === "meaning" && <MeaningTab node={currentNode} meaning={data.meaning} />}
