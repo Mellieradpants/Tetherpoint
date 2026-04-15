@@ -29,14 +29,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Tetherpoint" },
+      { title: "Structured Parsing Engine" },
       { name: "description", content: "Source-anchored parsing stack. API-first." },
       { name: "author", content: "Tetherpoint" },
-      { property: "og:title", content: "Tetherpoint" },
+      { property: "og:title", content: "Structured Parsing Engine" },
       { property: "og:description", content: "Source-anchored parsing stack. API-first." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Structured Parsing Engine" },
+      { name: "twitter:description", content: "Source-anchored parsing stack. API-first." },
     ],
     links: [
       {
