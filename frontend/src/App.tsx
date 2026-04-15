@@ -4,4 +4,4 @@ function App() {
   return <HomePage />;
 }
 
-export default A
+export default App;
