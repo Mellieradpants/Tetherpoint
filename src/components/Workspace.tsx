@@ -32,8 +32,9 @@ interface MeaningLens {
 
 interface MeaningNodeResult {
   node_id: string;
-  source_text: string;
-  lenses: MeaningLens[];
+  source_text?: string;
+  summary?: string;
+  lenses: (MeaningLens | string)[];
 }
 
 interface MeaningData {
@@ -311,8 +312,13 @@ function MeaningTab({ node, meaning }: { node: StructureNode; meaning: MeaningDa
     );
   }
 
-  const detected = nodeResult.lenses.filter(l => l.detected);
-  const notDetected = nodeResult.lenses.filter(l => !l.detected);
+  // Normalize lenses: API may return string[] or MeaningLens[]
+  const normalizedLenses: MeaningLens[] = nodeResult.lenses.map(l =>
+    typeof l === "string" ? { lens: l, detected: true, detail: null } : l
+  );
+
+  const detected = normalizedLenses.filter(l => l.detected);
+  const notDetected = normalizedLenses.filter(l => !l.detected);
 
   return (
     <div className="space-y-4">
@@ -341,6 +347,11 @@ function MeaningTab({ node, meaning }: { node: StructureNode; meaning: MeaningDa
       )}
       {detected.length === 0 && notDetected.length === 0 && (
         <div className="text-sm text-muted-foreground italic">No lenses returned.</div>
+      )}
+      {nodeResult.summary && (
+        <FieldGroup title="Summary">
+          <div className="text-sm text-foreground leading-relaxed">{nodeResult.summary}</div>
+        </FieldGroup>
       )}
     </div>
   );
