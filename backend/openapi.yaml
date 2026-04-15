@@ -376,18 +376,18 @@ components:
         assertion_detected:
           type: boolean
         assertion_type:
-          type: string
-          nullable: true
-          enum:
-            - legal_legislative
-            - court_case_law
-            - government_publication
-            - scientific_biomedical
-            - statistical_public_data
-            - corporate_financial
-            - infrastructure_energy
-            - historical_archival
-            - null
+          oneOf:
+            - type: string
+              enum:
+                - legal_legislative
+                - court_case_law
+                - government_publication
+                - scientific_biomedical
+                - statistical_public_data
+                - corporate_financial
+                - infrastructure_energy
+                - historical_archival
+            - type: "null"
           description: Classification of the assertion if detected
         verification_path_available:
           type: boolean
@@ -402,8 +402,7 @@ components:
             Examples: Congress.gov, Federal Register, GovInfo, CourtListener,
             PubMed, SEC EDGAR, Census, EIA, FERC, NERC, JSTOR, National Archives
         verification_notes:
-          type: string
-          nullable: true
+          type: ["string", "null"]
 
     VerificationResult:
       type: object
