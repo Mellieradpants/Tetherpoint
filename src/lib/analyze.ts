@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader, getRequestHeaders } from "@tanstack/react-start/server";
+import { getRequestHeader } from "@tanstack/react-start/server";
 import { enforceAnalyzeSecurity } from "./analyze-security.server";
 import { runMeaningLayer } from "./meaning.server";
 
@@ -200,16 +200,11 @@ export const analyzePipeline = createServerFn({ method: "POST" })
       clientIp = forwarded?.split(",")[0].trim() ?? "unknown";
     } catch {}
 
-    const authHeader = (() => { try { return getRequestHeader("authorization") ?? undefined; } catch { return undefined; } })();
-    const secretHeader = (() => { try { return getRequestHeader("x-analyze-secret") ?? undefined; } catch { return undefined; } })();
-
     const security = enforceAnalyzeSecurity({
       content,
       content_type: contentType,
       options,
       clientIp,
-      authHeader,
-      analyzeSecretHeader: secretHeader,
     });
 
     if (security.reject) {

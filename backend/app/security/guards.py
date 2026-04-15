@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 
@@ -26,24 +27,18 @@ def get_client_ip(request: Request) -> str:
 def is_meaning_authorized(request: Request) -> bool:
     """Check if the caller is authorized to run the Meaning (AI) layer.
 
-    Authorized if:
-    - A server-side ANALYZE_SECRET is set AND the request provides it via
-      X-Analyze-Secret header, OR
-    - An Authorization bearer token is present (session-based auth)
+    Authorized ONLY if the request provides the correct x-analyze-secret header.
+    No bearer token fallback — all requests must come through the server function.
     """
     server_secret = os.environ.get("ANALYZE_SECRET", "")
+    if not server_secret:
+        return False
 
-    if server_secret:
-        client_secret = request.headers.get("x-analyze-secret", "")
-        if client_secret == server_secret:
-            return True
+    client_secret = request.headers.get("x-analyze-secret", "")
+    if not client_secret:
+        return False
 
-    # Bearer token: validate against ANALYZE_SECRET if configured
-    auth_header = request.headers.get("authorization", "")
-    if server_secret and auth_header == f"Bearer {server_secret}":
-        return True
-
-    return False
+    return hmac.compare_digest(client_secret, server_secret)
 
 
 def enforce_security(analyze_req: AnalyzeRequest, request: Request) -> AnalyzeRequest:
@@ -52,6 +47,14 @@ def enforce_security(analyze_req: AnalyzeRequest, request: Request) -> AnalyzeRe
 
     client_ip = get_client_ip(request)
     content_len = len(analyze_req.content)
+
+    # --- 0. Require x-analyze-secret for ALL requests ---
+    server_secret = os.environ.get("ANALYZE_SECRET", "")
+    if server_secret:
+        client_secret = request.headers.get("x-analyze-secret", "")
+        if not client_secret or not hmac.compare_digest(client_secret, server_secret):
+            logger.warning("Rejected unauthorized request from %s", client_ip)
+            raise HTTPException(status_code=401, detail="unauthorized")
 
     # --- 1. Empty content ---
     if not analyze_req.content or not analyze_req.content.strip():
@@ -70,17 +73,9 @@ def enforce_security(analyze_req: AnalyzeRequest, request: Request) -> AnalyzeRe
         )
 
     # --- 3. Meaning authorization ---
+    # If we got here, the secret is valid — meaning is authorized
     wants_meaning = analyze_req.options.run_meaning
-    meaning_allowed = False
-
-    if wants_meaning:
-        meaning_allowed = is_meaning_authorized(request)
-        if not meaning_allowed:
-            logger.info(
-                "Meaning blocked for unauthorized caller %s — forcing skip",
-                client_ip,
-            )
-            analyze_req.options.run_meaning = False
+    meaning_allowed = wants_meaning
 
     # --- 4. Rate limiting ---
     rate_result = rate_limiter.check(client_ip, wants_meaning and meaning_allowed)
@@ -88,7 +83,7 @@ def enforce_security(analyze_req: AnalyzeRequest, request: Request) -> AnalyzeRe
         logger.warning("Rate limited %s: %s", client_ip, rate_result)
         raise HTTPException(status_code=429, detail=rate_result)
 
-    # --- 5. Security log ---
+    # --- 5. Security log (do NOT log the secret) ---
     logger.info(
         "analyze request ip=%s size=%d meaning_requested=%s meaning_allowed=%s content_type=%s",
         client_ip,

@@ -1,6 +1,8 @@
 /**
  * Security guards for the analyze pipeline (server-only).
- * Ported from backend/app/security/guards.py.
+ * The server function is the trusted layer — meaning is authorized when
+ * ANALYZE_SECRET is configured (the server itself is trusted).
+ * No bearer token or client-supplied auth paths.
  */
 
 const MAX_CONTENT_LENGTH = 500_000;
@@ -59,8 +61,6 @@ export function enforceAnalyzeSecurity(input: {
   content_type: string;
   options: { run_meaning: boolean; run_origin: boolean; run_verification: boolean };
   clientIp?: string;
-  authHeader?: string;
-  analyzeSecretHeader?: string;
 }): SecurityCheckResult {
   const clientIp = input.clientIp ?? "unknown";
   const contentLen = input.content.length;
@@ -97,34 +97,17 @@ export function enforceAnalyzeSecurity(input: {
 
   // 4. Meaning authorization
   // The server function IS the trusted backend. If ANALYZE_SECRET is configured,
-  // the server itself is authorized to run meaning (no need for the browser to
-  // forward the secret). Client-supplied header or bearer token also work.
+  // the server is authorized to run meaning. No client auth paths.
   let meaningAllowed = false;
   if (input.options.run_meaning) {
     const serverSecret = process.env.ANALYZE_SECRET ?? "";
-
-    // Server-side authorization: secret is configured → server is trusted
     if (serverSecret) {
-      meaningAllowed = true;
-    }
-
-    // Client-supplied secret header (for direct API callers)
-    if (!meaningAllowed && serverSecret && input.analyzeSecretHeader === serverSecret) {
-      meaningAllowed = true;
-    }
-
-    // Bearer token: validate against ANALYZE_SECRET only
-    if (
-      !meaningAllowed &&
-      serverSecret &&
-      input.authHeader === `Bearer ${serverSecret}`
-    ) {
       meaningAllowed = true;
     }
 
     if (!meaningAllowed) {
       console.info(
-        `[security] Meaning blocked for unauthorized caller ${clientIp} — forcing skip`
+        `[security] Meaning blocked — ANALYZE_SECRET not configured. Client ${clientIp}`
       );
     }
   }
