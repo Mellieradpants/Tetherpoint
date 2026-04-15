@@ -26,7 +26,7 @@ class TestInputValidation:
 
     def test_oversized_content_rejected(self):
         r = _req(content="x" * 500_001)
-        assert r.status_code == 413
+        assert r.status_code in (413, 422)  # pydantic max_length or guard
 
 
 class TestMeaningProtection:
