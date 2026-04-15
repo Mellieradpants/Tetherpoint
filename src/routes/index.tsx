@@ -30,9 +30,9 @@ function Index() {
         content,
         content_type: contentType,
         options: {
-          run_meaning: options.run_meaning ?? false,
-          run_origin: options.run_origin ?? true,
-          run_verification: options.run_verification ?? true,
+          run_meaning: true,
+          run_origin: true,
+          run_verification: true,
         },
       });
       setResult(data as PipelineResponse);
