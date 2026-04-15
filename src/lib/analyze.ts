@@ -47,8 +47,67 @@ function extractFromHtml(content: string): string[] {
 const JURISDICTION_RE = /\b(federal|state|national|court|SEC|FDA|EPA|FCC|FERC|NERC|Congress|Senate|House)\b/i;
 const MECHANISM_RE = /\b(enforce(?:ment|d|s)?|penalty|fine|audit|compliance|regulation|rule|statute)\b/i;
 const WHEN_RE = /\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4}|\d{4}-\d{2}-\d{2})\b/i;
-const ACTION_RE = /\b(shall|must|may|will|enacted|issued|published|reported|ruled|filed)\b/i;
+const ACTION_RE = /\b(shall|must|may|will|enacted|issued|published|reported|ruled|filed|announced|declared|stated|required|approved|signed|established|created|removed|amended|authorized|prohibited|mandated|ordered|determined|concluded|found|held|decided|rejected|granted|denied|proposed|adopted|implemented|enforced|suspended|revoked|repealed|overturned|upheld|affirmed|reversed|dismissed|certified|designated|allocated|distributed|transferred|submitted|registered|disclosed|notified|assessed|evaluated|reviewed|examined|investigated|prosecuted|convicted|sentenced|fined|penalized|sanctioned|regulated|monitored|supervised|administered|managed|operated|maintained|controlled|directed|instructed|recommended|advised|warned|cautioned|restricted|limited|expanded|extended|renewed|modified|revised|updated|replaced|eliminated|reduced|increased|decreased|raised|lowered|set|fixed|defined|specified|identified|classified|categorized|assigned|appointed|elected|nominated|confirmed|ratified|endorsed|supported|opposed|vetoed|blocked|halted|delayed|postponed|accelerated|expedited)\b/i;
 const INTENT_RE = /\b(intend(?:s|ed)?|aim(?:s|ed)?|goal is)\b/i;
+
+// --- Sentence completeness detection ---
+// A subject pattern: capitalized word(s) or known entity patterns at start or after comma
+const SUBJECT_RE = /(?:^|[,;]\s*)(?:the\s+)?(?:[A-Z][a-zA-Z]*(?:\s+(?:of|and|for|the|in)\s+)?)+/;
+// A predicate pattern: a verb or verbal phrase
+const PREDICATE_RE = /\b(is|are|was|were|has|had|have|will|shall|must|may|can|could|would|should|do|does|did|said|says|announced|stated|reported|declared|enacted|issued|published|ruled|filed|requires?|provides?|establishes?|creates?|removes?|amends?|authorizes?|prohibits?|mandates?|orders?|determines?|concludes?|finds?|holds?|decides?|grants?|denies?|proposes?|adopts?|implements?|enforces?|revokes?|repeals?|signed|approved|upheld|affirmed|reversed|dismissed)\b/i;
+
+/**
+ * Check if a text segment is a semantically complete sentence
+ * (has both a subject/actor and a predicate/action).
+ */
+function isCompleteStatement(text: string): boolean {
+  const trimmed = text.trim();
+  // Too short to be a real sentence
+  if (trimmed.length < 10) return false;
+  // Must have a subject-like pattern
+  if (!SUBJECT_RE.test(trimmed)) return false;
+  // Must have a verb/predicate
+  if (!PREDICATE_RE.test(trimmed)) return false;
+  // Must end with sentence-ending punctuation or be long enough to be meaningful
+  if (!/[.!?;]$/.test(trimmed) && trimmed.length < 40) return false;
+  return true;
+}
+
+/**
+ * Merge fragments forward until each segment is a complete statement.
+ * Fragments that cannot be completed are marked as non_actionable_fragment.
+ */
+function mergeFragments(segments: string[]): { text: string; fragment: boolean }[] {
+  const results: { text: string; fragment: boolean }[] = [];
+  let buffer = "";
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i].trim();
+    if (!seg) continue;
+
+    if (buffer) {
+      buffer = buffer + " " + seg;
+    } else {
+      buffer = seg;
+    }
+
+    if (isCompleteStatement(buffer)) {
+      results.push({ text: buffer, fragment: false });
+      buffer = "";
+    }
+  }
+
+  // Remaining buffer: try to emit if complete, otherwise mark as fragment
+  if (buffer.trim()) {
+    if (isCompleteStatement(buffer)) {
+      results.push({ text: buffer, fragment: false });
+    } else {
+      results.push({ text: buffer, fragment: true });
+    }
+  }
+
+  return results;
+}
 
 const ASSERTION_PATTERNS: [RegExp, string][] = [
   [/\b(enacted|statute|Public Law|legislation|Congress)\b/i, "legal_legislative"],
@@ -70,13 +129,14 @@ const RECORD_SYSTEMS: Record<string, string[]> = {
   infrastructure_energy: ["FERC", "NERC", "EIA"],
 };
 
-function buildNode(idx: number, text: string) {
+function buildNode(idx: number, text: string, isFragment: boolean = false) {
   const jurisdiction = JURISDICTION_RE.exec(text)?.[0] || null;
   const mechanism = MECHANISM_RE.exec(text)?.[0] || null;
   const when = WHEN_RE.exec(text)?.[0] || null;
   const action = ACTION_RE.exec(text)?.[0] || null;
   const blocked_flags: string[] = [];
   if (INTENT_RE.test(text)) blocked_flags.push("intent_attribution");
+  if (isFragment) blocked_flags.push("non_actionable_fragment");
   const tags: string[] = [];
   if (jurisdiction) tags.push("has_jurisdiction");
   if (mechanism) tags.push("has_mechanism");
@@ -171,9 +231,10 @@ export const analyzePipeline = createServerFn({ method: "POST" })
       parse_errors: [] as string[],
     };
 
-    // 2. Structure
-    const statements = contentType === "html" ? extractFromHtml(content) : splitSentences(content);
-    const nodes = statements.filter(s => s.trim()).map((s, i) => buildNode(i, s.trim()));
+    // 2. Structure – merge fragments into complete statements
+    const rawSegments = contentType === "html" ? extractFromHtml(content) : splitSentences(content);
+    const merged = mergeFragments(rawSegments.filter(s => s.trim()));
+    const nodes = merged.map((m, i) => buildNode(i, m.text.trim(), m.fragment));
 
     // 3. Selection
     const selected = nodes.filter(n => n.blocked_flags.length === 0 && (n.tags.length > 0 || n.action));
