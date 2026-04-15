@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AnalyzeForm } from "../components/AnalyzeForm";
 import { Workspace } from "../components/Workspace";
 import type { PipelineResponse } from "../components/Workspace";
-import { analyzePipeline } from "../lib/analyze";
+import { analyzeDocument } from "../lib/api-client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
