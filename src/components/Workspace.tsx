@@ -544,9 +544,4 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     </div>
   );
 
-  const tabs: { key: DetailTab; label: string }[] = [
-    { key: "structure", label: "Structure" },
-    { key: "text", label: "Text" },
-    { key: "signals", label: "Signals" },
-  ];
 }
