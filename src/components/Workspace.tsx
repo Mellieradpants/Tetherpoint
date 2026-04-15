@@ -61,18 +61,18 @@ export interface PipelineResponse {
 
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className="flex items-baseline gap-3 py-1.5 border-b border-border/50 last:border-0">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-24 shrink-0">{label}</span>
-      <span className="text-sm text-foreground">{value || "Not specified"}</span>
+    <div className="flex items-baseline gap-3 py-2 md:py-1.5 border-b border-border/50 last:border-0">
+      <span className="text-xs md:text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-28 md:w-24 shrink-0">{label}</span>
+      <span className="text-[15px] md:text-sm text-foreground leading-snug">{value || "Not specified"}</span>
     </div>
   );
 }
 
 function FieldGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-4">
-      <div className="text-[10px] font-semibold text-gold-muted uppercase tracking-widest mb-2">{title}</div>
-      <div className="rounded-md bg-surface p-3 border border-border/50">
+    <div className="mb-6 md:mb-4">
+      <div className="text-xs md:text-[10px] font-semibold text-gold-muted uppercase tracking-widest mb-2.5 md:mb-2">{title}</div>
+      <div className="rounded-lg md:rounded-md bg-surface p-4 md:p-3 border border-border/50">
         {children}
       </div>
     </div>
@@ -362,15 +362,15 @@ export function Workspace({ data }: { data: PipelineResponse }) {
   const renderNodeDetail = (tab: DetailTab) => {
     if (!currentNode) {
       return (
-        <div className="p-8 text-center text-sm text-muted-foreground">
+        <div className="px-5 py-12 md:p-8 text-center text-sm text-muted-foreground">
           Select a node in the Structure tab first
         </div>
       );
     }
     return (
-      <div className="p-4 pb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
+      <div className="px-5 py-6 pb-12 md:p-4 md:pb-8">
+        <div className="flex items-center gap-2 mb-5 md:mb-4">
+          <span className="text-[11px] md:text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
         </div>
         {tab === "structure" && <StructureTab node={currentNode} />}
         {tab === "text" && <TextTab node={currentNode} />}
@@ -425,13 +425,13 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       {/* ─── MOBILE: top-level tabs replace entire content ─── */}
       <div className="md:hidden">
         {/* Tab bar */}
-        <div className="flex border-b border-border bg-surface/30">
+        <div className="flex border-b-2 border-border bg-surface/50 shadow-sm">
           {topTabs.map(tab => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setMobileTab(tab.key)}
-              className={`flex-1 px-2 py-2.5 text-xs font-medium transition-colors relative ${
+              className={`flex-1 px-2 py-3 text-sm font-medium transition-colors relative ${
                 mobileTab === tab.key
                   ? "text-gold"
                   : "text-muted-foreground hover:text-foreground"
@@ -450,8 +450,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {mobileTab === "text" && renderNodeDetail("text")}
         {mobileTab === "signals" && renderNodeDetail("signals")}
         {mobileTab === "origin" && (
-          <div className="p-4 pb-8">
-            <div className="text-sm font-medium text-foreground mb-4">Origin Signals</div>
+          <div className="px-5 py-6 pb-12">
+            <div className="text-base font-medium text-foreground mb-5">Origin Signals</div>
             <OriginPanel origin={data.origin} />
             <DebugJson data={data.origin} />
           </div>
