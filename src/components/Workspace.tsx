@@ -569,11 +569,16 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       {/* ─── MOBILE: top-level tabs replace entire content ─── */}
       <div className="md:hidden">
         {/* Tab bar */}
-        <div className="flex border-b-2 border-border bg-surface/50 shadow-sm">
+        <div role="tablist" aria-label="Analysis tabs" className="flex border-b-2 border-border bg-surface/50 shadow-sm">
           {topTabs.map(tab => (
             <button
               key={tab.key}
               type="button"
+              role="tab"
+              id={`mobile-${TAB_TEST_IDS[tab.key]}`}
+              aria-selected={mobileTab === tab.key}
+              aria-controls={`mobile-tabpanel-${tab.key}`}
+              data-testid={TAB_TEST_IDS[tab.key]}
               onClick={() => setMobileTab(tab.key)}
               className={`flex-1 px-2 py-3 text-sm font-medium transition-colors relative ${
                 mobileTab === tab.key
@@ -590,6 +595,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         </div>
 
         {/* Tab content — full page, no inner scroll */}
+        <div role="tabpanel" id={`mobile-tabpanel-${mobileTab}`} aria-labelledby={`mobile-${TAB_TEST_IDS[mobileTab]}`} data-testid={`tabpanel-${mobileTab}`}>
         {mobileTab === "structure" && nodeList}
         {mobileTab === "text" && renderNodeDetail("text")}
         {mobileTab === "meaning" && renderNodeDetail("meaning")}
@@ -601,6 +607,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             <DebugJson data={data.origin} />
           </div>
         )}
+        </div>
       </div>
 
       {/* ─── DESKTOP: side-by-side layout ─── */}
