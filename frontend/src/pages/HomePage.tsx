@@ -32,12 +32,17 @@ export function HomePage() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Analysis failed");
-      }
+     const text = await response.text();
+console.log("RAW RESPONSE:", text);
 
-      const data = await response.json();
-      setResult(data);
+if (!response.ok) {
+  throw new Error(text);
+}
+
+const data = JSON.parse(text);
+setResult(data);
+
+      
     } catch (err) {
       console.error(err);
       setResult({ error: "Failed to analyze" });
