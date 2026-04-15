@@ -175,8 +175,8 @@ function TextTab({ node }: { node: StructureNode }) {
           {node.source_text}
         </div>
       </div>
-      {/* translated_text removed — not in backend contract */}
-      )}
+
+
       <div>
         <div className="text-[10px] font-semibold text-gold-muted uppercase tracking-widest mb-2">Normalized Text</div>
         <div className="rounded-md bg-surface border border-border/50 p-4 text-sm text-muted-foreground leading-relaxed">
