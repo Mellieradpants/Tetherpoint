@@ -656,11 +656,16 @@ export function Workspace({ data }: { data: PipelineResponse }) {
           ) : currentNode ? (
             <>
               {/* Desktop detail tabs */}
-              <div className="flex border-b border-border bg-surface/30">
+              <div role="tablist" aria-label="Node detail tabs" className="flex border-b border-border bg-surface/30">
                 {tabs.map(tab => (
                   <button
                     key={tab.key}
                     type="button"
+                    role="tab"
+                    id={`desktop-${TAB_TEST_IDS[tab.key]}`}
+                    aria-selected={activeTab === tab.key}
+                    aria-controls={`desktop-tabpanel-${tab.key}`}
+                    data-testid={TAB_TEST_IDS[tab.key]}
                     onClick={() => setActiveTab(tab.key)}
                     className={`px-4 py-2.5 text-xs font-medium transition-colors relative ${
                       activeTab === tab.key
@@ -679,7 +684,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                   <span className="text-[10px] font-mono text-muted-foreground">{currentNode.node_id}</span>
                 </div>
               </div>
-              <div className="p-4 pb-8 flex-1 overflow-y-auto">
+              <div role="tabpanel" id={`desktop-tabpanel-${activeTab}`} aria-labelledby={`desktop-${TAB_TEST_IDS[activeTab]}`} data-testid={`tabpanel-${activeTab}`} className="p-4 pb-8 flex-1 overflow-y-auto">
                 {activeTab === "structure" && <StructureTab node={currentNode} />}
                 {activeTab === "text" && <TextTab node={currentNode} />}
                 {activeTab === "meaning" && <MeaningTab node={currentNode} meaning={data.meaning} />}
