@@ -24,16 +24,13 @@ interface AnalyzeFormProps {
 export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
   const [content, setContent] = useState("");
   const [contentType, setContentType] = useState<string>("text");
-  const [runMeaning, setRunMeaning] = useState(false);
-  const [runOrigin, setRunOrigin] = useState(true);
-  const [runVerification, setRunVerification] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(content, contentType, {
-      run_meaning: runMeaning,
-      run_origin: runOrigin,
-      run_verification: runVerification,
+      run_meaning: true,
+      run_origin: true,
+      run_verification: true,
     });
   };
 
@@ -67,23 +64,6 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
         rows={6}
       />
 
-      <div className="flex flex-wrap items-center gap-4">
-        {[
-          { label: "Meaning (AI)", checked: runMeaning, set: setRunMeaning },
-          { label: "Origin", checked: runOrigin, set: setRunOrigin },
-          { label: "Verification", checked: runVerification, set: setRunVerification },
-        ].map(opt => (
-          <label key={opt.label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-            <input
-              type="checkbox"
-              checked={opt.checked}
-              onChange={(e) => opt.set(e.target.checked)}
-              className="rounded border-border"
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
 
       <div className="flex gap-2">
         <button
