@@ -1,6 +1,22 @@
 import { useState } from "react";
 import { AnalyzeRequest } from "../types";
 
+const SAMPLE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Federal Energy Commission Report</title>
+  <meta name="author" content="Sarah Chen">
+  <meta property="og:title" content="FERC Grid Standards 2025">
+</head>
+<body>
+  <p>The Federal Energy Regulatory Commission enacted Order No. 2222-A on November 1, 2024.</p>
+  <p>Tesla Inc. reported Q3 2024 revenue of $25.2 billion.</p>
+  <p>The Supreme Court ruled in West Virginia v. EPA.</p>
+</body>
+</html>`;
+
+const CONTENT_TYPES = ["text", "html", "xml", "json"] as const;
+
 interface InputFormProps {
   onSubmit: (request: AnalyzeRequest) => void;
   loading: boolean;
@@ -11,9 +27,6 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   const [contentType, setContentType] = useState<
     "xml" | "html" | "json" | "text"
   >("text");
-  const [runMeaning, setRunMeaning] = useState(true);
-  const [runOrigin, setRunOrigin] = useState(true);
-  const [runVerification, setRunVerification] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,9 +34,9 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
       content,
       content_type: contentType,
       options: {
-        run_meaning: runMeaning,
-        run_origin: runOrigin,
-        run_verification: runVerification,
+        run_meaning: true,
+        run_origin: true,
+        run_verification: true,
       },
     });
   };
@@ -31,65 +44,48 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   return (
     <form onSubmit={handleSubmit} className="input-form">
       <div className="form-group">
-        <label htmlFor="content">Document Content</label>
+        <div className="type-row">
+          <span className="type-label">Type</span>
+          <div className="type-pills">
+            {CONTENT_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setContentType(type)}
+                className={contentType === type ? "type-pill active" : "type-pill"}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <textarea
           id="content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          rows={12}
+          rows={8}
           placeholder="Paste document content here..."
           required
         />
       </div>
 
-      <div className="form-row">
-        <div className="form-group">
-          <label htmlFor="content-type">Content Type</label>
-          <select
-            id="content-type"
-            value={contentType}
-            onChange={(e) =>
-              setContentType(e.target.value as "xml" | "html" | "json" | "text")
-            }
-          >
-            <option value="text">Text</option>
-            <option value="html">HTML</option>
-            <option value="xml">XML</option>
-            <option value="json">JSON</option>
-          </select>
-        </div>
+      <div className="button-row">
+        <button type="submit" disabled={loading || !content.trim()}>
+          {loading ? "Analyzing..." : "Analyze"}
+        </button>
 
-        <div className="form-group checkbox-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={runMeaning}
-              onChange={(e) => setRunMeaning(e.target.checked)}
-            />
-            Meaning
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={runOrigin}
-              onChange={(e) => setRunOrigin(e.target.checked)}
-            />
-            Origin
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={runVerification}
-              onChange={(e) => setRunVerification(e.target.checked)}
-            />
-            Verification
-          </label>
-        </div>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => {
+            setContent(SAMPLE_HTML);
+            setContentType("html");
+          }}
+        >
+          Load Sample
+        </button>
       </div>
-
-      <button type="submit" disabled={loading || !content.trim()}>
-        {loading ? "Analyzing..." : "Analyze"}
-      </button>
     </form>
   );
 }
