@@ -6,7 +6,9 @@ interface ResultsViewProps {
 }
 
 function NodeTable({ nodes, title }: { nodes: StructureNode[]; title: string }) {
-  if (nodes.length === 0) return <p>No {title.toLowerCase()}.</p>;
+  if (nodes.length === 0) {
+    return <p>No {title.toLowerCase()}.</p>;
+  }
 
   return (
     <div className="node-table">
