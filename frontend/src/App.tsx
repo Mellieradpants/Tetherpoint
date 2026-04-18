@@ -22,7 +22,7 @@ function App() {
       setShowInput(false);
     } catch (err) {
       console.error("Analysis failed:", err);
-      setError("Analysis failed. Please retry.");
+      setError(err instanceof Error ? err.message : "Analysis failed. Please retry.");
     } finally {
       setLoading(false);
     }
@@ -31,10 +31,13 @@ function App() {
   return (
     <div className="home-page">
       <header>
-        <h1>Tetherpoint</h1>
-        <p className="subtitle">Source-Anchored Parsing Stack</p>
+        <div>
+          <h1>Anchored Flow Stack</h1>
+          <p className="subtitle">Source-Anchored Parsing Stack</p>
+        </div>
+
         {result && (
-          <button type="button" onClick={() => setShowInput(!showInput)}>
+          <button type="button" onClick={() => setShowInput((value) => !value)}>
             {showInput ? "Hide Input" : "New Analysis"}
           </button>
         )}
@@ -44,9 +47,25 @@ function App() {
 
       {showInput && <InputForm onSubmit={handleSubmit} loading={loading} />}
 
-      <div className="results">
-  <ResultsView data={result || ({} as any)} />
-</div>
+      {loading && (
+        <div className="layer-section">
+          <h3>Pipeline Status</h3>
+          <div className="layer-content">
+            <p>Running analysis pipeline...</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !result && !error && (
+        <div className="layer-section">
+          <h3>Ready</h3>
+          <div className="layer-content">
+            <p>Paste content and run the pipeline to inspect node-level results.</p>
+          </div>
+        </div>
+      )}
+
+      {result && <ResultsView data={result} />}
     </div>
   );
 }
