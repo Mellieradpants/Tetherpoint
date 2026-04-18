@@ -32,14 +32,14 @@ def _build_prompt(node: StructureNode) -> str:
         "You are a precise analytical system. Given the following text extracted from a document, "
         "evaluate it against each of the following lenses. For each lens, respond with a JSON object "
         "containing 'lens', 'detected' (boolean), and 'detail' (string or null).\n\n"
-        f"Text: \"{node.source_text}\"\n\n"
+        f'Text: "{node.source_text}"\n\n'
         "Lenses to evaluate:\n"
-        "1. modality_shift — Does the text shift obligation modality (e.g., 'shall' to 'may')?\n"
-        "2. scope_change — Does the text narrow or expand scope relative to its apparent domain?\n"
-        "3. actor_power_shift — Does the text redistribute authority or power among actors?\n"
-        "4. action_domain_shift — Does the text move an action into a different domain?\n"
-        "5. threshold_standard_shift — Does the text raise or lower a threshold or standard?\n"
-        "6. obligation_removal — Does the text remove or weaken an obligation?\n\n"
+        "1. modality_shift - Does the text shift obligation modality (e.g., 'shall' to 'may')?\n"
+        "2. scope_change - Does the text narrow or expand scope relative to its apparent domain?\n"
+        "3. actor_power_shift - Does the text redistribute authority or power among actors?\n"
+        "4. action_domain_shift - Does the text move an action into a different domain?\n"
+        "5. threshold_standard_shift - Does the text raise or lower a threshold or standard?\n"
+        "6. obligation_removal - Does the text remove or weaken an obligation?\n\n"
         "Respond ONLY with a JSON array of objects, one per lens. No extra text."
     )
 
@@ -68,7 +68,8 @@ def _call_openai(prompt: str, api_key: str) -> Optional[list[dict]]:
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
         return json.loads(content)
-    except Exception:
+    except Exception as e:
+        print(f"Meaning API failure: {type(e).__name__}: {e}")
         return None
 
 
@@ -104,16 +105,20 @@ def process_meaning(
         else:
             lenses = []
             for item in raw:
-                lenses.append(MeaningLens(
-                    lens=item.get("lens", "unknown"),
-                    detected=bool(item.get("detected", False)),
-                    detail=item.get("detail"),
-                ))
+                lenses.append(
+                    MeaningLens(
+                        lens=item.get("lens", "unknown"),
+                        detected=bool(item.get("detected", False)),
+                        detail=item.get("detail"),
+                    )
+                )
 
-        node_results.append(MeaningNodeResult(
-            node_id=node.node_id,
-            source_text=node.source_text,
-            lenses=lenses,
-        ))
+        node_results.append(
+            MeaningNodeResult(
+                node_id=node.node_id,
+                source_text=node.source_text,
+                lenses=lenses,
+            )
+        )
 
     return MeaningResult(status="executed", node_results=node_results)
