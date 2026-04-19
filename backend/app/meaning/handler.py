@@ -1,7 +1,6 @@
 """Meaning layer: the ONLY AI interpretation layer.
 
-Operates only on selected nodes. If no API key is available,
-returns explicit 'meaning not executed' status.
+Operates only on selected nodes and returns a terminal node-scoped meaning result.
 """
 
 from __future__ import annotations
@@ -11,38 +10,37 @@ import os
 from typing import Any
 
 from app.schemas.models import (
-    MeaningLens,
-    MeaningNodeResult,
+    MeaningEmptyNodeResult,
+    MeaningErrorNodeResult,
     MeaningResult,
+    MeaningStructured,
+    MeaningSuccessNodeResult,
     StructureNode,
 )
-
-LENSES = [
-    "modality_shift",
-    "scope_change",
-    "actor_power_shift",
-    "action_domain_shift",
-    "threshold_standard_shift",
-    "obligation_removal",
-]
 
 
 def _build_prompt(node: StructureNode) -> str:
     return (
-        "You are a precise analytical system. Given the following text extracted from a document, "
-        "evaluate it against each of the following lenses. For each lens, respond with a JSON object "
-        "containing 'lens', 'detected' (boolean), and 'detail' (string or null).\n\n"
-        f'Text: "{node.source_text}"\n\n'
-        "Lenses to evaluate:\n"
-        "1. modality_shift - Does the text shift obligation modality (e.g., 'shall' to 'may')?\n"
-        "2. scope_change - Does the text narrow or expand scope relative to its apparent domain?\n"
-        "3. actor_power_shift - Does the text redistribute authority or power among actors?\n"
-        "4. action_domain_shift - Does the text move an action into a different domain?\n"
-        "5. threshold_standard_shift - Does the text raise or lower a threshold or standard?\n"
-        "6. obligation_removal - Does the text remove or weaken an obligation?\n\n"
-        "Respond ONLY with valid JSON. No markdown fences, no prose, no explanation. "
-        "Return a top-level JSON array of 6 objects. Each object must contain exactly: "
-        "lens, detected, detail."
+        "You are the meaning layer for a deterministic pipeline. "
+        "Read exactly one node and return ONLY one JSON object. No markdown, no prose, no explanation.\n\n"
+        f'Node text: "{node.source_text}"\n\n'
+        "Required output contract:\n"
+        "Success:\n"
+        '{"status":"success","plain_meaning":"one plain sentence","structured":{"actors":[],"actions":[],"object":null,"temporal":null,"jurisdiction":null}}\n\n'
+        "Empty:\n"
+        '{"status":"empty","plain_meaning":null,"structured":null,"reason":"no meaningful content extracted"}\n\n'
+        "Rules:\n"
+        "- status must be exactly success or empty\n"
+        "- plain_meaning must be one plain sentence or null\n"
+        "- structured must be an object on success or null on empty\n"
+        "- structured.actors must be a list of strings\n"
+        "- structured.actions must be a list of strings\n"
+        "- structured.object must be a string or null\n"
+        "- structured.temporal must be a string or null\n"
+        "- structured.jurisdiction must be a string or null\n"
+        "- do not include node_id\n"
+        "- do not include any extra keys\n"
+        "- if there is no meaningful content to interpret, return empty\n"
     )
 
 
@@ -57,11 +55,6 @@ def _extract_candidate_json(raw_text: str) -> str:
     if text.startswith("json\n"):
         text = text[5:].strip()
 
-    array_start = text.find("[")
-    array_end = text.rfind("]")
-    if array_start != -1 and array_end != -1 and array_end > array_start:
-        return text[array_start : array_end + 1]
-
     obj_start = text.find("{")
     obj_end = text.rfind("}")
     if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
@@ -70,57 +63,134 @@ def _extract_candidate_json(raw_text: str) -> str:
     return text
 
 
-def _normalize_lens_payload(raw_text: str) -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
+def _validate_success_payload(node_id: str, payload: dict[str, Any]):
+    plain_meaning = payload.get("plain_meaning")
+    structured = payload.get("structured")
+
+    if not isinstance(plain_meaning, str) or not plain_meaning.strip():
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="plain_meaning must be a non-empty string for success output",
+        )
+
+    if not isinstance(structured, dict):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured must be an object for success output",
+        )
+
+    actors = structured.get("actors")
+    actions = structured.get("actions")
+    object_value = structured.get("object")
+    temporal = structured.get("temporal")
+    jurisdiction = structured.get("jurisdiction")
+
+    if not isinstance(actors, list) or not all(isinstance(item, str) for item in actors):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured.actors must be a list of strings",
+        )
+
+    if not isinstance(actions, list) or not all(isinstance(item, str) for item in actions):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured.actions must be a list of strings",
+        )
+
+    if object_value is not None and not isinstance(object_value, str):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured.object must be a string or null",
+        )
+
+    if temporal is not None and not isinstance(temporal, str):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured.temporal must be a string or null",
+        )
+
+    if jurisdiction is not None and not isinstance(jurisdiction, str):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="structured.jurisdiction must be a string or null",
+        )
+
+    return MeaningSuccessNodeResult(
+        node_id=node_id,
+        status="success",
+        plain_meaning=plain_meaning.strip(),
+        structured=MeaningStructured(
+            actors=actors,
+            actions=actions,
+            object=object_value,
+            temporal=temporal,
+            jurisdiction=jurisdiction,
+        ),
+    )
+
+
+def _normalize_meaning_payload(node_id: str, raw_text: str):
     candidate = _extract_candidate_json(raw_text)
 
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:
-        return None, {
-            "error": "response_parse_failed",
-            "message": f"{type(exc).__name__}: {exc}",
-            "raw_response": raw_text,
-        }
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason=f"{type(exc).__name__}: {exc}",
+        )
 
-    if isinstance(payload, dict):
-        if isinstance(payload.get("lenses"), list):
-            payload = payload["lenses"]
-        else:
-            return None, {
-                "error": "response_shape_mismatch",
-                "message": "Model returned a JSON object instead of a lens array.",
-                "raw_response": raw_text,
-            }
+    if not isinstance(payload, dict):
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="model response was not a JSON object",
+        )
 
-    if not isinstance(payload, list):
-        return None, {
-            "error": "response_shape_mismatch",
-            "message": "Model response was not a JSON array.",
-            "raw_response": raw_text,
-        }
+    status = payload.get("status")
+    if status not in {"success", "empty"}:
+        return MeaningErrorNodeResult(
+            node_id=node_id,
+            status="error",
+            reason="model status must be success or empty",
+        )
 
-    normalized: list[dict[str, Any]] = []
-    for item in payload:
-        if not isinstance(item, dict):
-            return None, {
-                "error": "response_shape_mismatch",
-                "message": "One or more lens entries were not JSON objects.",
-                "raw_response": raw_text,
-            }
-        normalized.append(item)
+    if status == "empty":
+        reason = payload.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return MeaningErrorNodeResult(
+                node_id=node_id,
+                status="error",
+                reason="empty output must include a non-empty reason",
+            )
+        return MeaningEmptyNodeResult(
+            node_id=node_id,
+            status="empty",
+            reason=reason.strip(),
+        )
 
-    return normalized, None
+    return _validate_success_payload(node_id, payload)
 
 
-def _call_openai(prompt: str, api_key: str) -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
-    """Call OpenAI-compatible API and return normalized lens results or an error object."""
+def _call_openai(node: StructureNode, api_key: str):
     try:
         import httpx
     except ImportError as exc:
-        return None, {
-            "error": "dependency_import_failed",
-            "message": f"{type(exc).__name__}: {exc}",
-        }
+        return MeaningErrorNodeResult(
+            node_id=node.node_id,
+            status="error",
+            reason=f"{type(exc).__name__}: {exc}",
+        )
+
+    prompt = _build_prompt(node)
 
     try:
         resp = httpx.post(
@@ -133,44 +203,99 @@ def _call_openai(prompt: str, api_key: str) -> tuple[list[dict[str, Any]] | None
                 "model": "gpt-4o-mini",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.0,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "meaning_node_result",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "oneOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"const": "success"},
+                                        "plain_meaning": {"type": "string"},
+                                        "structured": {
+                                            "type": "object",
+                                            "properties": {
+                                                "actors": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                },
+                                                "actions": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                },
+                                                "object": {"type": ["string", "null"]},
+                                                "temporal": {"type": ["string", "null"]},
+                                                "jurisdiction": {"type": ["string", "null"]},
+                                            },
+                                            "required": [
+                                                "actors",
+                                                "actions",
+                                                "object",
+                                                "temporal",
+                                                "jurisdiction",
+                                            ],
+                                            "additionalProperties": False,
+                                        },
+                                    },
+                                    "required": ["status", "plain_meaning", "structured"],
+                                    "additionalProperties": False,
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"const": "empty"},
+                                        "plain_meaning": {"type": "null"},
+                                        "structured": {"type": "null"},
+                                        "reason": {"type": "string"},
+                                    },
+                                    "required": ["status", "plain_meaning", "structured", "reason"],
+                                    "additionalProperties": False,
+                                },
+                            ],
+                        },
+                    },
+                },
             },
             timeout=30.0,
         )
     except Exception as exc:
-        return None, {
-            "error": "api_request_failed",
-            "message": f"{type(exc).__name__}: {exc}",
-        }
-
-    raw_body = resp.text
+        return MeaningErrorNodeResult(
+            node_id=node.node_id,
+            status="error",
+            reason=f"{type(exc).__name__}: {exc}",
+        )
 
     try:
         resp.raise_for_status()
     except Exception as exc:
-        return None, {
-            "error": "api_http_error",
-            "message": f"{type(exc).__name__}: {exc}",
-            "raw_response": raw_body,
-        }
+        return MeaningErrorNodeResult(
+            node_id=node.node_id,
+            status="error",
+            reason=f"{type(exc).__name__}: {exc}",
+        )
 
     try:
         response_json = resp.json()
         content = response_json["choices"][0]["message"]["content"]
     except Exception as exc:
-        return None, {
-            "error": "api_response_shape_error",
-            "message": f"{type(exc).__name__}: {exc}",
-            "raw_response": raw_body,
-        }
+        return MeaningErrorNodeResult(
+            node_id=node.node_id,
+            status="error",
+            reason=f"{type(exc).__name__}: {exc}",
+        )
 
     if not isinstance(content, str):
-        return None, {
-            "error": "api_response_shape_error",
-            "message": "Model content was not a string.",
-            "raw_response": json.dumps(content, ensure_ascii=False),
-        }
+        return MeaningErrorNodeResult(
+            node_id=node.node_id,
+            status="error",
+            reason="model content was not a string",
+        )
 
-    return _normalize_lens_payload(content)
+    return _normalize_meaning_payload(node.node_id, content)
 
 
 def process_meaning(
@@ -182,55 +307,36 @@ def process_meaning(
         return MeaningResult(
             status="skipped",
             message="Meaning layer skipped by options",
+            node_results=[],
         )
 
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         return MeaningResult(
-            status="skipped",
+            status="error",
             message="Meaning not executed: no OPENAI_API_KEY configured",
+            node_results=[
+                MeaningErrorNodeResult(
+                    node_id=node.node_id,
+                    status="error",
+                    reason="OPENAI_API_KEY not configured",
+                )
+                for node in selected_nodes
+            ],
         )
 
-    node_results: list[MeaningNodeResult] = []
-
+    node_results = []
     for node in selected_nodes:
-        prompt = _build_prompt(node)
-        raw, error = _call_openai(prompt, api_key)
-
-        if error is not None:
+        if not node.source_text.strip():
             node_results.append(
-                MeaningNodeResult(
+                MeaningEmptyNodeResult(
                     node_id=node.node_id,
-                    source_text=node.source_text,
-                    status="error",
-                    error=error.get("error"),
-                    message=error.get("message"),
-                    raw_response=error.get("raw_response"),
-                    lenses=[],
+                    status="empty",
+                    reason="no meaningful content extracted",
                 )
             )
             continue
 
-        lenses: list[MeaningLens] = []
-        for item in raw or []:
-            lens_name = item.get("lens", "unknown")
-            if lens_name not in LENSES:
-                continue
-            lenses.append(
-                MeaningLens(
-                    lens=lens_name,
-                    detected=bool(item.get("detected", False)),
-                    detail=item.get("detail"),
-                )
-            )
-
-        node_results.append(
-            MeaningNodeResult(
-                node_id=node.node_id,
-                source_text=node.source_text,
-                status="executed",
-                lenses=lenses,
-            )
-        )
+        node_results.append(_call_openai(node, api_key))
 
     return MeaningResult(status="executed", node_results=node_results)
