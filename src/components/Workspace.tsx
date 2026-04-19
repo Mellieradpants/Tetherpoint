@@ -139,6 +139,24 @@ function EmptyState({ message }: { message: string }) {
   return <div className="text-sm italic text-muted-foreground">{message}</div>;
 }
 
+function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
+  if (signals.length === 0) {
+    return <EmptyState message="No origin signals in this section." />;
+  }
+
+  return (
+    <div>
+      {signals.map((signal, index) => (
+        <FieldRow
+          key={`${signal.signal}-${signal.value}-${index}`}
+          label={signal.signal}
+          value={signal.category ? `${signal.value} (${signal.category})` : signal.value}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Workspace({ data }: { data: PipelineResponse }) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>("structure");
@@ -516,19 +534,29 @@ export function Workspace({ data }: { data: PipelineResponse }) {
 
         {activeTab === "origin" && (
           <div className="space-y-5 px-5 py-6 pb-12">
-            <div className="text-sm font-mono text-muted-foreground">
-              {currentNode?.node_id || "No node selected"}
-            </div>
+            <div className="text-sm font-mono text-muted-foreground">document</div>
 
-            {!currentNode ? (
-              <EmptyState message="No data for this node." />
-            ) : !isSelectedNode ? (
-              <EmptyState message="This node is excluded. No Origin data for this node." />
-            ) : (
-              <Section title="Origin Signals">
-                <EmptyState message="No Origin data for this node. Current backend response is document-level only." />
-              </Section>
-            )}
+            <Section title="Origin Identity Signals">
+              <OriginSignalList signals={data.origin.origin_identity_signals} />
+            </Section>
+
+            <Section title="Origin Metadata Signals">
+              <OriginSignalList signals={data.origin.origin_metadata_signals} />
+            </Section>
+
+            <Section title="Distribution Signals">
+              <OriginSignalList signals={data.origin.distribution_signals} />
+            </Section>
+
+            <Section title="Evidence Trace">
+              {data.origin.evidence_trace.length > 0 ? (
+                <pre className="overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
+                  {JSON.stringify(data.origin.evidence_trace, null, 2)}
+                </pre>
+              ) : (
+                <EmptyState message="No evidence trace returned." />
+              )}
+            </Section>
           </div>
         )}
       </div>
