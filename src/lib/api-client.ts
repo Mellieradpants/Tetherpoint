@@ -1,9 +1,7 @@
 /**
- * Frontend API client — ALL analysis requests route through the server function.
- * The frontend never calls the backend directly and never handles secrets.
+ * Frontend API client - analysis requests route through the local `/api/analyze`
+ * server proxy so the browser never handles secrets directly.
  */
-
-import { analyzePipeline } from "./analyze";
 
 interface AnalyzeRequest {
   content: string;
@@ -17,11 +15,36 @@ interface AnalyzeRequest {
 }
 
 export async function analyzeDocument(request: AnalyzeRequest) {
-  return analyzePipeline({
-    data: {
+  const response = await fetch("/api/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       content: request.content,
       content_type: request.content_type,
       options: request.options,
-    },
+    }),
   });
+
+  const text = await response.text();
+
+  if (!response.ok) {
+    let message = `Analysis failed (${response.status})`;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.message === "string") {
+        message = parsed.message;
+      }
+    } catch {
+      if (text.trim()) {
+        message = text;
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  return JSON.parse(text);
 }
