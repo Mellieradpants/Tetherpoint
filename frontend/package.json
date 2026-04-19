@@ -1,0 +1,25 @@
+{
+  "name": "tetherpoint-vercel-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build .. --outDir frontend/dist",
+    "dev": "vite ..",
+    "preview": "vite preview dist"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.2.1",
+    "tw-animate-css": "^1.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.1"
+  }
+}
