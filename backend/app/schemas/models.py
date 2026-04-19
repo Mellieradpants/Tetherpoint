@@ -119,6 +119,10 @@ class MeaningLens(BaseModel):
 class MeaningNodeResult(BaseModel):
     node_id: str
     source_text: str
+    status: Optional[Literal["executed", "error"]] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
+    raw_response: Optional[str] = None
     lenses: list[MeaningLens]
 
 
