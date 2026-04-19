@@ -93,7 +93,7 @@ export interface PipelineResponse {
   errors: Array<{ layer: string; error: string; fatal?: boolean }>;
 }
 
-type DetailTab = "structure" | "text" | "meaning" | "verification" | "origin";
+type DetailTab = "meaning" | "verification" | "origin";
 
 function FieldRow({
   label,
@@ -214,7 +214,7 @@ function MeaningSummary({
 
 export function Workspace({ data }: { data: PipelineResponse }) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DetailTab>("structure");
+  const [activeTab, setActiveTab] = useState<DetailTab>("meaning");
 
   const selectedIds = useMemo(
     () => new Set(data.selection.selected_nodes.map((node) => node.node_id)),
@@ -306,7 +306,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       )}
 
       <div className="flex border-b border-border bg-surface/30">
-        {(["structure", "text", "meaning", "verification", "origin"] as DetailTab[]).map(
+        {(["meaning", "verification", "origin"] as DetailTab[]).map(
           (tab) => (
             <button
               key={tab}
@@ -328,7 +328,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {activeTab === "structure" && (
+        {activeTab === "meaning" && (
           <div className="space-y-1 p-4">
             {data.structure.nodes.map((node, index) => {
               const isActive = node.node_id === selectedNodeId;
@@ -384,108 +384,90 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                         </span>
                       ))}
                     </div>
+                    <div className="mt-4 rounded-xl border border-border/60 bg-surface p-3">
+                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+                        Source Context
+                      </div>
+                      <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
+                        {node.source_text}
+                      </pre>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+                      {isSelected && nodeMeaning?.status === "success" ? (
+                        <>
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+                            Plain Meaning
+                          </div>
+                          <div className="text-sm leading-relaxed text-foreground">
+                            {nodeMeaning.plain_meaning}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+                            Meaning
+                          </div>
+                          <MeaningSummary
+                            meaning={nodeMeaning}
+                            isSelectedNode={isSelected}
+                          />
+                        </>
+                      )}
+                    </div>
+                    {isSelected && nodeMeaning?.status === "success" && (
+                      <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+                          Structured Meaning
+                        </div>
+                        <FieldRow
+                          label="actors"
+                          value={nodeMeaning.structured?.actors.join(", ")}
+                        />
+                        <FieldRow
+                          label="actions"
+                          value={nodeMeaning.structured?.actions.join(", ")}
+                        />
+                        <FieldRow
+                          label="object"
+                          value={nodeMeaning.structured?.object}
+                        />
+                        <FieldRow
+                          label="temporal"
+                          value={nodeMeaning.structured?.temporal}
+                        />
+                        <FieldRow
+                          label="jurisdiction"
+                          value={nodeMeaning.structured?.jurisdiction}
+                        />
+                      </div>
+                    )}
+                    {isSelected && !nodeMeaning && (
+                      <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+                        <EmptyState message="No Meaning data for this node." />
+                      </div>
+                    )}
+                    {isSelected && nodeMeaning && nodeMeaning.status !== "success" && (
+                      <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+                        <EmptyState
+                          message={nodeMeaning.reason || "Meaning unavailable for this node."}
+                        />
+                      </div>
+                    )}
                     <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
                       <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-                        Meaning
+                        Structure Fields
                       </div>
-                      <MeaningSummary
-                        meaning={nodeMeaning}
-                        isSelectedNode={isSelected}
-                      />
+                      <FieldRow label="anchor" value={node.source_anchor} />
+                      <FieldRow label="actor" value={node.actor} />
+                      <FieldRow label="action" value={node.action} />
+                      <FieldRow label="condition" value={node.condition} />
+                      <FieldRow label="temporal" value={node.temporal} />
+                      <FieldRow label="jurisdiction" value={node.jurisdiction} />
                     </div>
                   </div>
                 </button>
               );
             })}
-          </div>
-        )}
-
-        {activeTab === "text" && (
-          <div className="space-y-5 px-5 py-6 pb-12">
-            <div className="text-sm font-mono text-muted-foreground">
-              {currentNode?.node_id || "No node selected"}
-            </div>
-
-            {!currentNode ? (
-              <EmptyState message="No data for this node." />
-            ) : (
-              <>
-                <Section title="Source Text">
-                  <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground">
-                    {currentNode.source_text}
-                  </pre>
-                </Section>
-
-                <Section title="Normalized Text">
-                  <pre className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                    {currentNode.normalized_text}
-                  </pre>
-                </Section>
-              </>
-            )}
-          </div>
-        )}
-
-        {activeTab === "meaning" && (
-          <div className="space-y-5 px-5 py-6 pb-12">
-            <div className="text-sm font-mono text-muted-foreground">
-              {currentNode?.node_id || "No node selected"}
-            </div>
-
-            {!currentNode ? (
-              <EmptyState message="No data for this node." />
-            ) : !isSelectedNode ? (
-              <EmptyState message="This node is excluded. No Meaning data for this node." />
-            ) : !currentMeaning ? (
-              <EmptyState message="No Meaning data for this node." />
-            ) : (
-              <>
-                {currentMeaning.status === "success" ? (
-                  <>
-                    <Section title="Plain Meaning">
-                      <div className="text-sm leading-relaxed text-foreground">
-                        {currentMeaning.plain_meaning}
-                      </div>
-                    </Section>
-
-                    <Section title="Meaning Structure">
-                      <FieldRow
-                        label="actors"
-                        value={currentMeaning.structured?.actors.join(", ")}
-                      />
-                      <FieldRow
-                        label="actions"
-                        value={currentMeaning.structured?.actions.join(", ")}
-                      />
-                      <FieldRow
-                        label="object"
-                        value={currentMeaning.structured?.object}
-                      />
-                      <FieldRow
-                        label="temporal"
-                        value={currentMeaning.structured?.temporal}
-                      />
-                      <FieldRow
-                        label="jurisdiction"
-                        value={currentMeaning.structured?.jurisdiction}
-                      />
-                    </Section>
-                  </>
-                ) : (
-                  <Section title="Meaning">
-                    <EmptyState
-                      message={currentMeaning.reason || "Meaning unavailable for this node."}
-                    />
-                  </Section>
-                )}
-
-                <Section title="Raw Meaning Result">
-                  <pre className="overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                    {JSON.stringify(currentMeaning, null, 2)}
-                  </pre>
-                </Section>
-              </>
-            )}
           </div>
         )}
 
