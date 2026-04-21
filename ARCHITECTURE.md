@@ -17,8 +17,6 @@ The system is structured as a simple pipeline:
 3. Output Layer  
    Structured, traceable representation of meaning
 
-The system does not generate free-form answers.  
-It constrains interpretation and exposes how meaning is formed.
 ### Parsing Layer
 
 The system does not perform free-form interpretation.
