@@ -24,7 +24,7 @@ class ContentType(str, Enum):
 
 
 class AnalyzeOptions(BaseModel):
-    run_meaning: bool = False  # default off — requires authorization
+    run_meaning: bool = False  # default off - requires authorization
     run_origin: bool = True
     run_verification: bool = True
 
@@ -36,7 +36,7 @@ class AnalyzeRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 1 — Input
+# Layer 1 - Input
 # Purpose: intake only. No inference, no interpretation.
 # ---------------------------------------------------------------------------
 
@@ -49,13 +49,29 @@ class InputResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 2 — Structure
+# Layer 2 - Structure
 # Purpose: deterministic parse and normalize. No AI.
 # Subsystems: 5W1H, SSE, CFS, LNS, AAC, TPS, SJM, MPS, RDS, ISC
 # ---------------------------------------------------------------------------
 
 class StructureNode(BaseModel):
     node_id: str
+    section_id: str
+    parent_id: Optional[str] = None
+    role: Literal[
+        "PRIMARY_RULE",
+        "EVIDENCE",
+        "CONDITION",
+        "EXCEPTION",
+        "CONSEQUENCE",
+        "DEFINITION",
+        "BOILERPLATE",
+    ]
+    depth: int = 0
+    source_span_start: Optional[int] = None
+    source_span_end: Optional[int] = None
+    validation_status: Literal["valid", "repaired", "invalid"] = "valid"
+    validation_errors: list[str] = Field(default_factory=list)
     source_anchor: str
     source_text: str
     normalized_text: str
@@ -79,10 +95,32 @@ class StructureNode(BaseModel):
 class StructureResult(BaseModel):
     nodes: list[StructureNode]
     node_count: int
+    section_count: int
+    validation_report: "StructureValidationReport"
+
+
+class StructureValidationIssue(BaseModel):
+    section_id: str
+    issue_type: Literal[
+        "missing_primary",
+        "multiple_primary",
+        "boilerplate_leak",
+        "oversized_node",
+        "unclassified_node",
+        "unattached_child",
+    ]
+    message: str
+    node_id: Optional[str] = None
+
+
+class StructureValidationReport(BaseModel):
+    status: Literal["clean", "repaired", "failed"]
+    issues: list[StructureValidationIssue] = Field(default_factory=list)
+    repaired_sections: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
-# Layer 3 — Selection
+# Layer 3 - Selection
 # Purpose: deterministic node eligibility. No AI, no interpretation.
 # Nodes pass through unchanged.
 # ---------------------------------------------------------------------------
@@ -94,43 +132,36 @@ class SelectionResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 4 — Meaning
+# Layer 4 - Meaning
 # Purpose: the ONLY AI interpretation layer.
 # Operates only on selected nodes. Isolated behind clear interface.
+# If no model key, returns status only - no fake output.
 # ---------------------------------------------------------------------------
 
-class MeaningStructured(BaseModel):
-    actors: list[str]
-    actions: list[str]
-    object: Optional[str] = None
-    temporal: Optional[str] = None
-    jurisdiction: Optional[str] = None
+MeaningLensName = Literal[
+    "modality_shift",
+    "scope_change",
+    "actor_power_shift",
+    "action_domain_shift",
+    "threshold_standard_shift",
+    "obligation_removal",
+]
 
 
-class MeaningSuccessNodeResult(BaseModel):
+class MeaningLens(BaseModel):
+    lens: MeaningLensName
+    detected: bool
+    detail: Optional[str] = None
+
+
+class MeaningNodeResult(BaseModel):
     node_id: str
-    status: Literal["success"]
-    plain_meaning: str
-    structured: MeaningStructured
-
-
-class MeaningErrorNodeResult(BaseModel):
-    node_id: str
-    status: Literal["error"]
-    plain_meaning: None = None
-    structured: None = None
-    reason: str
-
-
-class MeaningEmptyNodeResult(BaseModel):
-    node_id: str
-    status: Literal["empty"]
-    plain_meaning: None = None
-    structured: None = None
-    reason: str
-
-
-MeaningNodeResult = MeaningSuccessNodeResult | MeaningErrorNodeResult | MeaningEmptyNodeResult
+    source_text: str
+    status: Optional[str] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
+    raw_response: Optional[str] = None
+    lenses: list[MeaningLens]
 
 
 class MeaningResult(BaseModel):
@@ -140,7 +171,7 @@ class MeaningResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 5 — Origin
+# Layer 5 - Origin
 # Purpose: provenance/source tracing only.
 # No credibility judgment. No truth claims. No intent claims.
 # Distribution metadata does not override origin identity.
@@ -161,7 +192,7 @@ class OriginResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 6 — Verification
+# Layer 6 - Verification
 # Purpose: verification-path routing only.
 # No true/false decisions. No credibility scoring. No final judgment.
 # ---------------------------------------------------------------------------
@@ -193,7 +224,7 @@ class VerificationResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 7 — Output
+# Layer 7 - Output
 # Purpose: presentation only. No transformation of upstream meaning.
 # ---------------------------------------------------------------------------
 
@@ -236,3 +267,6 @@ class PipelineResponse(BaseModel):
     verification: VerificationResult
     output: OutputResult
     errors: list[PipelineError] = Field(default_factory=list)
+
+
+StructureResult.model_rebuild()
