@@ -14,7 +14,7 @@ from app.verification.handler import process_verification
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the locked 7-layer pipeline:
-    Input → Origin → Structure → Selection → Meaning → Verification → Output
+    Input -> Structure -> Selection -> Meaning -> Origin -> Verification -> Output
     """
     errors: list[PipelineError] = []
 
@@ -27,13 +27,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=True,
         ))
 
-    # 2. Origin
-    origin_result = process_origin(
-        input_result,
-        run=request.options.run_origin,
-    )
-
-    # 3. Structure
+    # 2. Structure
     structure_result = process_structure(input_result)
     if structure_result.node_count == 0 and input_result.parse_status == "ok":
         errors.append(PipelineError(
@@ -41,11 +35,22 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             error="No nodes extracted from valid input",
             fatal=False,
         ))
+    invalid_nodes = [node.node_id for node in structure_result.nodes if node.validation_status == "invalid"]
+    if invalid_nodes:
+        errors.append(PipelineError(
+            layer="structure",
+            error=(
+                "Hierarchy validation failed for nodes: "
+                + ", ".join(invalid_nodes[:10])
+                + ("..." if len(invalid_nodes) > 10 else "")
+            ),
+            fatal=False,
+        ))
 
-    # 4. Selection
+    # 3. Selection
     selection_result = process_selection(structure_result)
 
-    # 5. Meaning
+    # 4. Meaning
     meaning_result = process_meaning(
         selection_result.selected_nodes,
         run=request.options.run_meaning,
@@ -56,6 +61,12 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             error=meaning_result.message or "Meaning layer could not execute",
             fatal=False,
         ))
+
+    # 5. Origin
+    origin_result = process_origin(
+        input_result,
+        run=request.options.run_origin,
+    )
 
     # 6. Verification
     verification_result = process_verification(
