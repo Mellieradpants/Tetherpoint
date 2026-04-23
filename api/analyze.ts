@@ -1,12 +1,21 @@
-import { enforceAnalyzeSecurity } from "../src/lib/analyze-security.server";
+import { enforceAnalyzeSecurity } from "./_shared/analyze-security";
+
+type AnalyzeOptions = {
+  run_meaning: boolean;
+  run_origin: boolean;
+  run_verification: boolean;
+};
+
+type AnalyzeBody = {
+  content: string;
+  content_type: string;
+  options: AnalyzeOptions;
+};
 
 function getBackendConfig() {
   const apiBaseUrl =
-    process.env.ANALYZE_API_BASE_URL ??
-    process.env.VITE_ANALYZE_API_BASE_URL ??
-    "https://anchored-flow-stack.onrender.com";
-  const analyzeSecret =
-    process.env.ANALYZE_SECRET ?? process.env.VITE_ANALYZE_SECRET ?? "";
+    process.env.ANALYZE_API_BASE_URL ?? "https://anchored-flow-stack.onrender.com";
+  const analyzeSecret = process.env.ANALYZE_SECRET ?? "";
 
   return {
     apiUrl: `${apiBaseUrl.replace(/\/+$/, "")}/analyze`,
@@ -14,76 +23,102 @@ function getBackendConfig() {
   };
 }
 
-function readAnalyzeBody(req: any) {
-  try {
-    const parsedBody = req.body;
+function sendJson(res: any, status: number, payload: Record<string, unknown>) {
+  res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
+  res.send(JSON.stringify(payload));
+}
 
-    if (typeof parsedBody === "string") {
-      const trimmed = parsedBody.trim();
-      return trimmed ? JSON.parse(trimmed) : {};
-    }
+async function readRawBody(req: any): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
 
-    if (parsedBody && typeof parsedBody === "object") {
-      return parsedBody;
-    }
+    req.on("data", (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
 
-    return {};
-  } catch (error) {
-    throw new Error(
-      error instanceof Error ? error.message : "Invalid JSON request body."
-    );
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+
+    req.on("error", (error: Error) => {
+      reject(error);
+    });
+
+    req.on("aborted", () => {
+      reject(new Error("Request body was aborted."));
+    });
+  });
+}
+
+function parseAnalyzeBody(rawBody: string): AnalyzeBody {
+  let parsed: unknown = {};
+
+  if (rawBody.trim()) {
+    parsed = JSON.parse(rawBody);
   }
+
+  const body = parsed && typeof parsed === "object" ? parsed : {};
+  const record = body as Record<string, unknown>;
+  const rawOptions =
+    record.options && typeof record.options === "object"
+      ? (record.options as Record<string, unknown>)
+      : {};
+
+  return {
+    content: typeof record.content === "string" ? record.content : "",
+    content_type:
+      typeof record.content_type === "string" ? record.content_type : "",
+    options: {
+      run_meaning: Boolean(rawOptions.run_meaning),
+      run_origin: Boolean(rawOptions.run_origin),
+      run_verification: Boolean(rawOptions.run_verification),
+    },
+  };
 }
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
-    res.status(405).json({ message: "Method not allowed" });
+    sendJson(res, 405, { message: "Method not allowed" });
     return;
   }
 
+  let body: AnalyzeBody;
+
   try {
-    let body: any;
+    const rawBody = await readRawBody(req);
+    body = parseAnalyzeBody(rawBody);
+  } catch (error) {
+    sendJson(res, 400, {
+      message:
+        error instanceof Error ? error.message : "Invalid JSON request body.",
+    });
+    return;
+  }
 
-    try {
-      body = readAnalyzeBody(req);
-    } catch (error) {
-      res.status(400).json({
-        message:
-          error instanceof Error ? error.message : "Invalid JSON request body.",
-      });
-      return;
-    }
+  const clientIpHeader = req.headers["x-forwarded-for"];
+  const clientIp = Array.isArray(clientIpHeader)
+    ? clientIpHeader[0]
+    : clientIpHeader?.split(",")[0].trim() ?? "unknown";
 
-    const content = typeof body.content === "string" ? body.content : "";
-    const contentType =
-      typeof body.content_type === "string" ? body.content_type : "";
-    const options = body.options ?? {
-      run_meaning: false,
-      run_origin: true,
-      run_verification: true,
-    };
-
-    const clientIpHeader = req.headers["x-forwarded-for"];
-    const clientIp = Array.isArray(clientIpHeader)
-      ? clientIpHeader[0]
-      : clientIpHeader?.split(",")[0].trim() ?? "unknown";
-
+  try {
     const security = enforceAnalyzeSecurity({
-      content,
-      content_type: contentType,
-      options,
+      content: body.content,
+      content_type: body.content_type,
+      options: body.options,
       clientIp,
     });
 
     if (security.reject) {
-      res.status(security.reject.status).json({ message: security.reject.message });
+      sendJson(res, security.reject.status, { message: security.reject.message });
       return;
     }
 
     const { apiUrl, analyzeSecret } = getBackendConfig();
 
     if (!analyzeSecret) {
-      res.status(500).json({ message: "ANALYZE_SECRET is not configured on the server." });
+      sendJson(res, 500, {
+        message: "ANALYZE_SECRET is not configured on the server.",
+      });
       return;
     }
 
@@ -94,9 +129,9 @@ export default async function handler(req: any, res: any) {
         "x-analyze-secret": analyzeSecret,
       },
       body: JSON.stringify({
-        content,
-        content_type: contentType,
-        options,
+        content: body.content,
+        content_type: body.content_type,
+        options: body.options,
       }),
     });
 
@@ -122,20 +157,21 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      res.status(response.status).json({ message });
+      sendJson(res, response.status, { message });
       return;
     }
 
     try {
-      res.status(200).json(JSON.parse(text));
+      sendJson(res, 200, JSON.parse(text));
     } catch {
-      res.status(502).json({ message: "Backend returned invalid JSON." });
+      sendJson(res, 502, { message: "Backend returned invalid JSON." });
     }
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Analyze proxy request failed before backend completion.";
-    res.status(502).json({ message });
+    sendJson(res, 502, {
+      message:
+        error instanceof Error
+          ? error.message
+          : "Analyze proxy request failed before backend completion.",
+    });
   }
 }
