@@ -82,8 +82,10 @@ class TestStructureLayer:
         assert struct.node_count > 0
         for node in struct.nodes:
             assert node.node_id
+            assert node.section_id
             assert node.source_anchor
             assert node.source_text
+            assert node.role
 
     def test_node_order_preserved(self):
         inp = process_input(
@@ -119,6 +121,106 @@ class TestStructureLayer:
         inp = process_input(html, ContentType.html)
         struct = process_structure(inp)
         assert struct.node_count >= 2
+
+    def test_structure_enforces_single_parent_per_section(self):
+        inp = process_input(
+            "Be it enacted by the Senate and House of Representatives. "
+            "A State shall require proof of citizenship to register to vote. "
+            "If documentary proof is unavailable, the applicant may submit supplemental records. "
+            "Unless the applicant is a minor, this requirement applies at the time of registration.",
+            ContentType.text,
+        )
+        struct = process_structure(inp)
+
+        sections: dict[str, list] = {}
+        for node in struct.nodes:
+            sections.setdefault(node.section_id, []).append(node)
+
+        assert struct.validation_report.status == "clean"
+        assert struct.validation_report.issues == []
+        assert struct.section_count == len(sections)
+        for section_nodes in sections.values():
+            parents = [node for node in section_nodes if node.role == "PRIMARY_RULE"]
+            assert len(parents) == 1
+            parent = parents[0]
+            for child in section_nodes:
+                if child.node_id == parent.node_id:
+                    continue
+                assert child.parent_id == parent.node_id
+                assert child.role in {
+                    "EVIDENCE",
+                    "CONDITION",
+                    "EXCEPTION",
+                    "CONSEQUENCE",
+                    "DEFINITION",
+                }
+
+    def test_save_act_section_restores_parent_and_evidence_children(self):
+        save_act_text = (
+            "SEC. 101. Proof of citizenship requirement. "
+            "An applicant shall provide documentary proof of United States citizenship to register to vote. "
+            "Acceptable document types include: a valid United States passport; "
+            "a certified birth certificate; a military identification card indicating United States citizenship."
+        )
+        inp = process_input(save_act_text, ContentType.text)
+        struct = process_structure(inp)
+        selection = process_selection(struct)
+
+        primary_nodes = [node for node in struct.nodes if node.role == "PRIMARY_RULE"]
+        evidence_nodes = [node for node in struct.nodes if node.role == "EVIDENCE"]
+
+        assert struct.validation_report.status == "clean"
+        assert struct.validation_report.issues == []
+        assert len(primary_nodes) == 1
+        assert "shall provide documentary proof of United States citizenship" in primary_nodes[0].normalized_text
+        assert len(evidence_nodes) == 3
+        assert all(node.parent_id == primary_nodes[0].node_id for node in evidence_nodes)
+        assert any("passport" in node.normalized_text.lower() for node in evidence_nodes)
+        assert any("birth certificate" in node.normalized_text.lower() for node in evidence_nodes)
+        assert any("military identification card" in node.normalized_text.lower() for node in evidence_nodes)
+        assert all(node.role != "BOILERPLATE" for node in struct.nodes)
+        assert all("sec. 101" not in node.normalized_text.lower() for node in struct.nodes)
+        assert all(node.role != "BOILERPLATE" for node in selection.selected_nodes)
+        assert max(len(node.normalized_text) for node in struct.nodes) <= 240
+
+    def test_subsection_markers_split_into_evidence_children(self):
+        text = (
+            "A State shall require documentary proof of citizenship as follows: "
+            "(A) a valid United States passport; "
+            "(B) a certified birth certificate; "
+            "(C) naturalization papers."
+        )
+        inp = process_input(text, ContentType.text)
+        struct = process_structure(inp)
+
+        primary_nodes = [node for node in struct.nodes if node.role == "PRIMARY_RULE"]
+        evidence_nodes = [node for node in struct.nodes if node.role == "EVIDENCE"]
+
+        assert len(primary_nodes) == 1
+        assert len(evidence_nodes) == 3
+        assert struct.validation_report.status == "clean"
+        assert struct.validation_report.issues == []
+
+    def test_multiple_obligations_split_before_parent_selection(self):
+        text = (
+            "The State shall verify documentary proof, and the registrar shall retain a copy of each record."
+        )
+        inp = process_input(text, ContentType.text)
+        struct = process_structure(inp)
+
+        primary_nodes = [node for node in struct.nodes if node.role == "PRIMARY_RULE"]
+
+        assert len(primary_nodes) == 2
+        assert max(len(node.normalized_text) for node in struct.nodes) <= 240
+
+    def test_single_primary_section_is_valid(self):
+        inp = process_input(
+            "A State shall maintain a voter registration list.",
+            ContentType.text,
+        )
+        struct = process_structure(inp)
+        assert struct.validation_report.status == "clean"
+        assert struct.validation_report.issues == []
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +281,8 @@ class TestMeaningLayer:
         assert result.status == "skipped"
         assert result.node_results == []
 
-    def test_meaning_skipped_without_api_key(self):
-        """Without OPENAI_API_KEY, meaning returns skipped even when run=True."""
+    def test_meaning_returns_node_error_without_api_key(self):
+        """Without OPENAI_API_KEY, meaning surfaces a per-node error."""
         import os
         old = os.environ.pop("OPENAI_API_KEY", None)
         try:
@@ -188,9 +290,61 @@ class TestMeaningLayer:
             struct = process_structure(inp)
             sel = process_selection(struct)
             result = process_meaning(sel.selected_nodes, run=True)
-            assert result.status == "skipped"
+            assert result.status == "executed"
+            assert result.node_results
+            assert result.node_results[0].status == "error"
+            assert result.node_results[0].error == "missing_api_key"
         finally:
             if old is not None:
+                os.environ["OPENAI_API_KEY"] = old
+
+    def test_meaning_accepts_wrapped_lens_payload(self, monkeypatch):
+        old = os.environ.get("OPENAI_API_KEY")
+        os.environ["OPENAI_API_KEY"] = "test-key"
+
+        def fake_post(*args, **kwargs):
+            class FakeResponse:
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": json.dumps(
+                                        {
+                                            "lenses": [
+                                                {
+                                                    "lens": "scope_change",
+                                                    "detected": True,
+                                                    "detail": "wrapped",
+                                                }
+                                            ]
+                                        }
+                                    )
+                                }
+                            }
+                        ]
+                    }
+
+            return FakeResponse()
+
+        import httpx
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+
+        try:
+            inp = process_input("The court ruled on the case.", ContentType.text)
+            struct = process_structure(inp)
+            sel = process_selection(struct)
+            result = process_meaning(sel.selected_nodes, run=True)
+            assert result.node_results[0].status == "executed"
+            assert result.node_results[0].lenses[0].lens == "scope_change"
+        finally:
+            if old is None:
+                os.environ.pop("OPENAI_API_KEY", None)
+            else:
                 os.environ["OPENAI_API_KEY"] = old
 
 
