@@ -377,6 +377,24 @@ components:
         detail:
           type: ["string", "null"]
 
+    MeaningScopeDetail:
+      type: object
+      required: [scope]
+      properties:
+        scope:
+          type: string
+          enum:
+            - modality_shift
+            - scope_change
+            - actor_power_shift
+            - action_domain_shift
+            - threshold_standard_shift
+            - obligation_removal
+        detail:
+          type: ["string", "null"]
+        evidence:
+          type: ["string", "null"]
+
     MeaningNodeResult:
       type: object
       required: [node_id, source_text, lenses]
@@ -399,6 +417,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MeaningLens"
+        detected_scopes:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Meaning Buddy scopes detected for this node
+        plain_meaning:
+          type: ["string", "null"]
+          description: Plain-language operational effect for the selected node
+        scope_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeaningScopeDetail"
+          default: []
+          description: Evidence-backed details for detected scopes
+        missing_information:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Details absent from the selected node that limit Meaning output
 
     MeaningResult:
       type: object
