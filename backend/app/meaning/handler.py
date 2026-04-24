@@ -13,7 +13,6 @@ from app.schemas.models import (
     MeaningNodeResult,
     MeaningNodeResult,
     MeaningResult,
-    MeaningStructured,
     MeaningSuccessNodeResult,
     StructureNode,
 )
