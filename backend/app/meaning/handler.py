@@ -285,7 +285,7 @@ def process_meaning(
                 MeaningNodeResult(
                     node_id=node.node_id,
                     source_text=node.source_text,
-                    status="success",
+                    status="executed",
                     lenses=lenses,
                 )
             )
