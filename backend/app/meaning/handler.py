@@ -10,7 +10,7 @@ import os
 from typing import Any
 
 from app.schemas.models import (
-    MeaningEmptyNodeResult,
+    MeaningNodeResult,
     MeaningErrorNodeResult,
     MeaningResult,
     MeaningStructured,
@@ -171,7 +171,7 @@ def _normalize_meaning_payload(node_id: str, raw_text: str):
                 status="error",
                 reason="empty output must include a non-empty reason",
             )
-        return MeaningEmptyNodeResult(
+        return MeaningNodeResult(
             node_id=node_id,
             status="empty",
             reason=reason.strip(),
@@ -279,7 +279,7 @@ def process_meaning(
     for node in selected_nodes:
         if not node.source_text.strip():
             node_results.append(
-                MeaningEmptyNodeResult(
+                MeaningNodeResult(
                     node_id=node.node_id,
                     status="empty",
                     reason="no meaningful content extracted",
