@@ -114,7 +114,7 @@ def _selection_reasons(node: StructureNode) -> list[str]:
     has_action = _has_action_or_requirement(node, text)
     has_operational_effect = _has_operational_effect(node, text)
 
-    if words < 5 and not has_operational_effect:
+    if words < 5 and not (has_actor and has_action):
         reasons.append("too short to contain actor/action/condition")
 
     if not has_actor and not has_action:
