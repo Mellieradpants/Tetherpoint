@@ -80,6 +80,18 @@ _BOILERPLATE_RE = re.compile(
     r"^(be it enacted\b|section\s+[a-z0-9.-]+\b|sec\.\s*[a-z0-9.-]+\b|short title\b|table of contents\b)",
     re.I,
 )
+_FRAGMENT_LABEL_RE = re.compile(
+    r"^(?:h\.?|r\.?|\d+\.?|h\.?\s*r\.?\s*\d+\.?|s\.?\s*\d+\.?|an act\.?|and\.?|or\.?)$",
+    re.I,
+)
+_AMENDMENT_FRAGMENT_RE = re.compile(
+    r"^by\s+(?:striking|inserting|adding|redesignating|amending|substituting|moving|transferring)\b",
+    re.I,
+)
+_ATOMIC_RULE_SIGNAL_RE = re.compile(
+    r"\b(shall|must|may not|shall not|must not|is required to|are required to|required to|may only|proof|documentary|eligible|eligibility|register|registration|verify|verification|authority|authorized|deadline|not later than|means|includes)\b",
+    re.I,
+)
 _MULTI_CLAUSE_RE = re.compile(r"\b(and|or)\b.+\b(and|or)\b", re.I)
 _LEAD_CLAUSE_RE = re.compile(
     r"^(?P<lead>(?:if|when|where|provided that|on condition that|in the event that|after|before|upon|unless|except|except that|notwithstanding|other than)\b.+?),(?P<trail>\s*.+)$",
@@ -314,17 +326,44 @@ def _ensure_terminal_punctuation(text: str) -> str:
     return f"{text}."
 
 
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\b[\w'-]+\b", text))
+
+
+def _is_non_substantive_fragment(text: str) -> bool:
+    normalized = _normalize_fragment(text).strip(" .;:")
+    if not normalized:
+        return True
+    if _FRAGMENT_LABEL_RE.match(normalized):
+        return True
+    if _AMENDMENT_FRAGMENT_RE.match(normalized) and not _ATOMIC_RULE_SIGNAL_RE.search(normalized):
+        return True
+    if _word_count(normalized) <= 3 and not _ATOMIC_RULE_SIGNAL_RE.search(normalized):
+        return True
+    return False
+
+
+def _fragment_role(text: str, hint_role: Optional[str] = None) -> str:
+    if hint_role:
+        return hint_role
+    if _is_boilerplate(text):
+        return "BOILERPLATE"
+    if _is_non_substantive_fragment(text):
+        return "CONSEQUENCE"
+    return "PRIMARY_RULE"
+
+
 def _is_boilerplate(text: str) -> bool:
     return bool(_BOILERPLATE_RE.search(text.strip()))
 
 
 def _is_primary_candidate(text: str) -> bool:
     text = text.strip()
-    if not text or _is_boilerplate(text):
+    if not text or _is_boilerplate(text) or _is_non_substantive_fragment(text):
         return False
     if _CONDITION_RE.search(text) or _EXCEPTION_RE.search(text):
         return False
-    return bool(_PRIMARY_RULE_RE.search(text))
+    return bool(_PRIMARY_RULE_RE.search(text) or _ATOMIC_RULE_SIGNAL_RE.search(text))
 
 
 def _is_atomic_parent(text: str) -> bool:
@@ -577,7 +616,7 @@ def _fallback_groups(fragments: list[dict[str, object]]) -> list[dict[str, list[
     if parent_index is None:
         parent_index = 0
 
-    parent = _fragment(str(fragments[parent_index]["text"] or ""))
+    parent = _fragment(str(fragments[parent_index]["text"] or ""), fragments[parent_index].get("hint_role"))
     children = [fragment for index, fragment in enumerate(fragments) if index != parent_index]
     return [{"parent": parent, "children": children}]
 
@@ -675,6 +714,10 @@ def validateSection(
     section_id = section_nodes[0].section_id
     visible_section_nodes = visible_nodes if visible_nodes is not None else section_nodes
     parents = [node for node in visible_section_nodes if node.role == "PRIMARY_RULE"]
+    if not parents and visible_section_nodes and all(
+        _is_non_substantive_fragment(node.normalized_text) for node in visible_section_nodes
+    ):
+        return []
 
     if len(parents) == 0:
         message = f"{section_id}: missing PRIMARY_RULE"
@@ -834,16 +877,19 @@ def _parse_section(
         if not _is_atomic_node(parent_text):
             raise ValueError(f"{section_id}: non-atomic parent candidate reached classification")
         parent_start, parent_end, search_offset = _span_for_text(normalized, parent_text, anchor, 0)
+        parent_role = _fragment_role(parent_text, group["parent"].get("hint_role"))
         parent_node = _build_node(
             next_index,
             section_id,
             parent_text,
             f"{anchor}#p{group_index}",
-            "PRIMARY_RULE",
+            parent_role,
             depth=0,
             source_span_start=parent_start,
             source_span_end=parent_end,
         )
+        if parent_role != "PRIMARY_RULE" and "fragment:incomplete" not in parent_node.tags:
+            parent_node.tags.append("fragment:incomplete")
         next_index += 1
 
         child_nodes: list[StructureNode] = []
@@ -1019,7 +1065,7 @@ def _walk_json(obj: object, path: str, out: list[dict[str, str]]) -> None:
             _walk_json(value, f"{path}.{key}", out)
     elif isinstance(obj, list):
         for index, value in enumerate(obj):
-            _walk_json(value, f"{path}[{index}]", out)
+            _walk_json(value, f"{path}[{index}")
 
 
 # ---------------------------------------------------------------------------
