@@ -16,6 +16,7 @@ from app.schemas.models import (
     MeaningLens,
     MeaningNodeResult,
     MeaningResult,
+    MeaningScopeDetail,
     OriginResult,
     StructureNode,
     VerificationNodeResult,
@@ -58,38 +59,24 @@ def _missing_information(
     origin_result: OriginResult | None,
     verification_node: VerificationNodeResult | None,
 ) -> list[str]:
-    missing: list[str] = []
-    for field in (
-        "actor",
-        "action",
-        "condition",
-        "temporal",
-        "jurisdiction",
-        "mechanism",
-        "risk",
-        "who",
-        "what",
-        "when",
-        "where",
-        "why",
-        "how",
-    ):
-        if getattr(node, field) in (None, "", []):
-            missing.append(field)
+    """Return source-grounding gaps that may limit Meaning output.
 
+    These are prompts for the Meaning layer, not automatic insufficiency labels.
+    Origin and Verification gaps are grounding gaps only; they should not by
+    themselves suppress a source-text-supported operational explanation.
+    """
+    missing: list[str] = []
+
+    if not (node.source_text or "").strip():
+        missing.append("selected_node_text")
+    if not any([node.actor, node.who]):
+        missing.append("explicit_actor_or_affected_party")
+    if not any([node.action, node.what]):
+        missing.append("explicit_action_or_requirement")
     if origin_result is None:
         missing.append("origin_context")
-    elif not any([
-        origin_result.origin_identity_signals,
-        origin_result.origin_metadata_signals,
-        origin_result.distribution_signals,
-    ]):
-        missing.append("origin_signals")
-
     if verification_node is None:
         missing.append("verification_result")
-    elif not verification_node.verification_path_available:
-        missing.append("verification_path")
 
     return missing
 
@@ -127,48 +114,59 @@ def _build_prompt(
         },
         "origin": _model_dump(origin_result) if origin_result is not None else None,
         "verification": _model_dump(verification_node) if verification_node is not None else None,
-        "missing_information": _missing_information(node, origin_result, verification_node),
+        "candidate_missing_information": _missing_information(node, origin_result, verification_node),
     }
 
     return (
         "You are the constrained Meaning layer for a source-anchored analysis pipeline. "
         "Analyze exactly one selected node using only the provided deterministic context. "
         "Do not create structure. Do not invent verification. Do not infer motive, intent, "
-        "or unsupported outcome. If the context is insufficient, say so in the lens detail.\n\n"
-        "Use the node text, parsed fields, detected scopes, origin signals, verification path, "
-        "and missing information to explain operational effect only where supported.\n\n"
+        "legal advice, political framing, or unsupported outcome. Fail rather than guess.\n\n"
+        "Meaning Buddy behavior: identify supported Meaning scopes, then synthesize them "
+        "into one compact plain-language paragraph explaining operational effect. Use the "
+        "selected node text, parsed fields, detected tags/scopes, origin signals, and "
+        "verification routing only as read-only grounding.\n\n"
         "Context JSON:\n"
         f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
-        "Evaluate each of the following lenses. For each lens, respond with a JSON object "
-        "containing 'lens', 'detected' (boolean), and 'detail' (string or null).\n\n"
-        "Lenses to evaluate:\n"
-        "1. modality_shift - Does the text shift obligation modality (e.g., 'shall' to 'may')?\n"
-        "2. scope_change - Does the text narrow or expand scope relative to the parsed/detected scope?\n"
-        "3. actor_power_shift - Does the text redistribute authority or power among explicit actors?\n"
-        "4. action_domain_shift - Does the text move an action into a different parsed domain?\n"
-        "5. threshold_standard_shift - Does the text raise or lower an explicit threshold or standard?\n"
-        "6. obligation_removal - Does the text remove or weaken an explicit obligation?\n\n"
+        "Evaluate these Meaning scopes:\n"
+        "1. modality_shift - obligation or permission language such as shall, must, may, prohibited, required.\n"
+        "2. scope_change - explicit narrowing or expanding of affected people, documents, places, systems, or cases.\n"
+        "3. actor_power_shift - explicit assignment, removal, or redistribution of authority among actors.\n"
+        "4. action_domain_shift - movement of an action into an explicit operational domain such as registration, review, documentation, enforcement, or verification.\n"
+        "5. threshold_standard_shift - explicit proof, eligibility, evidence, standard, or review threshold.\n"
+        "6. obligation_removal - explicit removal, weakening, or exception from a requirement.\n\n"
         "Output requirements:\n"
         "- Return ONLY valid JSON.\n"
-        "- Do not include markdown fences.\n"
-        "- Do not include explanatory text outside JSON.\n"
-        "- Return a top-level JSON array.\n"
-        "- Each array item must be an object with exactly these keys: lens, detected, detail.\n"
-        "- 'lens' must be one of: modality_shift, scope_change, actor_power_shift, "
-        "action_domain_shift, threshold_standard_shift, obligation_removal.\n"
-        "- 'detected' must be true or false.\n"
-        "- 'detail' must be a string or null.\n"
-        "- If a lens cannot be evaluated from the context, use detected=false and explain the missing information in detail.\n\n"
+        "- Do not include markdown fences or text outside JSON.\n"
+        "- Return one top-level JSON object with exactly these keys: detected_scopes, plain_meaning, scope_details, missing_information, lenses.\n"
+        "- detected_scopes must be an array of scope names from the allowed list, only when supported by the selected node text.\n"
+        "- plain_meaning must be one short paragraph, or null only if the selected node text is too incomplete to explain operational effect.\n"
+        "- scope_details must be an array of objects with scope, detail, and evidence. Include only detected scopes.\n"
+        "- missing_information must be an array of short strings. Include items only when the selected node lacks details needed for the paragraph.\n"
+        "- lenses must be an array of objects with lens, detected, and detail for all six scopes, preserving compatibility.\n"
+        "- Do not mark missing origin or verification context as insufficient if the selected node text itself supports a Meaning paragraph.\n"
+        "- If no scopes are detected but the node is still clear, detected_scopes and scope_details may be empty and plain_meaning should explain the explicit operational effect.\n\n"
         "Example output:\n"
-        "["
-        "{\"lens\":\"modality_shift\",\"detected\":false,\"detail\":null},"
-        "{\"lens\":\"scope_change\",\"detected\":true,\"detail\":\"The node narrows operation to the selected text's explicit jurisdiction.\"}"
-        "]"
+        "{"
+        "\"detected_scopes\":[\"modality_shift\",\"threshold_standard_shift\"],"
+        "\"plain_meaning\":\"The node makes documentary proof a required condition for the described action, so the operational effect is that the affected actor must satisfy a proof threshold before the process can proceed.\","
+        "\"scope_details\":["
+        "{\"scope\":\"modality_shift\",\"detail\":\"The text uses mandatory language.\",\"evidence\":\"shall provide\"},"
+        "{\"scope\":\"threshold_standard_shift\",\"detail\":\"The text states a proof requirement.\",\"evidence\":\"documentary proof\"}"
+        "],"
+        "\"missing_information\":[],"
+        "\"lenses\":["
+        "{\"lens\":\"modality_shift\",\"detected\":true,\"detail\":\"The text uses mandatory language.\"},"
+        "{\"lens\":\"scope_change\",\"detected\":false,\"detail\":null},"
+        "{\"lens\":\"actor_power_shift\",\"detected\":false,\"detail\":null},"
+        "{\"lens\":\"action_domain_shift\",\"detected\":false,\"detail\":null},"
+        "{\"lens\":\"threshold_standard_shift\",\"detected\":true,\"detail\":\"The text states a proof requirement.\"},"
+        "{\"lens\":\"obligation_removal\",\"detected\":false,\"detail\":null}"
+        "]}"
     )
 
 
-def _normalize_lens_payload(content: str) -> list[dict[str, Any]] | dict[str, str]:
-    """Parse model output into the expected lens list."""
+def _parse_json_payload(content: str) -> Any | dict[str, str]:
     cleaned = content.strip()
     candidates: list[str] = []
 
@@ -198,40 +196,77 @@ def _normalize_lens_payload(content: str) -> list[dict[str, Any]] | dict[str, st
         return repaired
 
     last_error: Exception | None = None
-    payload: Any = None
-    parsed = False
-
     for candidate in candidates:
         for attempt in (candidate, repair_json(candidate)):
             try:
-                payload = json.loads(attempt)
-                parsed = True
-                break
+                return json.loads(attempt)
             except json.JSONDecodeError as e:
                 last_error = e
-        if parsed:
-            break
 
-    if not parsed:
-        logger.exception("Meaning response JSON decode failed")
-        return {
-            "status": "error",
-            "error": "response_parse_failed",
-            "message": (
-                f"{type(last_error).__name__}: {last_error}"
-                if last_error is not None
-                else "Unable to parse model response"
-            ),
-            "raw_response": content,
-        }
+    logger.exception("Meaning response JSON decode failed")
+    return {
+        "status": "error",
+        "error": "response_parse_failed",
+        "message": (
+            f"{type(last_error).__name__}: {last_error}"
+            if last_error is not None
+            else "Unable to parse model response"
+        ),
+        "raw_response": content,
+    }
 
-    if isinstance(payload, list):
+
+def _as_string_list(value: Any, allowed: set[str] | None = None) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        item = item.strip()
+        if not item:
+            continue
+        if allowed is not None and item not in allowed:
+            continue
+        if item not in result:
+            result.append(item)
+    return result
+
+
+def _normalize_meaning_payload(content: str) -> dict[str, Any] | dict[str, str]:
+    """Parse model output into the Meaning Buddy object contract."""
+    payload = _parse_json_payload(content)
+    if isinstance(payload, dict) and "error" in payload:
         return payload
 
+    if isinstance(payload, list):
+        detected_scopes = [
+            item.get("lens")
+            for item in payload
+            if isinstance(item, dict)
+            and item.get("lens") in VALID_LENSES
+            and bool(item.get("detected", False))
+        ]
+        return {
+            "detected_scopes": detected_scopes,
+            "plain_meaning": None,
+            "scope_details": [
+                {
+                    "scope": item.get("lens"),
+                    "detail": item.get("detail"),
+                    "evidence": None,
+                }
+                for item in payload
+                if isinstance(item, dict)
+                and item.get("lens") in VALID_LENSES
+                and bool(item.get("detected", False))
+            ],
+            "missing_information": ["plain_meaning"],
+            "lenses": payload,
+        }
+
     if isinstance(payload, dict):
-        lenses = payload.get("lenses")
-        if isinstance(lenses, list):
-            return lenses
+        return payload
 
     return {
         "status": "error",
@@ -241,8 +276,8 @@ def _normalize_lens_payload(content: str) -> list[dict[str, Any]] | dict[str, st
     }
 
 
-def _call_openai(prompt: str) -> list[dict[str, Any]] | dict[str, str]:
-    """Call OpenAI-compatible API. Returns parsed lens results or a structured error."""
+def _call_openai(prompt: str) -> dict[str, Any] | dict[str, str]:
+    """Call OpenAI-compatible API. Returns parsed meaning output or a structured error."""
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         return {
@@ -278,7 +313,7 @@ def _call_openai(prompt: str) -> list[dict[str, Any]] | dict[str, str]:
         resp.raise_for_status()
         response_json = resp.json()
         content = response_json["choices"][0]["message"]["content"]
-        return _normalize_lens_payload(content)
+        return _normalize_meaning_payload(content)
     except httpx.HTTPError as e:
         logger.exception("Meaning API HTTP failure")
         return {
@@ -301,6 +336,63 @@ def _call_openai(prompt: str) -> list[dict[str, Any]] | dict[str, str]:
             "error": "api_runtime_error",
             "message": f"{type(e).__name__}: {e}",
         }
+
+
+def _coerce_lenses(raw_lenses: Any) -> list[MeaningLens] | dict[str, str]:
+    if not isinstance(raw_lenses, list):
+        return {
+            "error": "lenses_shape_mismatch",
+            "message": f"Expected lenses list, received {type(raw_lenses).__name__}",
+        }
+
+    lenses: list[MeaningLens] = []
+    for item in raw_lenses:
+        if not isinstance(item, dict):
+            return {
+                "error": "lens_item_shape_mismatch",
+                "message": f"Unexpected lens item shape: {type(item).__name__}",
+            }
+
+        lens_name = item.get("lens")
+        if lens_name not in VALID_LENSES:
+            return {
+                "error": "lens_name_invalid",
+                "message": f"Unexpected lens name: {lens_name!r}",
+            }
+
+        detail = item.get("detail")
+        lenses.append(
+            MeaningLens(
+                lens=lens_name,
+                detected=bool(item.get("detected", False)),
+                detail=detail if isinstance(detail, str) else None,
+            )
+        )
+
+    return lenses
+
+
+def _coerce_scope_details(value: Any) -> list[MeaningScopeDetail]:
+    if not isinstance(value, list):
+        return []
+
+    details: list[MeaningScopeDetail] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        scope = item.get("scope")
+        if scope not in VALID_LENSES:
+            continue
+        detail = item.get("detail")
+        evidence = item.get("evidence")
+        details.append(
+            MeaningScopeDetail(
+                scope=scope,
+                detail=detail if isinstance(detail, str) else None,
+                evidence=evidence if isinstance(evidence, str) else None,
+            )
+        )
+    return details
 
 
 def process_meaning(
@@ -353,52 +445,59 @@ def process_meaning(
             )
             continue
 
-        lenses: list[MeaningLens] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                node_results.append(
-                    MeaningNodeResult(
-                        node_id=node.node_id,
-                        source_text=node.source_text,
-                        status="error",
-                        error="lens_item_shape_mismatch",
-                        message=f"Unexpected lens item shape: {type(item).__name__}",
-                        raw_response=json.dumps(raw),
-                        lenses=[],
-                    )
-                )
-                break
-
-            lens_name = item.get("lens")
-            if lens_name not in VALID_LENSES:
-                node_results.append(
-                    MeaningNodeResult(
-                        node_id=node.node_id,
-                        source_text=node.source_text,
-                        status="error",
-                        error="lens_name_invalid",
-                        message=f"Unexpected lens name: {lens_name!r}",
-                        raw_response=json.dumps(raw),
-                        lenses=[],
-                    )
-                )
-                break
-
-            lenses.append(
-                MeaningLens(
-                    lens=lens_name,
-                    detected=bool(item.get("detected", False)),
-                    detail=item.get("detail"),
-                )
-            )
-        else:
+        lenses = _coerce_lenses(raw.get("lenses"))
+        if isinstance(lenses, dict):
             node_results.append(
                 MeaningNodeResult(
                     node_id=node.node_id,
                     source_text=node.source_text,
-                    status="executed",
-                    lenses=lenses,
+                    status="error",
+                    error=lenses["error"],
+                    message=lenses.get("message"),
+                    raw_response=json.dumps(raw),
+                    lenses=[],
                 )
             )
+            continue
+
+        detected_scopes = _as_string_list(raw.get("detected_scopes"), VALID_LENSES)
+        if not detected_scopes:
+            detected_scopes = [lens.lens for lens in lenses if lens.detected]
+
+        plain_meaning = raw.get("plain_meaning")
+        if not isinstance(plain_meaning, str) or not plain_meaning.strip():
+            plain_meaning = None
+
+        scope_details = _coerce_scope_details(raw.get("scope_details"))
+        missing_information = _as_string_list(raw.get("missing_information"))
+
+        if plain_meaning is None and not missing_information:
+            node_results.append(
+                MeaningNodeResult(
+                    node_id=node.node_id,
+                    source_text=node.source_text,
+                    status="error",
+                    error="plain_meaning_missing",
+                    message="Meaning response did not include plain_meaning or missing_information",
+                    raw_response=json.dumps(raw),
+                    lenses=lenses,
+                    detected_scopes=detected_scopes,
+                    scope_details=scope_details,
+                )
+            )
+            continue
+
+        node_results.append(
+            MeaningNodeResult(
+                node_id=node.node_id,
+                source_text=node.source_text,
+                status="executed",
+                lenses=lenses,
+                detected_scopes=detected_scopes,
+                plain_meaning=plain_meaning,
+                scope_details=scope_details,
+                missing_information=missing_information,
+            )
+        )
 
     return MeaningResult(status="executed", node_results=node_results)
