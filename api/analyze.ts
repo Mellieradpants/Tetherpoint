@@ -1,5 +1,3 @@
-import { enforceAnalyzeSecurity } from "./_shared/analyze-security";
-
 type AnalyzeOptions = {
   run_meaning: boolean;
   run_origin: boolean;
@@ -11,6 +9,20 @@ type AnalyzeBody = {
   content_type: string;
   options: AnalyzeOptions;
 };
+
+type SecurityCheckResult = {
+  reject?: { status: number; message: string };
+  meaningAllowed: boolean;
+};
+
+const MAX_CONTENT_LENGTH = 500_000;
+const VALID_CONTENT_TYPES = new Set(["text", "html", "xml", "json"]);
+const GENERAL_LIMIT = 30;
+const MEANING_LIMIT = 5;
+const WINDOW_SECONDS = 60_000;
+
+const generalBuckets = new Map<string, number[]>();
+const meaningBuckets = new Map<string, number[]>();
 
 function getBackendConfig() {
   const apiBaseUrl =
@@ -26,6 +38,111 @@ function getBackendConfig() {
 function sendJson(res: any, status: number, payload: Record<string, unknown>) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
   res.send(JSON.stringify(payload));
+}
+
+function prune(timestamps: number[], now: number): number[] {
+  const cutoff = now - WINDOW_SECONDS;
+  return timestamps.filter((timestamp) => timestamp > cutoff);
+}
+
+function checkRateLimit(clientIp: string, wantsMeaning: boolean): string | null {
+  const now = Date.now();
+
+  let general = generalBuckets.get(clientIp) ?? [];
+  general = prune(general, now);
+  if (general.length >= GENERAL_LIMIT) {
+    return `Rate limit exceeded: ${GENERAL_LIMIT} requests per ${WINDOW_SECONDS / 1000}s`;
+  }
+  general.push(now);
+  generalBuckets.set(clientIp, general);
+
+  if (wantsMeaning) {
+    let meaning = meaningBuckets.get(clientIp) ?? [];
+    meaning = prune(meaning, now);
+    if (meaning.length >= MEANING_LIMIT) {
+      return `Meaning rate limit exceeded: ${MEANING_LIMIT} requests per ${WINDOW_SECONDS / 1000}s`;
+    }
+    meaning.push(now);
+    meaningBuckets.set(clientIp, meaning);
+  }
+
+  return null;
+}
+
+function enforceAnalyzeSecurity(input: {
+  content: string;
+  content_type: string;
+  options: AnalyzeOptions;
+  clientIp?: string;
+}): SecurityCheckResult {
+  const clientIp = input.clientIp ?? "unknown";
+  const contentLength = input.content.length;
+
+  if (!input.content || !input.content.trim()) {
+    console.warn(`[security] Rejected empty content from ${clientIp}`);
+    return {
+      reject: { status: 400, message: "content must not be empty" },
+      meaningAllowed: false,
+    };
+  }
+
+  if (contentLength > MAX_CONTENT_LENGTH) {
+    console.warn(
+      `[security] Rejected oversized request from ${clientIp}: ${contentLength} bytes (max ${MAX_CONTENT_LENGTH})`
+    );
+    return {
+      reject: {
+        status: 413,
+        message: `content too large: ${contentLength} bytes (max ${MAX_CONTENT_LENGTH})`,
+      },
+      meaningAllowed: false,
+    };
+  }
+
+  if (!VALID_CONTENT_TYPES.has(input.content_type)) {
+    console.warn(
+      `[security] Rejected invalid content_type "${input.content_type}" from ${clientIp}`
+    );
+    return {
+      reject: {
+        status: 400,
+        message: `Invalid content_type: must be one of ${[...VALID_CONTENT_TYPES].join(", ")}`,
+      },
+      meaningAllowed: false,
+    };
+  }
+
+  let meaningAllowed = false;
+  if (input.options.run_meaning) {
+    const serverSecret = process.env.ANALYZE_SECRET ?? "";
+    if (serverSecret) {
+      meaningAllowed = true;
+    }
+
+    if (!meaningAllowed) {
+      console.info(
+        `[security] Meaning blocked - ANALYZE_SECRET not configured. Client ${clientIp}`
+      );
+    }
+  }
+
+  const rateLimitError = checkRateLimit(
+    clientIp,
+    input.options.run_meaning && meaningAllowed
+  );
+  if (rateLimitError) {
+    console.warn(`[security] Rate limited ${clientIp}: ${rateLimitError}`);
+    return {
+      reject: { status: 429, message: rateLimitError },
+      meaningAllowed: false,
+    };
+  }
+
+  console.info(
+    `[security] analyze request ip=${clientIp} size=${contentLength} meaning_requested=${input.options.run_meaning} meaning_allowed=${input.options.run_meaning ? meaningAllowed : "n/a"} content_type=${input.content_type}`
+  );
+
+  return { meaningAllowed };
 }
 
 async function readRawBody(req: any): Promise<string> {
