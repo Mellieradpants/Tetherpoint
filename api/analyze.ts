@@ -24,14 +24,24 @@ const WINDOW_SECONDS = 60_000;
 const generalBuckets = new Map<string, number[]>();
 const meaningBuckets = new Map<string, number[]>();
 
+function getAnalyzeSecret(): string | undefined {
+  const analyzeSecret = process.env.ANALYZE_SECRET;
+
+  if (typeof analyzeSecret !== "string") {
+    return undefined;
+  }
+
+  const trimmedSecret = analyzeSecret.trim();
+  return trimmedSecret.length > 0 ? trimmedSecret : undefined;
+}
+
 function getBackendConfig() {
   const apiBaseUrl =
     process.env.ANALYZE_API_BASE_URL ?? "https://anchored-flow-stack.onrender.com";
-  const analyzeSecret = process.env.ANALYZE_SECRET ?? "";
 
   return {
     apiUrl: `${apiBaseUrl.replace(/\/+$/, "")}/analyze`,
-    analyzeSecret,
+    analyzeSecret: getAnalyzeSecret(),
   };
 }
 
@@ -114,8 +124,7 @@ function enforceAnalyzeSecurity(input: {
 
   let meaningAllowed = false;
   if (input.options.run_meaning) {
-    const serverSecret = process.env.ANALYZE_SECRET ?? "";
-    if (serverSecret) {
+    if (getAnalyzeSecret()) {
       meaningAllowed = true;
     }
 
