@@ -1,3 +1,7 @@
+export const config = {
+  runtime: "nodejs",
+};
+
 type AnalyzeOptions = {
   run_meaning: boolean;
   run_origin: boolean;
