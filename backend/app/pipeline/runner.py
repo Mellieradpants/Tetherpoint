@@ -14,7 +14,7 @@ from app.verification.handler import process_verification
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the locked pipeline:
-    Input -> Origin Intake -> Structure -> Selection -> Parsing -> Verification -> Meaning -> Output
+    Input -> Structure -> Origin / Document Anchor -> Selection -> Verification -> Meaning -> Output
 
     Parsing fields are currently produced inside Structure; no separate Parsing layer is created here.
     """
@@ -29,13 +29,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=True,
         ))
 
-    # 2. Origin Intake
-    origin_result = process_origin(
-        input_result,
-        run=request.options.run_origin,
-    )
-
-    # 3. Structure
+    # 2. Structure
     structure_result = process_structure(input_result)
     if structure_result.node_count == 0 and input_result.parse_status == "ok":
         errors.append(PipelineError(
@@ -55,19 +49,22 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
+    # 3. Origin / Document Anchor
+    origin_result = process_origin(
+        input_result,
+        run=request.options.run_origin,
+    )
+
     # 4. Selection
     selection_result = process_selection(structure_result)
 
-    # 5. Parsing
-    # Parsed node fields are produced by the deterministic Structure layer in this pass.
-
-    # 6. Verification
+    # 5. Verification
     verification_result = process_verification(
         selection_result.selected_nodes,
         run=request.options.run_verification,
     )
 
-    # 7. Meaning
+    # 6. Meaning
     meaning_result = process_meaning(
         selection_result.selected_nodes,
         run=request.options.run_meaning,
@@ -81,7 +78,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 8. Output
+    # 7. Output
     output_result = assemble_output(
         input_result,
         structure_result,
