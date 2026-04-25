@@ -33,6 +33,10 @@ _CITATION_TITLE_RE = re.compile(
     re.I,
 )
 _LABEL_VALUE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 _/-]{1,60})\s*:\s*(.+?)\s*$")
+_USC_CITATION_RE = re.compile(r"\b\d+\s+U\.?S\.?C\.?\s*\d+[a-zA-Z0-9.-]*\b", re.I)
+_NAMED_ACT_RE = re.compile(r"\b(?:[A-Z][A-Za-z]+(?:\s+|\-)){1,8}Act of \d{4}\b")
+_SECTION_AMEND_RE = re.compile(r"\bSection\s+\d+[A-Za-z0-9.-]*\b[^.]{0,120}\bis amended\b", re.I)
+_FEDERAL_CONTEXT_RE = re.compile(r"\b(Federal office|United States citizenship|Secretary of State|Department of Homeland Security|REAL ID)\b", re.I)
 
 _TEXT_IDENTITY_LABELS = {
     "source system": "source_system",
@@ -67,6 +71,70 @@ _TEXT_DISTRIBUTION_LABELS = {
     "og title": "og:title",
     "twitter title": "twitter:title",
 }
+
+
+def _append_unique_signal(
+    signals: list[OriginSignal],
+    signal: str,
+    value: str,
+    category: str,
+    trace: list[str],
+    reason: str,
+) -> None:
+    cleaned = " ".join(value.split()).strip(" .;,")
+    if not cleaned:
+        return
+    if any(existing.signal == signal and existing.value == cleaned for existing in signals):
+        return
+    signals.append(OriginSignal(signal=signal, value=cleaned, category=category))
+    trace.append(f"{signal} -> {reason}")
+
+
+def _extract_inferred_text_origin(
+    content: str,
+    identity: list[OriginSignal],
+    metadata: list[OriginSignal],
+    trace: list[str],
+) -> None:
+    for match in _NAMED_ACT_RE.finditer(content):
+        _append_unique_signal(
+            identity,
+            "referenced_act",
+            match.group(0),
+            "text_derived_signal",
+            trace,
+            f"text pattern ({match.group(0)})",
+        )
+
+    for match in _USC_CITATION_RE.finditer(content):
+        _append_unique_signal(
+            identity,
+            "usc_citation",
+            match.group(0),
+            "text_derived_signal",
+            trace,
+            f"text pattern ({match.group(0)})",
+        )
+
+    for match in _SECTION_AMEND_RE.finditer(content):
+        _append_unique_signal(
+            metadata,
+            "amendment_section",
+            match.group(0),
+            "text_derived_signal",
+            trace,
+            f"text pattern ({match.group(0)})",
+        )
+
+    for match in _FEDERAL_CONTEXT_RE.finditer(content):
+        _append_unique_signal(
+            metadata,
+            "federal_context",
+            match.group(0),
+            "text_derived_signal",
+            trace,
+            f"text pattern ({match.group(0)})",
+        )
 
 
 def _extract_html_origin(content: str) -> dict:
@@ -223,6 +291,8 @@ def _extract_text_origin(content: str) -> dict:
     if author_match and not any(signal.signal == "author" for signal in identity):
         identity.append(OriginSignal(signal="author", value=author_match.group(1)))
         trace.append("author -> text author pattern")
+
+    _extract_inferred_text_origin(content, identity, metadata, trace)
 
     return {"identity": identity, "metadata": metadata, "distribution": distribution, "trace": trace}
 
