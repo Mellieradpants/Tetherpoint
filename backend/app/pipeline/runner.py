@@ -14,7 +14,7 @@ from app.verification.handler import process_verification
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the locked pipeline:
-    Input -> Structure -> Origin / Document Anchor -> Selection -> Verification -> Meaning -> Output
+    Input -> Structure -> Document Origin -> Node Anchors -> Selection -> Verification -> Meaning -> Output
 
     Parsing fields are currently produced inside Structure; no separate Parsing layer is created here.
     """
@@ -49,9 +49,10 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 3. Origin / Document Anchor
+    # 3. Document Origin / Node Anchors
     origin_result = process_origin(
         input_result,
+        structure_result=structure_result,
         run=request.options.run_origin,
     )
 
