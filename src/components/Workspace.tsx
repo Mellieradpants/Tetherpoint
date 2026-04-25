@@ -680,20 +680,6 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                 <EmptyState message="No evidence trace returned." />
               )}
             </Section>
-
-            {data.structure.validation_report.issues.length > 0 && (
-              <Section title="Validation Report">
-                {data.structure.validation_report.issues.map((issue, index) => (
-                  <div
-                    key={`${issue.section_id}-${issue.issue_type}-${index}`}
-                    className="border-b border-border/50 py-2 text-sm text-foreground last:border-0"
-                  >
-                    <div className="font-medium text-destructive">{issue.issue_type}</div>
-                    <div className="mt-1 text-muted-foreground">{issue.message}</div>
-                  </div>
-                ))}
-              </Section>
-            )}
           </div>
         )}
       </div>
