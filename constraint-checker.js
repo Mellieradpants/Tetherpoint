@@ -1,4 +1,4 @@
-```javascript
+
 const GOVERNANCE_STATUSES = {
   MATCH: "match",
   MISMATCH_DETECTED: "mismatch_detected",
@@ -167,4 +167,4 @@ console.log("TEST 2 - Conflict:");
 console.log(sampleConflict);
 
 
-```
+
