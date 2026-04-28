@@ -166,12 +166,5 @@ console.log(sampleMissingSource);
 console.log("TEST 2 - Conflict:");
 console.log(sampleConflict);
 
-export {
-  GOVERNANCE_STATUSES,
-  REQUIRED_ANCHOR_FIELDS,
-  checkRequiredAnchorFields,
-  checkFieldConflict,
-  checkDownstreamActionSupport,
-  evaluateGovernanceRecord,
-};
+
 ```
