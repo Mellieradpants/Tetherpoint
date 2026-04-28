@@ -1,0 +1,34 @@
+{
+  "layer": "governance_constraints",
+  "purpose": "Detect missing, conflicting, or unsupported data before downstream action.",
+  "principles": [
+    "Do not infer truth",
+    "Do not guess missing values",
+    "Do not overwrite verified values silently",
+    "Tag mismatches neutrally",
+    "Block unsupported downstream action"
+  ],
+  "statuses": [
+    "match",
+    "mismatch_detected",
+    "contradiction_detected",
+    "missing_required_source",
+    "needs_review",
+    "unsupported_downstream_action"
+  ],
+  "requiredAnchorFields": [
+    "fieldName",
+    "extractedValue",
+    "sourceAnchor",
+    "sourceSystem",
+    "documentType"
+  ],
+  "reviewTriggers": [
+    "missing_source_anchor",
+    "conflicting_dates",
+    "conflicting_relationship_status",
+    "name_mismatch",
+    "timeline_sequence_conflict",
+    "unsupported_value_used_for_action"
+  ]
+}
