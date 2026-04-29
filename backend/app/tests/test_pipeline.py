@@ -93,6 +93,20 @@ class TestRuleUnitsLayer:
         assert units.rule_units[0].source_node_ids
         assert "citizenship" in units.rule_units[0].source_text_combined.lower()
 
+    def test_standalone_exception_rule_unit_is_ready(self):
+        units = _rule_units_for_text(
+            "The reporting requirement in Section 2 does not apply to a regional transmission operator "
+            "that serves fewer than 100,000 retail customers, unless the Commission determines that "
+            "the operator’s service area includes critical defense, hospital, or water infrastructure."
+        )
+        assert units.unit_count == 1
+        assert units.ready_count == 1
+        assert units.needs_review_count == 0
+        assert units.rule_units[0].meaning_eligible is True
+        assert "missing_primary_rule" not in units.rule_units[0].assembly_issues
+        assert "service area includes critical defense" in units.rule_units[0].source_text_combined
+        assert "service area. critical defense" not in units.rule_units[0].source_text_combined
+
 
 class TestMeaningLayer:
     def test_meaning_skipped_when_disabled(self):
@@ -161,6 +175,7 @@ class TestFullPipeline:
         assert result.verification.status == "executed"
         assert result.meaning.status == "fallback"
         assert result.meaning.summary_basis == "deterministic_brief"
+        assert result.governance.status in {"match", "needs_review"}
 
     def test_malformed_json_pipeline(self):
         req = AnalyzeRequest(
@@ -173,7 +188,7 @@ class TestFullPipeline:
         assert result.errors
         assert result.errors[0].layer == "input"
 
-    def test_response_has_top_level_rule_units(self):
+    def test_response_has_top_level_rule_units_and_governance(self):
         req = AnalyzeRequest(
             content="The SEC must enforce compliance.",
             content_type=ContentType.text,
@@ -187,6 +202,7 @@ class TestFullPipeline:
         assert result.meaning is not None
         assert result.origin is not None
         assert result.verification is not None
+        assert result.governance is not None
         assert result.output is not None
         assert result.errors is not None
 
@@ -199,5 +215,5 @@ class TestFullPipeline:
         })
         assert response.status_code == 200
         body = response.json()
-        required_keys = {"input", "structure", "selection", "rule_units", "meaning", "origin", "verification", "output", "errors"}
+        required_keys = {"input", "structure", "selection", "rule_units", "meaning", "origin", "verification", "governance", "output", "errors"}
         assert required_keys == set(body.keys())
