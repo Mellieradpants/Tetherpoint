@@ -34,6 +34,27 @@ The current backend executes layers in this order:
 
 This order matters. Atomic Structure nodes are traceability units. Rule Units are the coherent interpretation units used by Verification and Meaning. Governance evaluates source support and action-safety constraints after structured records exist and before final output assembly.
 
+## Deterministic control boundary
+
+Tetherpoint does not permit AI to create or modify the structural record.
+
+Before Meaning can produce a plain-language explanation, the pipeline has already produced:
+
+- source anchors
+- section and node boundaries
+- node roles
+- selection eligibility
+- Rule Units
+- source-node references
+- verification routes
+- governance status
+
+Those fields are created by deterministic code, not by a model response.
+
+AI, when enabled in a future bounded Meaning path, may only explain from the structured record it receives. It must not create anchors, change node roles, alter Rule Units, assign verification routes, change governance status, or decide whether a record is safe to pass forward.
+
+Security implication: prompt text can be analyzed, but it does not control the schema, anchors, eligibility rules, verification routing, or governance outcome.
+
 ## Layer responsibilities
 
 | Layer | Purpose | AI |
@@ -78,6 +99,7 @@ Governance is not UI, upload, export, translation, or truth adjudication.
 
 - No source span, no output.
 - No anchor, no meaning.
+- AI does not define or modify record structure, source anchors, node roles, Rule Units, verification routes, or governance outcomes.
 - Atomic Structure nodes are traceability units, not public Meaning targets.
 - Rule Units are interpretation units.
 - Meaning must not use scope or shift-label taxonomy in the default Tetherpoint path.
