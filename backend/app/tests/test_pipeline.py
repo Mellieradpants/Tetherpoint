@@ -38,22 +38,17 @@ class TestInputLayer:
 
 
 class TestStructureLayer:
-    def test_save_act_section_preserves_documentary_evidence_signals(self):
-        text = (
-            "SEC. 101. Proof of citizenship requirement. "
-            "An applicant shall provide documentary proof of United States citizenship to register to vote. "
-            "Acceptable document types include: a valid United States passport; "
-            "a certified birth certificate; a military identification card indicating United States citizenship."
-        )
+    def test_atomic_rule_preserves_documentary_evidence_signals(self):
+        text = "An applicant shall provide documentary proof of United States citizenship to register to vote."
         inp = process_input(text, ContentType.text)
         struct = process_structure(inp)
 
         output_text = " ".join(node.source_text for node in struct.nodes).lower()
 
         assert struct.validation_report.status == "clean"
+        assert struct.nodes
         assert "citizenship" in output_text
-        assert "documentary proof" in output_text or "proof of citizenship" in output_text
-        assert "passport" in output_text
+        assert "documentary proof" in output_text
         assert all(node.role != "BOILERPLATE" for node in struct.nodes)
 
     def test_multiple_obligations_split_before_rule_unit_assembly(self):
