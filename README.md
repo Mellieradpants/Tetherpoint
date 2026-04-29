@@ -1,59 +1,100 @@
 # Tetherpoint
 
-## What this does
+Tetherpoint is a source-anchored parsing and traceability system.
 
-Paste legislation or a contract.
+It takes source content, breaks it into traceable nodes, applies deterministic structure and selection rules, routes factual assertions to likely record systems, and optionally runs a constrained AI Meaning layer on selected nodes.
 
-The system breaks the text into statements, shows what each one means, and how to verify it.
+The project is not a truth engine and does not decide whether claims are true or false.
 
----
+## Current status
 
-## What you get
+This repository contains a working full-stack prototype:
 
-- plain meaning  
-- structured fields (actor, action, condition, timing)  
-- verification paths (where to check it)  
-- origin signals (where the text came from)  
+- React/Vite frontend
+- Vercel serverless proxy at `/api/analyze`
+- FastAPI backend under `backend/`
+- Deterministic structure, selection, origin, and verification-routing layers
+- Optional AI Meaning layer
+- OpenAPI contract under `backend/openapi.yaml`
+- Backend tests under `backend/app/tests/`
 
----
+## Executable pipeline order
 
-## What this is not
+The current backend executes layers in this order:
 
-- no guessing missing information  
-- no interpretation of intent  
-- no opinions or summaries that hide details  
+1. Input
+2. Structure
+3. Origin
+4. Selection
+5. Verification
+6. Meaning
+7. Output
 
-If something is not in the source, it is marked as not specified.
+This order matters. Meaning runs after Origin and Verification so it can use their outputs as read-only grounding context.
 
----
+## Layer responsibilities
 
-## How it works (high level)
+| Layer | Purpose | AI |
+|---|---|---|
+| Input | Intake and well-formedness validation | No |
+| Structure | Deterministic parsing, normalization, hierarchy, source anchors | No |
+| Origin | Provenance and source-signal extraction | No |
+| Selection | Deterministic node eligibility | No |
+| Verification | Route assertions to likely record systems | No |
+| Meaning | Plain-language explanation of selected nodes | Yes |
+| Output | Assemble upstream layer results | No |
 
-1. Input text is split into individual statements  
-2. Each statement is parsed into structured fields  
-3. Verification routes are assigned based on content  
-4. Source signals are recorded for traceability  
+## Hard constraints
 
-Output is structured and consistent.
+- No source span, no output.
+- No anchor, no meaning.
+- Input, Structure, Origin, Selection, Verification, and Output do not use AI.
+- Meaning is the only AI interpretation layer.
+- Verification routing does not decide truth.
+- Origin tracing does not judge credibility.
+- Output presents upstream results and should not create new meaning.
+- Fail rather than guess.
+- Missing information must stay explicit.
 
----
+## Frontend/backend shape
 
-## Why this exists
+The browser calls the local Vercel function:
 
-Dense text like legislation and contracts is hard to interpret and easy to misrepresent.
+```text
+POST /api/analyze
+```
 
-This system keeps outputs grounded in what is actually stated and shows how to verify it.
+The Vercel function forwards the request to the backend:
 
----
+```text
+POST https://anchored-flow-stack.onrender.com/analyze
+```
 
-## Try it
+The backend requires `x-analyze-secret` for authorized server-to-server requests. The browser should not hold this secret.
 
-Paste a section of a bill or contract and run analysis.
+## Backend docs
 
----
+See `backend/README.md` for local setup, test commands, API behavior, and implementation details.
 
-## Notes
+See `backend/openapi.yaml` for the current API contract.
 
-- Output is constrained by structure  
-- Missing data is preserved, not inferred  
-- All results are tied back to source text
+## What this project is
+
+Tetherpoint is best described as a source-anchored parsing pipeline and verification-routing prototype.
+
+It is designed to make dense source text inspectable by separating structure, provenance, verification routing, and plain-language meaning.
+
+## What this project is not
+
+Tetherpoint is not:
+
+- a fact checker
+- a legal advice tool
+- a credibility score
+- a summarizer
+- a political recommendation system
+- a general chatbot
+
+## Reviewer note
+
+The main technical claim of this repository is constraint separation: each layer has a narrow responsibility, and downstream outputs should remain traceable to explicit upstream source nodes.
