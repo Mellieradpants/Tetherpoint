@@ -6,6 +6,7 @@ from app.input.handler import process_input
 from app.meaning.handler import process_meaning
 from app.origin.handler import process_origin
 from app.output.handler import assemble_output
+from app.rule_units.handler import process_rule_units
 from app.schemas.models import AnalyzeRequest, PipelineError, PipelineResponse
 from app.selection.handler import process_selection
 from app.structure.handler import process_structure
@@ -13,10 +14,11 @@ from app.verification.handler import process_verification
 
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
-    """Execute the locked pipeline:
-    Input -> Structure -> Document Origin -> Node Anchors -> Selection -> Verification -> Meaning -> Output
+    """Execute the pipeline:
+    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Output
 
-    Parsing fields are currently produced inside Structure; no separate Parsing layer is created here.
+    Atomic Structure nodes remain traceability units. Rule Units are the
+    interpretation units passed into Meaning.
     """
     errors: list[PipelineError] = []
 
@@ -49,7 +51,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 3. Document Origin / Node Anchors
+    # 3. Origin
     origin_result = process_origin(
         input_result,
         structure_result=structure_result,
@@ -59,15 +61,24 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     # 4. Selection
     selection_result = process_selection(structure_result)
 
-    # 5. Verification
+    # 5. Rule Unit Builder
+    rule_unit_result = process_rule_units(structure_result, selection_result)
+    if rule_unit_result.unit_count == 0 and selection_result.selected_nodes:
+        errors.append(PipelineError(
+            layer="rule_units",
+            error="Selected nodes did not assemble into rule units",
+            fatal=False,
+        ))
+
+    # 6. Verification routing
     verification_result = process_verification(
-        selection_result.selected_nodes,
+        rule_unit_result.rule_units,
         run=request.options.run_verification,
     )
 
-    # 6. Meaning
+    # 7. Meaning
     meaning_result = process_meaning(
-        selection_result.selected_nodes,
+        rule_unit_result.rule_units,
         run=request.options.run_meaning,
         origin_result=origin_result,
         verification_result=verification_result,
@@ -79,11 +90,12 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 7. Output
+    # 8. Output
     output_result = assemble_output(
         input_result,
         structure_result,
         selection_result,
+        rule_unit_result,
         meaning_result,
         origin_result,
         verification_result,
@@ -93,6 +105,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         input=input_result,
         structure=structure_result,
         selection=selection_result,
+        rule_units=rule_unit_result,
         meaning=meaning_result,
         origin=origin_result,
         verification=verification_result,
