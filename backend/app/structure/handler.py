@@ -7,6 +7,7 @@ visible without being treated as required PRIMARY_RULE hierarchy members.
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from . import handler_base as _base
@@ -15,6 +16,33 @@ from . import handler_base as _base
 for _name in dir(_base):
     if _name not in globals():
         globals()[_name] = getattr(_base, _name)
+
+_SOURCE_DOCUMENT_RE = re.compile(r"^\s*Source\s+Document\s*:\s*.+", re.I)
+
+
+def _is_document_metadata_node(node: StructureNode) -> bool:
+    """Document labels/titles are source context, not rule hierarchy members."""
+    text = (node.normalized_text or node.source_text or "").strip()
+    return bool(_SOURCE_DOCUMENT_RE.match(text)) or "origin:document_identity" in node.tags
+
+
+def _is_document_metadata_text(text: str) -> bool:
+    return bool(_SOURCE_DOCUMENT_RE.match((text or "").strip()))
+
+
+def _mark_document_metadata(nodes: list[StructureNode]) -> None:
+    for node in nodes:
+        if not _is_document_metadata_node(node):
+            continue
+        if "metadata:source_document" not in node.tags:
+            node.tags.append("metadata:source_document")
+        if "origin:document_identity" not in node.tags:
+            node.tags.append("origin:document_identity")
+        if node.validation_status == "invalid":
+            node.validation_status = "valid"
+        node.validation_errors = [
+            error for error in node.validation_errors if "Hierarchy validation" not in error
+        ]
 
 
 def _is_fragment_node(node: StructureNode) -> bool:
@@ -31,6 +59,8 @@ def _has_primary_rule_candidate(nodes: list[StructureNode]) -> bool:
 
 
 def _has_primary_rule_text(text: str) -> bool:
+    if _is_document_metadata_text(text):
+        return False
     return _base._is_primary_candidate(text)
 
 
@@ -41,11 +71,17 @@ def validateSection(
     if not section_nodes:
         return []
 
+    _mark_document_metadata(section_nodes)
+
     issues: list[StructureValidationIssue] = []
     section_id = section_nodes[0].section_id
     visible_section_nodes = visible_nodes if visible_nodes is not None else section_nodes
 
-    hierarchy_nodes = [node for node in visible_section_nodes if not _is_fragment_node(node)]
+    # Source-document metadata stays available for Origin/display but cannot fail rule hierarchy validation.
+    hierarchy_nodes = [
+        node for node in visible_section_nodes
+        if not _is_fragment_node(node) and not _is_document_metadata_node(node)
+    ]
     if not hierarchy_nodes:
         return []
 
@@ -129,6 +165,10 @@ def _parse_with_validation(
         _base.logger.info("Atomicity guard triggered for section %s: %s", section_index, exc)
         nodes, next_index = [], node_start_index
 
+    _mark_document_metadata(nodes)
+    if _is_document_metadata_text(text) or (nodes and all(_is_document_metadata_node(node) for node in nodes)):
+        return nodes, next_index, [], False
+
     validation_issues = _base._validate_sections(nodes)
     fragment_only_section = _base._is_non_substantive_fragment(text)
     primary_rule_text = _has_primary_rule_text(text)
@@ -162,6 +202,10 @@ def _parse_with_validation(
             exc,
         )
         reparsed_nodes, reparsed_next_index = [], node_start_index
+
+    _mark_document_metadata(reparsed_nodes)
+    if _is_document_metadata_text(text) or (reparsed_nodes and all(_is_document_metadata_node(node) for node in reparsed_nodes)):
+        return reparsed_nodes, reparsed_next_index, [], False
 
     reparse_issues = _base._validate_sections(reparsed_nodes)
     if not reparsed_nodes and (fragment_only_section or not primary_rule_text):
