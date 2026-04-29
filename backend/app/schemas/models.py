@@ -183,6 +183,8 @@ class MeaningResult(BaseModel):
     status: Literal["executed", "skipped", "error"]
     message: Optional[str] = None
     node_results: list[MeaningNodeResult] = Field(default_factory=list)
+    overall_plain_meaning: Optional[str] = None
+    summary_missing_information: list[str] = Field(default_factory=list)
 
 
 class OriginSignal(BaseModel):
