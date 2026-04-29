@@ -208,11 +208,15 @@ class TestFullPipeline:
 
     def test_response_serializes_all_keys_via_api(self):
         client = TestClient(app)
-        response = client.post("/analyze", json={
-            "content": "Test content.",
-            "content_type": "text",
-            "options": {"run_meaning": False, "run_origin": False, "run_verification": False},
-        })
+        response = client.post(
+            "/analyze",
+            headers={"x-analyze-secret": "ci-test-secret"},
+            json={
+                "content": "Test content.",
+                "content_type": "text",
+                "options": {"run_meaning": False, "run_origin": False, "run_verification": False},
+            },
+        )
         assert response.status_code == 200
         body = response.json()
         required_keys = {"input", "structure", "selection", "rule_units", "meaning", "origin", "verification", "governance", "output", "errors"}
