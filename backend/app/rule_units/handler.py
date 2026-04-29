@@ -29,6 +29,8 @@ _RULE_SIGNAL_RE = re.compile(
     re.I,
 )
 
+_REFERENCE_ACT_RE = re.compile(r"\b([A-Z][A-Za-z0-9\s,-]+ Act of \d{4}|REAL ID Act of 2005)\b", re.I)
+
 
 def _node_ref(node: StructureNode) -> RuleUnitNodeRef:
     return RuleUnitNodeRef(
@@ -48,6 +50,25 @@ def _clean_joined_text(text: str) -> str:
 
 def _combined_text(nodes: list[StructureNode]) -> str:
     return _clean_joined_text("\n".join(node.source_text.strip() for node in nodes if node.source_text.strip()))
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = " ".join(value.split()).strip(" .;,")
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
+def _extract_external_references(text: str) -> list[str]:
+    return _unique_preserve_order([match.group(1) for match in _REFERENCE_ACT_RE.finditer(text)])
 
 
 def _has_unsafe_node(nodes: list[StructureNode]) -> bool:
@@ -84,6 +105,7 @@ def _build_rule_unit(
     fragments: list[StructureNode],
 ) -> RuleUnit:
     source_nodes = [primary] + children
+    source_text_combined = _combined_text(source_nodes)
     assembly_issues: list[str] = []
 
     if _has_unsafe_node(source_nodes):
@@ -134,9 +156,10 @@ def _build_rule_unit(
         timing=timing,
         jurisdiction=jurisdiction,
         mechanisms=mechanisms,
+        external_references=_extract_external_references(source_text_combined),
         source_node_ids=[node.node_id for node in source_nodes],
         fragment_node_ids=[node.node_id for node in fragments],
-        source_text_combined=_combined_text(source_nodes),
+        source_text_combined=source_text_combined,
         assembly_status=assembly_status,
         assembly_issues=assembly_issues,
         meaning_eligible=assembly_status == "complete",
@@ -147,6 +170,7 @@ def _build_rule_unit(
 
 def _build_review_unit(unit_index: int, section_id: str, nodes: list[StructureNode], issue: str) -> RuleUnit:
     fragments = [node for node in nodes if "fragment:incomplete" in node.tags]
+    source_text_combined = _combined_text(nodes)
     return RuleUnit(
         rule_unit_id=f"review-{unit_index:04d}",
         section_id=section_id,
@@ -160,9 +184,10 @@ def _build_review_unit(unit_index: int, section_id: str, nodes: list[StructureNo
         timing=[],
         jurisdiction=[],
         mechanisms=[],
+        external_references=_extract_external_references(source_text_combined),
         source_node_ids=[node.node_id for node in nodes],
         fragment_node_ids=[node.node_id for node in fragments],
-        source_text_combined=_combined_text(nodes),
+        source_text_combined=source_text_combined,
         assembly_status="needs_review",
         assembly_issues=[issue],
         meaning_eligible=False,
