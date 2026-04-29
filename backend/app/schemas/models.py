@@ -181,24 +181,11 @@ class OriginSignal(BaseModel):
     category: Optional[str] = None
 
 
-class ReferencedSourceCard(BaseModel):
-    reference_id: str
-    name: str
-    reference_type: str
-    detected_from: Literal["source_text"] = "source_text"
-    matched_text: str
-    official_source_url: Optional[str] = None
-    source_system: Optional[str] = None
-    why_it_matters: str
-    status: Literal["official_reference_detected"] = "official_reference_detected"
-
-
 class OriginResult(BaseModel):
     status: Literal["executed", "skipped"]
     origin_identity_signals: list[OriginSignal] = Field(default_factory=list)
     origin_metadata_signals: list[OriginSignal] = Field(default_factory=list)
     distribution_signals: list[OriginSignal] = Field(default_factory=list)
-    referenced_sources: list[ReferencedSourceCard] = Field(default_factory=list)
     evidence_trace: list[str] = Field(default_factory=list)
 
 
