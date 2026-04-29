@@ -231,7 +231,7 @@ function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
         <FieldRow
           key={`${signal.signal}-${signal.value}-${index}`}
           label={signal.signal}
-          value={signal.category ? `${signal.value} (${signal.category})` : signal.value}
+          value={signal.value}
         />
       ))}
     </div>
@@ -388,7 +388,6 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             <div className="rounded-xl border border-border/60 bg-surface px-4 py-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Overall Plain Meaning</div>
-                {data.meaning.summary_basis && <span className="rounded bg-secondary px-2 py-1 text-[11px] text-muted-foreground">{data.meaning.summary_basis}</span>}
               </div>
               {overallPlainMeaning.length > 0 ? (
                 <div className="space-y-3 text-sm leading-relaxed text-foreground">
