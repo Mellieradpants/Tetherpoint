@@ -142,3 +142,15 @@
     color: var(--color-foreground);
   }
 }
+
+@layer components {
+  .border-b.border-border.bg-surface\/30 > .flex.flex-wrap.gap-2 {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .border-b.border-border.bg-surface\/30 > .flex.flex-wrap.gap-2 > button {
+    flex: 0 0 auto;
+  }
+}
