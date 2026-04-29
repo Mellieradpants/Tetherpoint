@@ -3,8 +3,9 @@ info:
   title: Tetherpoint
   description: >
     Source-anchored parsing stack. Executable pipeline:
-    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Output.
+    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Governance -> Output.
     Atomic Structure nodes are trace units; Rule Units are interpretation units.
+    Governance is a deterministic support and action-safety gate before final output assembly.
   version: "0.1.0"
   license:
     name: MIT
@@ -389,6 +390,87 @@ components:
         status: { type: string, enum: [executed, skipped] }
         node_results: { type: array, items: { $ref: "#/components/schemas/VerificationNodeResult" }, default: [] }
 
+    GovernanceStatus:
+      type: string
+      enum:
+        - match
+        - mismatch_detected
+        - contradiction_detected
+        - missing_required_source
+        - needs_review
+        - unsupported_downstream_action
+
+    GovernanceRecord:
+      type: object
+      required: [fieldName]
+      properties:
+        fieldName: { type: string }
+        extractedValue: { type: ["string", "null"] }
+        sourceAnchor: { type: ["string", "null"] }
+        sourceSystem: { type: ["string", "null"] }
+        documentType: { type: ["string", "null"] }
+
+    GovernanceCheckResult:
+      type: object
+      required: [checkName, status]
+      properties:
+        checkName: { type: string }
+        status:
+          $ref: "#/components/schemas/GovernanceStatus"
+        issue: { type: ["string", "null"] }
+        missingFields: { type: array, items: { type: string }, default: [] }
+        comparedField: { type: ["string", "null"] }
+        firstValue: { type: ["string", "null"] }
+        secondValue: { type: ["string", "null"] }
+        requestedAction: { type: ["string", "null"] }
+        blockingStatus:
+          oneOf:
+            - $ref: "#/components/schemas/GovernanceStatus"
+            - type: "null"
+
+    GovernanceRecordResult:
+      type: object
+      required: [overallStatus, checks, activeIssues, principle]
+      properties:
+        inputField: { type: ["string", "null"] }
+        extractedValue: { type: ["string", "null"] }
+        sourceAnchor: { type: ["string", "null"] }
+        sourceSystem: { type: ["string", "null"] }
+        documentType: { type: ["string", "null"] }
+        overallStatus:
+          $ref: "#/components/schemas/GovernanceStatus"
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceCheckResult"
+          default: []
+        activeIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceCheckResult"
+          default: []
+        principle: { type: string }
+
+    GovernanceResult:
+      type: object
+      required: [status, record_count, issue_count, results, activeIssues, principle]
+      properties:
+        status:
+          $ref: "#/components/schemas/GovernanceStatus"
+        record_count: { type: integer }
+        issue_count: { type: integer }
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceRecordResult"
+          default: []
+        activeIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceCheckResult"
+          default: []
+        principle: { type: string }
+
     OutputResult:
       type: object
       required: [summary, total_nodes, selected_count, excluded_count, meaning_status, origin_status, verification_status]
@@ -403,6 +485,8 @@ components:
         meaning_status: { type: string }
         origin_status: { type: string }
         verification_status: { type: string }
+        governance_status: { type: string, default: match }
+        governance_issue_count: { type: integer, default: 0 }
 
     PipelineError:
       type: object
@@ -410,13 +494,13 @@ components:
       properties:
         layer:
           type: string
-          enum: [input, structure, origin, selection, rule_units, verification, meaning, output]
+          enum: [input, structure, origin, selection, rule_units, verification, meaning, governance, output]
         error: { type: string }
         fatal: { type: boolean, default: false }
 
     PipelineResponse:
       type: object
-      required: [input, structure, selection, rule_units, meaning, origin, verification, output]
+      required: [input, structure, selection, rule_units, meaning, origin, verification, governance, output]
       properties:
         input: { $ref: "#/components/schemas/InputResult" }
         structure: { $ref: "#/components/schemas/StructureResult" }
@@ -425,6 +509,7 @@ components:
         meaning: { $ref: "#/components/schemas/MeaningResult" }
         origin: { $ref: "#/components/schemas/OriginResult" }
         verification: { $ref: "#/components/schemas/VerificationResult" }
+        governance: { $ref: "#/components/schemas/GovernanceResult" }
         output: { $ref: "#/components/schemas/OutputResult" }
         errors: { type: array, items: { $ref: "#/components/schemas/PipelineError" }, default: [] }
 
