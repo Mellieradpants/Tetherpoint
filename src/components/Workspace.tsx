@@ -116,11 +116,23 @@ interface OriginSignal {
   category: string | null;
 }
 
+interface ReferencedSource {
+  reference_id: string;
+  name: string;
+  reference_type: string;
+  matched_text: string;
+  source_system?: string | null;
+  official_source_url?: string | null;
+  why_it_matters?: string | null;
+  status: string;
+}
+
 interface OriginData {
   status: string;
   origin_identity_signals: OriginSignal[];
   origin_metadata_signals: OriginSignal[];
   distribution_signals: OriginSignal[];
+  referenced_sources?: ReferencedSource[];
   evidence_trace: unknown[];
 }
 
@@ -250,6 +262,29 @@ function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
           label={signal.signal}
           value={signal.value}
         />
+      ))}
+    </div>
+  );
+}
+
+function ReferencedSourceList({ sources }: { sources: ReferencedSource[] }) {
+  if (sources.length === 0) return <EmptyState message="No referenced legal sources detected." />;
+
+  return (
+    <div className="space-y-3">
+      {sources.map((source) => (
+        <div key={source.reference_id} className="rounded-xl border border-border/50 bg-background/40 p-3">
+          <div className="text-sm font-semibold text-foreground">{source.name}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{source.reference_type}{source.source_system ? ` · ${source.source_system}` : ""}</div>
+          {source.why_it_matters && <div className="mt-2 text-sm leading-relaxed text-muted-foreground">{source.why_it_matters}</div>}
+          {source.official_source_url ? (
+            <a className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline" href={source.official_source_url} target="_blank" rel="noreferrer">
+              Open official source
+            </a>
+          ) : (
+            <div className="mt-3 text-xs text-muted-foreground">Official source link not mapped yet.</div>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -484,6 +519,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {activeTab === "origin" && (
           <div className="space-y-5 px-5 py-6 pb-12">
             <div className="text-sm font-mono text-muted-foreground">document</div>
+            <Section title="Referenced Sources"><ReferencedSourceList sources={data.origin.referenced_sources ?? []} /></Section>
             <Section title="Origin Identity Signals"><OriginSignalList signals={data.origin.origin_identity_signals} /></Section>
             <Section title="Origin Metadata Signals"><OriginSignalList signals={data.origin.origin_metadata_signals} /></Section>
             <Section title="Distribution Signals"><OriginSignalList signals={data.origin.distribution_signals} /></Section>
