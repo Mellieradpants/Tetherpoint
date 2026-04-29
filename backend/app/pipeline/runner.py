@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.governance.handler import process_governance
 from app.input.handler import process_input
 from app.meaning.handler import process_meaning
 from app.origin.handler import process_origin
@@ -15,10 +16,11 @@ from app.verification.handler import process_verification
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the pipeline:
-    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Output
+    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Governance -> Output
 
     Atomic Structure nodes remain traceability units. Rule Units are the
-    interpretation units passed into Meaning.
+    interpretation units passed into Meaning. Governance evaluates anchored
+    rule-unit records before final output assembly.
     """
     errors: list[PipelineError] = []
 
@@ -90,7 +92,13 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 8. Output
+    # 8. Governance
+    governance_result = process_governance(
+        input_result,
+        rule_unit_result,
+    )
+
+    # 9. Output
     output_result = assemble_output(
         input_result,
         structure_result,
@@ -99,6 +107,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         meaning_result,
         origin_result,
         verification_result,
+        governance_result,
     )
 
     return PipelineResponse(
@@ -109,6 +118,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         meaning=meaning_result,
         origin=origin_result,
         verification=verification_result,
+        governance=governance_result,
         output=output_result,
         errors=errors,
     )
