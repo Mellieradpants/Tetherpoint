@@ -202,6 +202,21 @@ type DetailTab = "meaning" | "verification" | "origin";
 
 const ORIGIN_EMPTY_MESSAGE = "Pasted text has no verifiable source metadata. Use official HTML, XML, JSON, or source metadata to enable Origin signals.";
 
+const ASSERTION_TYPE_LABELS: Record<string, string> = {
+  legal_legislative: "Law / legislative records",
+  court_case_law: "Court / case-law records",
+  government_publication: "Government publication records",
+  scientific_biomedical: "Scientific / biomedical records",
+  statistical_public_data: "Public data / statistics records",
+  corporate_financial: "Corporate / financial records",
+  infrastructure_energy: "Energy / infrastructure records",
+  historical_archival: "Historical / archival records",
+};
+
+function formatAssertionType(assertionType: string): string {
+  return ASSERTION_TYPE_LABELS[assertionType] ?? assertionType.replaceAll("_", " ");
+}
+
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex items-start gap-3 border-b border-border/50 py-2 last:border-0">
@@ -451,12 +466,15 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             <Section title="Expected Record Systems">
               {verificationSummary.routes.length > 0 ? (
                 <div className="space-y-3">
-                  {verificationSummary.routes.map((route) => (
-                    <div key={route.system} className="rounded-xl border border-border/50 bg-background/40 p-3">
-                      <div className="text-sm font-semibold text-foreground">{route.system}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Triggered by {route.unitIds.length} rule unit(s){route.assertionTypes.length > 0 ? ` · ${route.assertionTypes.join(", ")}` : ""}</div>
-                    </div>
-                  ))}
+                  {verificationSummary.routes.map((route) => {
+                    const assertionLabels = route.assertionTypes.map(formatAssertionType);
+                    return (
+                      <div key={route.system} className="rounded-xl border border-border/50 bg-background/40 p-3">
+                        <div className="text-sm font-semibold text-foreground">{route.system}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Triggered by {route.unitIds.length} rule unit(s){assertionLabels.length > 0 ? ` · ${assertionLabels.join(", ")}` : ""}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : <EmptyState message="No document-level record systems were detected for this input." />}
             </Section>
