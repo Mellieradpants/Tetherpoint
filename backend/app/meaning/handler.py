@@ -28,7 +28,7 @@ _ACTION_RE = re.compile(
     re.I,
 )
 _CONDITION_RE = re.compile(r"\b(if|when|unless|except|before|after|provided that|at the time of)\b", re.I)
-_ACT_RE = re.compile(r"\b([A-Z][A-Za-z0-9\s,-]+ Act of \d{4}|REAL ID Act of 2005)\b", re.I)
+_ACT_RE = re.compile(r"\b(National Voter Registration Act of 1993|REAL ID Act of 2005)\b", re.I)
 _KEY_TERM_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("voter registration", re.compile(r"\b(register to vote|voter registration|elections? for federal office)\b", re.I)),
     ("documentary proof of United States citizenship", re.compile(r"\b(citizenship|United States citizen|U\.S\. citizen|documentary proof)\b", re.I)),
@@ -63,6 +63,12 @@ def _unique_preserve_order(values: list[str]) -> list[str]:
     return result
 
 
+def _join_names(values: list[str]) -> str:
+    if len(values) <= 1:
+        return "".join(values)
+    return ", ".join(values[:-1]) + f" and {values[-1]}"
+
+
 def _split_clauses(text: str) -> list[str]:
     clauses = re.split(r"(?<=[.;:])\s+|\s+and\s+", text)
     return [clause.strip(" ;:.") for clause in clauses if clause.strip(" ;:.")]
@@ -71,15 +77,15 @@ def _split_clauses(text: str) -> list[str]:
 def _extract_referenced_acts(rule_units: list[RuleUnit], origin_result: OriginResult | None) -> list[str]:
     values: list[str] = []
 
+    # Prefer Origin's structured referenced-source cards because they contain
+    # clean canonical names. Fall back to rule-unit signals and narrow text
+    # matching only when Origin has no mapped referenced sources.
+    if origin_result is not None and origin_result.referenced_sources:
+        values.extend(source.name for source in origin_result.referenced_sources)
+        return _unique_preserve_order(values)
+
     for unit in rule_units:
         values.extend(unit.external_references)
-
-    if origin_result is not None:
-        for source in origin_result.referenced_sources:
-            values.append(source.name)
-        for signal in origin_result.origin_identity_signals:
-            if signal.signal == "referenced_act":
-                values.append(signal.value)
 
     combined_text = " ".join(unit.source_text_combined for unit in rule_units)
     values.extend(match.group(1) for match in _ACT_RE.finditer(combined_text))
@@ -146,12 +152,11 @@ def _summary_from_brief(brief: MeaningBrief) -> tuple[str | None, list[str]]:
         details.append("It also identifies conditions, limits, or exceptions that affect how those requirements apply.")
     if brief.external_reference_needed and brief.referenced_acts:
         details.append(
-            "Some parts reference outside law: "
-            + ", ".join(brief.referenced_acts)
-            + ". This plain meaning explains the current source text only unless the referenced source is also analyzed."
+            "This document depends on outside law: "
+            + _join_names(brief.referenced_acts)
+            + ". The plain meaning above explains the current source text only. "
+            + "To understand these acts, see the Origin referenced source and copy/paste that text into the Tetherpoint input."
         )
-    if brief.truncated:
-        details.append("The summary is based on a bounded deterministic brief to protect runtime.")
 
     return " ".join([main_sentence, *details]).strip(), []
 
