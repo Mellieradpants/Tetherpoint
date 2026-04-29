@@ -13,10 +13,8 @@ import re
 from typing import Any
 
 from app.schemas.models import (
-    MeaningLens,
     MeaningNodeResult,
     MeaningResult,
-    MeaningScopeDetail,
     OriginResult,
     RuleUnit,
     VerificationNodeResult,
@@ -24,16 +22,6 @@ from app.schemas.models import (
 )
 
 logger = logging.getLogger("tetherpoint.meaning")
-
-LENSES = [
-    "modality_shift",
-    "scope_change",
-    "actor_power_shift",
-    "action_domain_shift",
-    "threshold_standard_shift",
-    "obligation_removal",
-]
-VALID_LENSES = set(LENSES)
 
 
 def _model_dump(value: Any) -> Any:
@@ -92,59 +80,33 @@ def _build_prompt(
         "Analyze exactly one Rule Unit using only the provided deterministic context. "
         "Do not create structure. Do not invent verification. Do not infer motive, intent, "
         "legal advice, political framing, or unsupported outcome. Fail rather than guess.\n\n"
-        "Important architecture rule: atomic nodes are traceability units, not interpretation targets. "
-        "Explain the Rule Unit as a coherent unit. Use source_node_ids only for traceability. "
+        "Architecture rule: atomic nodes are traceability units, not interpretation targets. "
+        "Explain the Rule Unit as one coherent unit. Use source_node_ids only for traceability. "
         "Do not explain fragment_node_ids independently.\n\n"
         "If assembly_status is not complete or review_status is not ready, return plain_meaning as null "
         "and include a missing_information item explaining why Meaning is blocked or limited.\n\n"
-        "Your job is to explain what the Rule Unit means in everyday public language. "
-        "Use the primary text, conditions, exceptions, evidence requirements, timing, jurisdiction, "
-        "mechanisms, origin signals, and verification routing only as read-only grounding.\n\n"
+        "Your only job is plain meaning. Do not classify scopes. Do not use shift labels. "
+        "Do not output taxonomy labels. Explain what the legislative language says in everyday public language.\n\n"
         "Context JSON:\n"
         f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
-        "Evaluate these Meaning scopes:\n"
-        "1. modality_shift - obligation or permission language such as shall, must, may, prohibited, required.\n"
-        "2. scope_change - explicit narrowing or expanding of affected people, documents, places, systems, or cases.\n"
-        "3. actor_power_shift - explicit assignment, removal, or redistribution of authority among actors.\n"
-        "4. action_domain_shift - movement of an action into a domain such as registration, review, records, enforcement, or verification.\n"
-        "5. threshold_standard_shift - explicit proof, eligibility, evidence, standard, or review threshold.\n"
-        "6. obligation_removal - explicit removal, weakening, or exception from a requirement.\n\n"
         "Plain Meaning style rules:\n"
         "- Write for an eighth-grade reader.\n"
-        "- Use one short sentence unless two short sentences are needed.\n"
+        "- Use one or two short sentences.\n"
         "- Explain who does what, when, where, or how.\n"
         "- Say what happens in real life.\n"
         "- Use common words first.\n"
         "- Do not copy the source sentence with only small word changes.\n"
-        "- Do not add extra claims beyond the Rule Unit.\n"
+        "- Do not add claims beyond the Rule Unit.\n"
         "- Do not use internal system words in plain_meaning.\n"
         "- Banned in plain_meaning: node, rule unit, operational, operationally, operational effect, indicates, the text indicates, engage, facilitate, utilize, affected actor, process can proceed.\n\n"
         "Output requirements:\n"
         "- Return ONLY valid JSON.\n"
         "- Do not include markdown fences or text outside JSON.\n"
-        "- Return one top-level JSON object with exactly these keys: detected_scopes, plain_meaning, scope_details, missing_information, lenses.\n"
-        "- detected_scopes must be an array of scope names from the allowed list, only when supported by the Rule Unit.\n"
+        "- Return one top-level JSON object with exactly these keys: plain_meaning, missing_information.\n"
         "- plain_meaning must be one or two short public-language sentences, or null only if the Rule Unit is not safe to explain.\n"
-        "- scope_details must be an array of objects with scope, detail, and evidence. Include only detected scopes.\n"
-        "- missing_information must be an array of short strings.\n"
-        "- lenses must be an array of objects with lens, detected, and detail for all six scopes.\n"
-        "- Do not mark missing origin or verification context as insufficient if the Rule Unit itself supports a plain explanation.\n\n"
+        "- missing_information must be an array of short strings. Use an empty array when nothing important is missing.\n\n"
         "Example output:\n"
-        "{"
-        "\"detected_scopes\":[\"modality_shift\"],"
-        "\"plain_meaning\":\"The agency has 30 days to update the public list after it approves the rule.\","
-        "\"scope_details\":["
-        "{\"scope\":\"modality_shift\",\"detail\":\"The rule creates a required action.\",\"evidence\":\"shall update\"}"
-        "],"
-        "\"missing_information\":[],"
-        "\"lenses\":["
-        "{\"lens\":\"modality_shift\",\"detected\":true,\"detail\":\"The rule creates a required action.\"},"
-        "{\"lens\":\"scope_change\",\"detected\":false,\"detail\":null},"
-        "{\"lens\":\"actor_power_shift\",\"detected\":false,\"detail\":null},"
-        "{\"lens\":\"action_domain_shift\",\"detected\":false,\"detail\":null},"
-        "{\"lens\":\"threshold_standard_shift\",\"detected\":false,\"detail\":null},"
-        "{\"lens\":\"obligation_removal\",\"detected\":false,\"detail\":null}"
-        "]}"
+        "{\"plain_meaning\":\"The agency has 30 days to update the public list after it approves the rule.\",\"missing_information\":[]}"
     )
 
 
@@ -198,7 +160,7 @@ def _parse_json_payload(content: str) -> Any | dict[str, str]:
     }
 
 
-def _as_string_list(value: Any, allowed: set[str] | None = None) -> list[str]:
+def _as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     result: list[str] = []
@@ -206,11 +168,7 @@ def _as_string_list(value: Any, allowed: set[str] | None = None) -> list[str]:
         if not isinstance(item, str):
             continue
         item = item.strip()
-        if not item:
-            continue
-        if allowed is not None and item not in allowed:
-            continue
-        if item not in result:
+        if item and item not in result:
             result.append(item)
     return result
 
@@ -219,32 +177,6 @@ def _normalize_meaning_payload(content: str) -> dict[str, Any] | dict[str, str]:
     payload = _parse_json_payload(content)
     if isinstance(payload, dict) and "error" in payload:
         return payload
-
-    if isinstance(payload, list):
-        detected_scopes = [
-            item.get("lens")
-            for item in payload
-            if isinstance(item, dict)
-            and item.get("lens") in VALID_LENSES
-            and bool(item.get("detected", False))
-        ]
-        return {
-            "detected_scopes": detected_scopes,
-            "plain_meaning": None,
-            "scope_details": [
-                {
-                    "scope": item.get("lens"),
-                    "detail": item.get("detail"),
-                    "evidence": None,
-                }
-                for item in payload
-                if isinstance(item, dict)
-                and item.get("lens") in VALID_LENSES
-                and bool(item.get("detected", False))
-            ],
-            "missing_information": ["plain_meaning"],
-            "lenses": payload,
-        }
 
     if isinstance(payload, dict):
         return payload
@@ -318,63 +250,6 @@ def _call_openai(prompt: str) -> dict[str, Any] | dict[str, str]:
         }
 
 
-def _coerce_lenses(raw_lenses: Any) -> list[MeaningLens] | dict[str, str]:
-    if not isinstance(raw_lenses, list):
-        return {
-            "error": "lenses_shape_mismatch",
-            "message": f"Expected lenses list, received {type(raw_lenses).__name__}",
-        }
-
-    lenses: list[MeaningLens] = []
-    for item in raw_lenses:
-        if not isinstance(item, dict):
-            return {
-                "error": "lens_item_shape_mismatch",
-                "message": f"Unexpected lens item shape: {type(item).__name__}",
-            }
-
-        lens_name = item.get("lens")
-        if lens_name not in VALID_LENSES:
-            return {
-                "error": "lens_name_invalid",
-                "message": f"Unexpected lens name: {lens_name!r}",
-            }
-
-        detail = item.get("detail")
-        lenses.append(
-            MeaningLens(
-                lens=lens_name,
-                detected=bool(item.get("detected", False)),
-                detail=detail if isinstance(detail, str) else None,
-            )
-        )
-
-    return lenses
-
-
-def _coerce_scope_details(value: Any) -> list[MeaningScopeDetail]:
-    if not isinstance(value, list):
-        return []
-
-    details: list[MeaningScopeDetail] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        scope = item.get("scope")
-        if scope not in VALID_LENSES:
-            continue
-        detail = item.get("detail")
-        evidence = item.get("evidence")
-        details.append(
-            MeaningScopeDetail(
-                scope=scope,
-                detail=detail if isinstance(detail, str) else None,
-                evidence=evidence if isinstance(evidence, str) else None,
-            )
-        )
-    return details
-
-
 def _build_error_result(unit: RuleUnit, error: str, message: str | None = None) -> MeaningNodeResult:
     return MeaningNodeResult(
         node_id=unit.rule_unit_id,
@@ -383,6 +258,8 @@ def _build_error_result(unit: RuleUnit, error: str, message: str | None = None) 
         error=error,
         message=message,
         lenses=[],
+        detected_scopes=[],
+        scope_details=[],
         missing_information=unit.assembly_issues,
     )
 
@@ -429,6 +306,8 @@ def process_meaning(
                     message=raw.get("message"),
                     raw_response=raw.get("raw_response"),
                     lenses=[],
+                    detected_scopes=[],
+                    scope_details=[],
                 )
             )
             continue
@@ -441,34 +320,16 @@ def process_meaning(
                     status="empty",
                     message="No meaning output returned",
                     lenses=[],
+                    detected_scopes=[],
+                    scope_details=[],
                 )
             )
             continue
-
-        lenses = _coerce_lenses(raw.get("lenses"))
-        if isinstance(lenses, dict):
-            node_results.append(
-                MeaningNodeResult(
-                    node_id=unit.rule_unit_id,
-                    source_text=unit.source_text_combined,
-                    status="error",
-                    error=lenses["error"],
-                    message=lenses.get("message"),
-                    raw_response=json.dumps(raw),
-                    lenses=[],
-                )
-            )
-            continue
-
-        detected_scopes = _as_string_list(raw.get("detected_scopes"), VALID_LENSES)
-        if not detected_scopes:
-            detected_scopes = [lens.lens for lens in lenses if lens.detected]
 
         plain_meaning = raw.get("plain_meaning")
         if not isinstance(plain_meaning, str) or not plain_meaning.strip():
             plain_meaning = None
 
-        scope_details = _coerce_scope_details(raw.get("scope_details"))
         missing_information = _as_string_list(raw.get("missing_information"))
 
         if plain_meaning is None and not missing_information:
@@ -480,9 +341,9 @@ def process_meaning(
                     error="plain_meaning_missing",
                     message="Meaning response did not include plain_meaning or missing_information",
                     raw_response=json.dumps(raw),
-                    lenses=lenses,
-                    detected_scopes=detected_scopes,
-                    scope_details=scope_details,
+                    lenses=[],
+                    detected_scopes=[],
+                    scope_details=[],
                 )
             )
             continue
@@ -492,10 +353,10 @@ def process_meaning(
                 node_id=unit.rule_unit_id,
                 source_text=unit.source_text_combined,
                 status="executed",
-                lenses=lenses,
-                detected_scopes=detected_scopes,
+                lenses=[],
+                detected_scopes=[],
                 plain_meaning=plain_meaning,
-                scope_details=scope_details,
+                scope_details=[],
                 missing_information=missing_information,
             )
         )
