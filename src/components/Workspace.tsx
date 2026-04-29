@@ -210,7 +210,7 @@ export interface PipelineResponse {
   errors: Array<{ layer: string; error: string; fatal?: boolean }>;
 }
 
-type DetailTab = "meaning" | "verification" | "origin";
+type DetailTab = "meaning" | "verification" | "origin" | "governance";
 
 const ORIGIN_EMPTY_MESSAGE = "Pasted text has no verifiable source metadata. Use official HTML, XML, JSON, or source metadata to enable Origin signals.";
 
@@ -227,6 +227,11 @@ const ASSERTION_TYPE_LABELS: Record<string, string> = {
 
 function formatAssertionType(assertionType: string): string {
   return ASSERTION_TYPE_LABELS[assertionType] ?? assertionType.replaceAll("_", " ");
+}
+
+function formatStatus(status: string | null | undefined): string {
+  if (!status) return "Not specified";
+  return status.replaceAll("_", " ");
 }
 
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -286,6 +291,45 @@ function ReferencedSourceList({ sources }: { sources: ReferencedSource[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function GovernanceDetails({ governance }: { governance?: GovernanceData }) {
+  if (!governance) return <EmptyState message="Governance results were not returned." />;
+
+  const hasIssues = governance.issue_count > 0 || governance.activeIssues.length > 0;
+
+  return (
+    <div className="space-y-5 px-5 py-6 pb-12">
+      <div className="text-sm font-mono text-muted-foreground">document</div>
+      <Section title="Governance Summary">
+        <FieldRow label="status" value={formatStatus(governance.status)} />
+        <FieldRow label="checked" value={`${governance.record_count} record(s)`} />
+        <FieldRow label="issues" value={`${governance.issue_count} issue(s)`} />
+        <FieldRow label="result" value={hasIssues ? "Warning: one or more fields need review." : "Match: no fields need review under current governance checks."} />
+      </Section>
+      <Section title="Fields Needing Review">
+        {hasIssues ? (
+          <div className="space-y-3">
+            {governance.activeIssues.map((issue, index) => (
+              <div key={`${issue.checkName}-${index}`} className="rounded-xl border border-border/50 bg-background/40 p-3">
+                <div className="text-sm font-semibold text-foreground">{issue.checkName}</div>
+                <div className="mt-1 text-xs text-muted-foreground">Status: {formatStatus(issue.status)}</div>
+                {issue.issue && <div className="mt-2 text-sm leading-relaxed text-muted-foreground">{issue.issue}</div>}
+                {issue.missingFields && issue.missingFields.length > 0 && (
+                  <div className="mt-2 text-sm leading-relaxed text-muted-foreground">Missing fields: {issue.missingFields.join(", ")}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState message="No fields need review under current governance checks." />
+        )}
+      </Section>
+      <Section title="Governance Principle">
+        <div className="text-sm leading-relaxed text-muted-foreground">{governance.principle || "Governance checks source support and review conditions for extracted records."}</div>
+      </Section>
     </div>
   );
 }
@@ -420,7 +464,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
 
       <div className="border-b border-border bg-surface/30 px-4 py-3">
         <div className="flex flex-wrap gap-2">
-          {(["meaning", "verification", "origin"] as DetailTab[]).map((tab) => (
+          {(["meaning", "verification", "origin", "governance"] as DetailTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -528,6 +572,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             </Section>
           </div>
         )}
+
+        {activeTab === "governance" && <GovernanceDetails governance={data.governance} />}
       </div>
     </div>
   );
