@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.schemas.models import (
+    GovernanceResult,
     InputResult,
     MeaningResult,
     OriginResult,
@@ -22,6 +23,7 @@ def assemble_output(
     meaning: MeaningResult,
     origin: OriginResult,
     verification: VerificationResult,
+    governance: GovernanceResult,
 ) -> OutputResult:
     """Assemble final output summary from all layers."""
     return OutputResult(
@@ -39,4 +41,6 @@ def assemble_output(
         meaning_status=meaning.status,
         origin_status=origin.status,
         verification_status=verification.status,
+        governance_status=governance.status,
+        governance_issue_count=governance.issue_count,
     )
