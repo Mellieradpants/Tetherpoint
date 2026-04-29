@@ -2,8 +2,9 @@ openapi: "3.1.0"
 info:
   title: Tetherpoint
   description: >
-    Source-anchored parsing stack. Locked 7-layer pipeline:
-    Input -> Structure -> Selection -> Meaning -> Origin -> Verification -> Output.
+    Source-anchored parsing stack. Current executable 7-layer pipeline:
+    Input -> Structure -> Origin -> Selection -> Verification -> Meaning -> Output.
+    Verification routes assertions to candidate record systems; it does not decide truth.
   version: "0.1.0"
   license:
     name: MIT
@@ -18,7 +19,7 @@ paths:
   /analyze:
     post:
       operationId: analyze
-      summary: Run the locked 7-layer pipeline on a source document
+      summary: Run the source-anchored 7-layer pipeline on a source document
       requestBody:
         required: true
         content:
@@ -27,13 +28,13 @@ paths:
               $ref: "#/components/schemas/AnalyzeRequest"
       responses:
         "200":
-          description: Full pipeline result with all 7 layer outputs
+          description: Full pipeline result with all layer outputs
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PipelineResponse"
         "400":
-          description: Invalid input (empty content)
+          description: Invalid input, including empty content
           content:
             application/json:
               schema:
@@ -82,26 +83,21 @@ paths:
                     type: string
                     enum: [ok]
 
-
 components:
   securitySchemes:
     analyzeSecret:
       type: apiKey
       in: header
       name: x-analyze-secret
-      description: >
-        Shared secret for server-to-backend authentication.
-        All /analyze requests must include this header.
+      description: Shared secret for server-to-backend authentication.
 
   schemas:
-
     ErrorResponse:
       type: object
       required: [detail]
       properties:
         detail:
           type: string
-          description: Human-readable error message
 
     ContentType:
       type: string
@@ -113,8 +109,7 @@ components:
         run_meaning:
           type: boolean
           default: false
-          description: >
-            Defaults to false. Requires valid x-analyze-secret header to execute.
+          description: Optional AI Meaning layer execution.
         run_origin:
           type: boolean
           default: true
@@ -129,6 +124,8 @@ components:
         content:
           type: string
           description: Raw document text
+          minLength: 1
+          maxLength: 500000
         content_type:
           $ref: "#/components/schemas/ContentType"
         options:
@@ -140,23 +137,18 @@ components:
       properties:
         raw_content:
           type: string
-          description: Preserved raw input exactly as received
         content_type:
           type: string
-          description: Content type as provided in request
         size:
           type: integer
-          description: Size in bytes (UTF-8 encoded)
         parse_status:
           type: string
           enum: [ok, error]
-          description: Well-formedness validation result
         parse_errors:
           type: array
           items:
             type: string
           default: []
-          description: Parse error messages if parse_status is error
 
     StructureNode:
       type: object
@@ -175,112 +167,74 @@ components:
       properties:
         node_id:
           type: string
-          description: Unique node identifier, path-addressable back to source
         section_id:
           type: string
-          description: Deterministic section identifier used for parent-child grouping
         parent_id:
           type: ["string", "null"]
-          description: Parent node id for children in the hierarchy
         role:
           type: string
-          enum:
-            - PRIMARY_RULE
-            - EVIDENCE
-            - CONDITION
-            - EXCEPTION
-            - CONSEQUENCE
-            - DEFINITION
-            - BOILERPLATE
-          description: Explicit hierarchy role assigned during deterministic section parsing
+          enum: [PRIMARY_RULE, EVIDENCE, CONDITION, EXCEPTION, CONSEQUENCE, DEFINITION, BOILERPLATE]
         depth:
           type: integer
-          description: Hierarchy depth, with PRIMARY_RULE at depth 0
         source_span_start:
           type: ["integer", "null"]
-          description: Best-effort start offset for the node text within the source
         source_span_end:
           type: ["integer", "null"]
-          description: Best-effort end offset for the node text within the source
         validation_status:
           type: string
           enum: [valid, repaired, invalid]
-          description: Node validation outcome after repair/reparse attempts
         validation_errors:
           type: array
           items:
             type: string
           default: []
-          description: Validation errors attached to this node, if any
         source_anchor:
           type: string
-          description: >
-            Position reference in source document
-            (e.g. char:0-42, xpath:section[0], jsonpath:$.body)
         source_text:
           type: string
-          description: Original text span, unmodified
         normalized_text:
           type: string
-          description: LNS-normalized text (whitespace/line cleanup only, no semantic rewriting)
         actor:
           type: ["string", "null"]
-          description: "AAC: explicit actor if present"
         action:
           type: ["string", "null"]
-          description: "AAC: explicit action if present"
         condition:
           type: ["string", "null"]
-          description: "AAC: explicit condition if present"
         temporal:
           type: ["string", "null"]
-          description: "TPS: explicit deadline, trigger, timing if present"
         jurisdiction:
           type: ["string", "null"]
-          description: "SJM: explicit system, jurisdiction, authority if present"
         mechanism:
           type: ["string", "null"]
-          description: "MPS: explicit enforcement, process step, procedural flow if present"
         risk:
           oneOf:
-            - type: "object"
+            - type: object
               properties:
                 likelihood:
                   type: ["string", "null"]
                 impact:
                   type: ["string", "null"]
             - type: "null"
-          description: "RDS: separated likelihood and impact language"
         tags:
           type: array
           items:
             type: string
-          description: Extraction signal tags (e.g. has_actor, has_temporal)
         blocked_flags:
           type: array
           items:
             type: string
-          description: >
-            CFS violation flags
-            (intent_attribution, emotional_labeling, causal_inference, narrative_language)
         who:
           type: ["string", "null"]
-          description: "5W1H: explicit who if directly present"
         what:
           type: ["string", "null"]
-          description: "5W1H: explicit what if directly present"
         when:
           type: ["string", "null"]
-          description: "5W1H: explicit when if directly present"
         where:
           type: ["string", "null"]
-          description: "5W1H: explicit where if directly present"
         why:
           type: ["string", "null"]
-          description: "5W1H: explicit why if directly present"
         how:
           type: ["string", "null"]
-          description: "5W1H: explicit how if directly present"
 
     StructureResult:
       type: object
@@ -290,12 +244,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StructureNode"
-          description: Ordered list of structure nodes, preserving source order
         node_count:
           type: integer
         section_count:
           type: integer
-          description: Count of parsed sections after hierarchy enforcement and reparsing
         validation_report:
           $ref: "#/components/schemas/StructureValidationReport"
 
@@ -307,13 +259,7 @@ components:
           type: string
         issue_type:
           type: string
-          enum:
-            - missing_primary
-            - multiple_primary
-            - boilerplate_leak
-            - oversized_node
-            - unclassified_node
-            - unattached_child
+          enum: [missing_primary, multiple_primary, boilerplate_leak, oversized_node, unclassified_node, unattached_child]
         message:
           type: string
         node_id:
@@ -345,19 +291,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StructureNode"
-          description: Nodes eligible for downstream processing (unchanged)
         excluded_nodes:
           type: array
           items:
             $ref: "#/components/schemas/StructureNode"
-          description: Nodes excluded with explicit reasons
         selection_log:
           type: array
           items:
             type: string
-          description: >
-            Per-node selection decision log
-            (e.g. "node-0001: SELECTED", "node-0002: EXCLUDED - no structured signal detected")
 
     MeaningLens:
       type: object
@@ -365,13 +306,7 @@ components:
       properties:
         lens:
           type: string
-          enum:
-            - modality_shift
-            - scope_change
-            - actor_power_shift
-            - action_domain_shift
-            - threshold_standard_shift
-            - obligation_removal
+          enum: [modality_shift, scope_change, actor_power_shift, action_domain_shift, threshold_standard_shift, obligation_removal]
         detected:
           type: boolean
         detail:
@@ -383,13 +318,7 @@ components:
       properties:
         scope:
           type: string
-          enum:
-            - modality_shift
-            - scope_change
-            - actor_power_shift
-            - action_domain_shift
-            - threshold_standard_shift
-            - obligation_removal
+          enum: [modality_shift, scope_change, actor_power_shift, action_domain_shift, threshold_standard_shift, obligation_removal]
         detail:
           type: ["string", "null"]
         evidence:
@@ -401,10 +330,8 @@ components:
       properties:
         node_id:
           type: string
-          description: Links back to StructureNode.node_id
         source_text:
           type: string
-          description: Original node text (not altered by Meaning)
         status:
           type: ["string", "null"]
         error:
@@ -422,22 +349,18 @@ components:
           items:
             type: string
           default: []
-          description: Meaning Buddy scopes detected for this node
         plain_meaning:
           type: ["string", "null"]
-          description: Plain-language operational effect for the selected node
         scope_details:
           type: array
           items:
             $ref: "#/components/schemas/MeaningScopeDetail"
           default: []
-          description: Evidence-backed details for detected scopes
         missing_information:
           type: array
           items:
             type: string
           default: []
-          description: Details absent from the selected node that limit Meaning output
 
     MeaningResult:
       type: object
@@ -446,12 +369,8 @@ components:
         status:
           type: string
           enum: [executed, skipped, error]
-          description: >
-            "executed" if AI ran, "skipped" if no API key or disabled,
-            "error" if AI call failed
         message:
           type: ["string", "null"]
-          description: Explanation when status is skipped or error
         node_results:
           type: array
           items:
@@ -464,12 +383,10 @@ components:
       properties:
         signal:
           type: string
-          description: Signal type (e.g. author, canonical_url, jsonld_publisher)
         value:
           type: string
         category:
           type: ["string", "null"]
-          description: Signal category (e.g. opengraph, twitter_card) - distribution signals only
 
     OriginResult:
       type: object
@@ -483,27 +400,21 @@ components:
           items:
             $ref: "#/components/schemas/OriginSignal"
           default: []
-          description: Source identity signals (author, publisher, canonical URL)
         origin_metadata_signals:
           type: array
           items:
             $ref: "#/components/schemas/OriginSignal"
           default: []
-          description: Source metadata signals (title, publish timestamp, type)
         distribution_signals:
           type: array
           items:
             $ref: "#/components/schemas/OriginSignal"
           default: []
-          description: >
-            Distribution metadata (OG tags, Twitter cards).
-            Explicitly separated - does NOT override origin identity.
         evidence_trace:
           type: array
           items:
             type: string
           default: []
-          description: Trace log of what was found and where
 
     VerificationNodeResult:
       type: object
@@ -516,29 +427,15 @@ components:
         assertion_type:
           oneOf:
             - type: string
-              enum:
-                - legal_legislative
-                - court_case_law
-                - government_publication
-                - scientific_biomedical
-                - statistical_public_data
-                - corporate_financial
-                - infrastructure_energy
-                - historical_archival
+              enum: [legal_legislative, court_case_law, government_publication, scientific_biomedical, statistical_public_data, corporate_financial, infrastructure_energy, historical_archival]
             - type: "null"
-          description: Classification of the assertion if detected
         verification_path_available:
           type: boolean
-          description: Whether candidate record systems exist for this assertion type
         expected_record_systems:
           type: array
           items:
             type: string
           default: []
-          description: >
-            Candidate record systems for verification routing.
-            Examples: Congress.gov, Federal Register, GovInfo, CourtListener,
-            PubMed, SEC EDGAR, Census, EIA, FERC, NERC, JSTOR, National Archives
         verification_notes:
           type: ["string", "null"]
 
@@ -557,19 +454,11 @@ components:
 
     OutputResult:
       type: object
-      required:
-        - summary
-        - total_nodes
-        - selected_count
-        - excluded_count
-        - meaning_status
-        - origin_status
-        - verification_status
+      required: [summary, total_nodes, selected_count, excluded_count, meaning_status, origin_status, verification_status]
       properties:
         summary:
           type: object
           additionalProperties: true
-          description: Input-level summary (content_type, parse_status, input_size)
         total_nodes:
           type: integer
         selected_count:
@@ -595,18 +484,10 @@ components:
         fatal:
           type: boolean
           default: false
-          description: If true, downstream layers may have empty results
 
     PipelineResponse:
       type: object
-      required:
-        - input
-        - structure
-        - selection
-        - meaning
-        - origin
-        - verification
-        - output
+      required: [input, structure, selection, meaning, origin, verification, output]
       properties:
         input:
           $ref: "#/components/schemas/InputResult"
@@ -627,7 +508,6 @@ components:
           items:
             $ref: "#/components/schemas/PipelineError"
           default: []
-          description: Top-level errors surfaced from any layer
 
     ValidationError:
       type: object
