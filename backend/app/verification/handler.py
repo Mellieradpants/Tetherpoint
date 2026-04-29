@@ -58,6 +58,8 @@ def _process_unit(unit: RuleUnit) -> VerificationNodeResult:
     if not unit.verification_eligible:
         return VerificationNodeResult(
             node_id=unit.rule_unit_id,
+            rule_unit_id=unit.rule_unit_id,
+            source_node_ids=unit.source_node_ids,
             assertion_detected=False,
             assertion_type=None,
             verification_path_available=False,
@@ -71,6 +73,8 @@ def _process_unit(unit: RuleUnit) -> VerificationNodeResult:
         systems = _RECORD_SYSTEMS.get(atype, [])
         return VerificationNodeResult(
             node_id=unit.rule_unit_id,
+            rule_unit_id=unit.rule_unit_id,
+            source_node_ids=unit.source_node_ids,
             assertion_detected=True,
             assertion_type=atype,
             verification_path_available=len(systems) > 0,
@@ -84,6 +88,8 @@ def _process_unit(unit: RuleUnit) -> VerificationNodeResult:
 
     return VerificationNodeResult(
         node_id=unit.rule_unit_id,
+        rule_unit_id=unit.rule_unit_id,
+        source_node_ids=unit.source_node_ids,
         assertion_detected=False,
         assertion_type=None,
         verification_path_available=False,
