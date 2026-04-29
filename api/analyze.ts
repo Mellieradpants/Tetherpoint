@@ -26,12 +26,6 @@ const WINDOW_SECONDS = 60_000;
 const generalBuckets = new Map<string, number[]>();
 const meaningBuckets = new Map<string, number[]>();
 
-function getVisibleEnvNames(): string[] {
-  return Object.keys(process.env)
-    .filter((name) => /ANALYZE|SECRET|API|VERCEL/i.test(name))
-    .sort();
-}
-
 function getBackendConfig() {
   const apiBaseUrl =
     process.env.ANALYZE_API_BASE_URL ?? "https://anchored-flow-stack.onrender.com";
@@ -131,9 +125,7 @@ function enforceAnalyzeSecurity(input: {
     }
 
     if (!meaningAllowed) {
-      console.info(
-        `[security] Meaning blocked - ANALYZE_SECRET not configured. Client ${clientIp}`
-      );
+      console.info(`[security] Meaning blocked for client ${clientIp}`);
     }
   }
 
@@ -244,15 +236,9 @@ export default async function handler(req: any, res: any) {
     const { apiUrl, analyzeSecret } = getBackendConfig();
 
     if (!analyzeSecret) {
+      console.error("Analyze proxy is missing backend access configuration.");
       sendJson(res, 500, {
-        message: "TOP_LEVEL_ANALYZE_SECRET_MISSING_V2",
-        diagnostics: {
-          hasAnalyzeSecretEnv: Boolean(process.env.ANALYZE_SECRET),
-          vercelEnv: process.env.VERCEL_ENV ?? null,
-          configPath: "process.env.ANALYZE_SECRET -> getBackendConfig().analyzeSecret",
-          apiBaseUrlSource: process.env.ANALYZE_API_BASE_URL ? "env" : "default",
-          visibleEnvNames: getVisibleEnvNames(),
-        },
+        message: "Analyze service is not configured correctly.",
       });
       return;
     }
