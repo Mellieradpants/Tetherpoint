@@ -1,8 +1,4 @@
-"""Pydantic models for the Tetherpoint pipeline.
-
-Source of truth: backend/openapi.yaml
-All schemas here must match the OpenAPI 3.1 spec exactly.
-"""
+"""Pydantic models for the Tetherpoint pipeline."""
 
 from __future__ import annotations
 
@@ -12,10 +8,6 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------------
-# Request
-# ---------------------------------------------------------------------------
-
 class ContentType(str, Enum):
     xml = "xml"
     html = "html"
@@ -24,7 +16,7 @@ class ContentType(str, Enum):
 
 
 class AnalyzeOptions(BaseModel):
-    run_meaning: bool = False  # default off - requires authorization
+    run_meaning: bool = False
     run_origin: bool = True
     run_verification: bool = True
 
@@ -35,11 +27,6 @@ class AnalyzeRequest(BaseModel):
     options: AnalyzeOptions = Field(default_factory=AnalyzeOptions)
 
 
-# ---------------------------------------------------------------------------
-# Layer 1 - Input
-# Purpose: intake only. No inference, no interpretation.
-# ---------------------------------------------------------------------------
-
 class InputResult(BaseModel):
     raw_content: str
     content_type: str
@@ -47,12 +34,6 @@ class InputResult(BaseModel):
     parse_status: Literal["ok", "error"]
     parse_errors: list[str] = Field(default_factory=list)
 
-
-# ---------------------------------------------------------------------------
-# Layer 2 - Structure
-# Purpose: deterministic parse and normalize. No AI.
-# Subsystems: 5W1H, SSE, CFS, LNS, AAC, TPS, SJM, MPS, RDS, ISC
-# ---------------------------------------------------------------------------
 
 class StructureNode(BaseModel):
     node_id: str
@@ -92,13 +73,6 @@ class StructureNode(BaseModel):
     how: Optional[str] = None
 
 
-class StructureResult(BaseModel):
-    nodes: list[StructureNode]
-    node_count: int
-    section_count: int
-    validation_report: "StructureValidationReport"
-
-
 class StructureValidationIssue(BaseModel):
     section_id: str
     issue_type: Literal[
@@ -119,11 +93,12 @@ class StructureValidationReport(BaseModel):
     repaired_sections: list[str] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Layer 3 - Selection
-# Purpose: deterministic node eligibility. No AI, no interpretation.
-# Nodes pass through unchanged.
-# ---------------------------------------------------------------------------
+class StructureResult(BaseModel):
+    nodes: list[StructureNode]
+    node_count: int
+    section_count: int
+    validation_report: StructureValidationReport
+
 
 class SelectionResult(BaseModel):
     selected_nodes: list[StructureNode]
@@ -131,12 +106,42 @@ class SelectionResult(BaseModel):
     selection_log: list[str]
 
 
-# ---------------------------------------------------------------------------
-# Layer 4 - Meaning
-# Purpose: the ONLY AI interpretation layer.
-# Operates only on selected nodes. Isolated behind clear interface.
-# If no model key, returns status only - no fake output.
-# ---------------------------------------------------------------------------
+class RuleUnitNodeRef(BaseModel):
+    node_id: str
+    text: str
+    role: str
+
+
+class RuleUnit(BaseModel):
+    rule_unit_id: str
+    section_id: str
+    primary_node_id: Optional[str] = None
+    primary_text: Optional[str] = None
+    conditions: list[RuleUnitNodeRef] = Field(default_factory=list)
+    exceptions: list[RuleUnitNodeRef] = Field(default_factory=list)
+    evidence_requirements: list[RuleUnitNodeRef] = Field(default_factory=list)
+    consequences: list[RuleUnitNodeRef] = Field(default_factory=list)
+    definitions: list[RuleUnitNodeRef] = Field(default_factory=list)
+    timing: list[RuleUnitNodeRef] = Field(default_factory=list)
+    jurisdiction: list[RuleUnitNodeRef] = Field(default_factory=list)
+    mechanisms: list[RuleUnitNodeRef] = Field(default_factory=list)
+    source_node_ids: list[str] = Field(default_factory=list)
+    fragment_node_ids: list[str] = Field(default_factory=list)
+    source_text_combined: str
+    assembly_status: Literal["complete", "needs_review", "blocked"]
+    assembly_issues: list[str] = Field(default_factory=list)
+    meaning_eligible: bool
+    verification_eligible: bool
+    review_status: Literal["ready", "needs_review", "blocked"]
+
+
+class RuleUnitResult(BaseModel):
+    rule_units: list[RuleUnit]
+    unit_count: int
+    ready_count: int
+    needs_review_count: int
+    assembly_log: list[str] = Field(default_factory=list)
+
 
 MeaningLensName = Literal[
     "modality_shift",
@@ -180,13 +185,6 @@ class MeaningResult(BaseModel):
     node_results: list[MeaningNodeResult] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Layer 5 - Origin
-# Purpose: provenance/source tracing only.
-# No credibility judgment. No truth claims. No intent claims.
-# Distribution metadata does not override origin identity.
-# ---------------------------------------------------------------------------
-
 class OriginSignal(BaseModel):
     signal: str
     value: str
@@ -200,12 +198,6 @@ class OriginResult(BaseModel):
     distribution_signals: list[OriginSignal] = Field(default_factory=list)
     evidence_trace: list[str] = Field(default_factory=list)
 
-
-# ---------------------------------------------------------------------------
-# Layer 6 - Verification
-# Purpose: verification-path routing only.
-# No true/false decisions. No credibility scoring. No final judgment.
-# ---------------------------------------------------------------------------
 
 AssertionType = Literal[
     "legal_legislative",
@@ -233,28 +225,28 @@ class VerificationResult(BaseModel):
     node_results: list[VerificationNodeResult] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Layer 7 - Output
-# Purpose: presentation only. No transformation of upstream meaning.
-# ---------------------------------------------------------------------------
-
 class OutputResult(BaseModel):
     summary: dict[str, Any]
     total_nodes: int
     selected_count: int
     excluded_count: int
+    rule_unit_count: int = 0
+    ready_rule_unit_count: int = 0
+    needs_review_rule_unit_count: int = 0
     meaning_status: str
     origin_status: str
     verification_status: str
 
 
-# ---------------------------------------------------------------------------
-# Pipeline error
-# ---------------------------------------------------------------------------
-
 PipelineLayerName = Literal[
-    "input", "structure", "selection", "meaning",
-    "origin", "verification", "output",
+    "input",
+    "structure",
+    "selection",
+    "rule_units",
+    "meaning",
+    "origin",
+    "verification",
+    "output",
 ]
 
 
@@ -264,19 +256,13 @@ class PipelineError(BaseModel):
     fatal: bool = False
 
 
-# ---------------------------------------------------------------------------
-# Full pipeline response
-# ---------------------------------------------------------------------------
-
 class PipelineResponse(BaseModel):
     input: InputResult
     structure: StructureResult
     selection: SelectionResult
+    rule_units: RuleUnitResult
     meaning: MeaningResult
     origin: OriginResult
     verification: VerificationResult
     output: OutputResult
     errors: list[PipelineError] = Field(default_factory=list)
-
-
-StructureResult.model_rebuild()
