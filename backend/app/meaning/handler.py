@@ -17,7 +17,6 @@ from app.schemas.models import (
     MeaningResult,
     OriginResult,
     RuleUnit,
-    VerificationNodeResult,
     VerificationResult,
 )
 
@@ -30,123 +29,48 @@ def _model_dump(value: Any) -> Any:
     return value
 
 
-def _verification_for_unit(
-    verification_result: VerificationResult | None,
-    rule_unit_id: str,
-) -> VerificationNodeResult | None:
-    if verification_result is None:
-        return None
-    for result in verification_result.node_results:
-        if result.node_id == rule_unit_id:
-            return result
-    return None
-
-
-def _missing_information(
-    unit: RuleUnit,
-    origin_result: OriginResult | None,
-    verification_node: VerificationNodeResult | None,
-) -> list[str]:
-    missing: list[str] = []
-
-    if not unit.source_text_combined.strip():
-        missing.append("rule_unit_text")
-    if not unit.primary_node_id:
-        missing.append("primary_rule")
-    if unit.review_status != "ready":
-        missing.append("ready_rule_unit")
-    if origin_result is None:
-        missing.append("origin_context")
-    if verification_node is None:
-        missing.append("verification_result")
-
-    return missing
-
-
-def _build_prompt(
-    unit: RuleUnit,
-    origin_result: OriginResult | None = None,
-    verification_node: VerificationNodeResult | None = None,
-) -> str:
-    context = {
-        "rule_unit": _model_dump(unit),
-        "origin": _model_dump(origin_result) if origin_result is not None else None,
-        "verification": _model_dump(verification_node) if verification_node is not None else None,
-        "candidate_missing_information": _missing_information(unit, origin_result, verification_node),
-    }
-
-    return (
-        "You are the constrained Meaning layer for a source-anchored public explanation pipeline. "
-        "Analyze exactly one Rule Unit using only the provided deterministic context. "
-        "Do not create structure. Do not invent verification. Do not infer motive, intent, "
-        "legal advice, political framing, or unsupported outcome. Fail rather than guess.\n\n"
-        "Architecture rule: atomic nodes are traceability units, not interpretation targets. "
-        "Explain the Rule Unit as one coherent unit. Use source_node_ids only for traceability. "
-        "Do not explain fragment_node_ids independently.\n\n"
-        "If assembly_status is not complete or review_status is not ready, return plain_meaning as null "
-        "and include a missing_information item explaining why Meaning is blocked or limited.\n\n"
-        "Your only job is plain meaning. Do not classify scopes. Do not use shift labels. "
-        "Do not output taxonomy labels. Explain what the legislative language says in everyday public language.\n\n"
-        "Context JSON:\n"
-        f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
-        "Plain Meaning style rules:\n"
-        "- Write for an eighth-grade reader.\n"
-        "- Use one or two short sentences.\n"
-        "- Explain who does what, when, where, or how.\n"
-        "- Say what happens in real life.\n"
-        "- Use common words first.\n"
-        "- Do not copy the source sentence with only small word changes.\n"
-        "- Do not add claims beyond the Rule Unit.\n"
-        "- Do not use internal system words in plain_meaning.\n"
-        "- Banned in plain_meaning: node, rule unit, operational, operationally, operational effect, indicates, the text indicates, engage, facilitate, utilize, affected actor, process can proceed.\n\n"
-        "Output requirements:\n"
-        "- Return ONLY valid JSON.\n"
-        "- Do not include markdown fences or text outside JSON.\n"
-        "- Return one top-level JSON object with exactly these keys: plain_meaning, missing_information.\n"
-        "- plain_meaning must be one or two short public-language sentences, or null only if the Rule Unit is not safe to explain.\n"
-        "- missing_information must be an array of short strings. Use an empty array when nothing important is missing.\n\n"
-        "Example output:\n"
-        "{\"plain_meaning\":\"The agency has 30 days to update the public list after it approves the rule.\",\"missing_information\":[]}"
-    )
-
-
 def _build_document_summary_prompt(
     rule_units: list[RuleUnit],
-    node_results: list[MeaningNodeResult],
     origin_result: OriginResult | None = None,
 ) -> str:
+    # Default Meaning must stay fast: one document-level synthesis call.
+    # Rule units provide structure and traceability; they are not each sent to AI by default.
     summary_context = []
-    result_by_id = {result.node_id: result for result in node_results}
 
     for unit in rule_units:
-        result = result_by_id.get(unit.rule_unit_id)
-        if not result or not result.plain_meaning:
+        if not unit.meaning_eligible:
             continue
         summary_context.append({
             "rule_unit_id": unit.rule_unit_id,
             "section_id": unit.section_id,
             "primary_text": unit.primary_text,
-            "plain_meaning": result.plain_meaning,
             "conditions": [_model_dump(item) for item in unit.conditions],
             "exceptions": [_model_dump(item) for item in unit.exceptions],
             "evidence_requirements": [_model_dump(item) for item in unit.evidence_requirements],
+            "consequences": [_model_dump(item) for item in unit.consequences],
+            "definitions": [_model_dump(item) for item in unit.definitions],
             "timing": [_model_dump(item) for item in unit.timing],
             "jurisdiction": [_model_dump(item) for item in unit.jurisdiction],
+            "mechanisms": [_model_dump(item) for item in unit.mechanisms],
+            "source_text_combined": unit.source_text_combined,
+            "source_node_ids": unit.source_node_ids,
         })
 
     context = {
-        "rule_unit_meanings": summary_context,
+        "rule_units": summary_context,
         "origin": _model_dump(origin_result) if origin_result is not None else None,
     }
 
     return (
-        "You are the document-level Meaning summarizer for a source-anchored legislative parsing pipeline. "
-        "Synthesize the provided rule-unit plain meanings into one concise public explanation. "
+        "You are the document-level Meaning layer for a source-anchored legislative parsing pipeline. "
+        "Synthesize the provided rule units into one concise public explanation. "
         "Do not classify scopes. Do not use shift labels. Do not list every rule unit. "
         "Do not repeat the same requirement over and over. Group repeated ideas into one explanation.\n\n"
+        "Architecture rule: rule units are coherent interpretation units. Atomic nodes are traceability units. "
+        "Use source_node_ids only as internal trace references; do not mention them in the public explanation.\n\n"
         "Your job: explain what this document or section is mainly doing in plain language. "
         "Mention major referenced laws or acts if they are central to the text. "
-        "Do not provide legal advice. Do not add claims beyond the provided rule-unit meanings.\n\n"
+        "Do not provide legal advice. Do not add claims beyond the provided rule units.\n\n"
         "Context JSON:\n"
         f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
         "Output requirements:\n"
@@ -299,30 +223,30 @@ def _call_openai(prompt: str) -> dict[str, Any] | dict[str, str]:
         }
 
 
-def _build_error_result(unit: RuleUnit, error: str, message: str | None = None) -> MeaningNodeResult:
+def _build_trace_result(unit: RuleUnit) -> MeaningNodeResult:
+    # Rule-unit Meaning is intentionally trace-only in the default path.
+    # A future debug/deep mode can add per-rule AI calls behind an explicit option.
     return MeaningNodeResult(
         node_id=unit.rule_unit_id,
         source_text=unit.source_text_combined,
-        status="error",
-        error=error,
-        message=message,
+        status="executed",
         lenses=[],
         detected_scopes=[],
+        plain_meaning=None,
         scope_details=[],
-        missing_information=unit.assembly_issues,
+        missing_information=[] if unit.meaning_eligible else unit.assembly_issues,
     )
 
 
 def _build_document_summary(
     rule_units: list[RuleUnit],
-    node_results: list[MeaningNodeResult],
     origin_result: OriginResult | None,
 ) -> tuple[str | None, list[str]]:
-    usable = [result for result in node_results if result.status == "executed" and result.plain_meaning]
+    usable = [unit for unit in rule_units if unit.meaning_eligible]
     if not usable:
-        return None, ["plain_meaning"]
+        return None, ["meaning_eligible_rule_units"]
 
-    prompt = _build_document_summary_prompt(rule_units, node_results, origin_result=origin_result)
+    prompt = _build_document_summary_prompt(rule_units, origin_result=origin_result)
     raw = _call_openai(prompt)
 
     if isinstance(raw, dict) and "error" in raw:
@@ -343,100 +267,20 @@ def process_meaning(
     origin_result: OriginResult | None = None,
     verification_result: VerificationResult | None = None,
 ) -> MeaningResult:
-    """Process Meaning for rule units. AI layer."""
+    """Process document-level Meaning with one AI call.
+
+    Default Meaning is intentionally document-level to avoid one API call per
+    rule unit. Rule units stay available as traceable structure underneath.
+    """
     if not run:
         return MeaningResult(
             status="skipped",
             message="Meaning layer skipped by options",
         )
 
-    node_results: list[MeaningNodeResult] = []
-
-    for unit in rule_units:
-        if not unit.meaning_eligible:
-            node_results.append(_build_error_result(
-                unit,
-                "rule_unit_not_meaning_eligible",
-                "Rule unit was not safe to explain independently.",
-            ))
-            continue
-
-        verification_node = _verification_for_unit(verification_result, unit.rule_unit_id)
-        prompt = _build_prompt(
-            unit,
-            origin_result=origin_result,
-            verification_node=verification_node,
-        )
-        raw = _call_openai(prompt)
-
-        if isinstance(raw, dict) and "error" in raw:
-            node_results.append(
-                MeaningNodeResult(
-                    node_id=unit.rule_unit_id,
-                    source_text=unit.source_text_combined,
-                    status="error",
-                    error=raw["error"],
-                    message=raw.get("message"),
-                    raw_response=raw.get("raw_response"),
-                    lenses=[],
-                    detected_scopes=[],
-                    scope_details=[],
-                )
-            )
-            continue
-
-        if not raw:
-            node_results.append(
-                MeaningNodeResult(
-                    node_id=unit.rule_unit_id,
-                    source_text=unit.source_text_combined,
-                    status="empty",
-                    message="No meaning output returned",
-                    lenses=[],
-                    detected_scopes=[],
-                    scope_details=[],
-                )
-            )
-            continue
-
-        plain_meaning = raw.get("plain_meaning")
-        if not isinstance(plain_meaning, str) or not plain_meaning.strip():
-            plain_meaning = None
-
-        missing_information = _as_string_list(raw.get("missing_information"))
-
-        if plain_meaning is None and not missing_information:
-            node_results.append(
-                MeaningNodeResult(
-                    node_id=unit.rule_unit_id,
-                    source_text=unit.source_text_combined,
-                    status="error",
-                    error="plain_meaning_missing",
-                    message="Meaning response did not include plain_meaning or missing_information",
-                    raw_response=json.dumps(raw),
-                    lenses=[],
-                    detected_scopes=[],
-                    scope_details=[],
-                )
-            )
-            continue
-
-        node_results.append(
-            MeaningNodeResult(
-                node_id=unit.rule_unit_id,
-                source_text=unit.source_text_combined,
-                status="executed",
-                lenses=[],
-                detected_scopes=[],
-                plain_meaning=plain_meaning,
-                scope_details=[],
-                missing_information=missing_information,
-            )
-        )
-
+    node_results = [_build_trace_result(unit) for unit in rule_units]
     overall_plain_meaning, summary_missing_information = _build_document_summary(
         rule_units,
-        node_results,
         origin_result=origin_result,
     )
 
