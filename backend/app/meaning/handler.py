@@ -71,9 +71,14 @@ def _split_clauses(text: str) -> list[str]:
 def _extract_referenced_acts(rule_units: list[RuleUnit], origin_result: OriginResult | None) -> list[str]:
     values: list[str] = []
 
+    for unit in rule_units:
+        values.extend(unit.external_references)
+
     if origin_result is not None:
+        for source in origin_result.referenced_sources:
+            values.append(source.name)
         for signal in origin_result.origin_identity_signals:
-            if signal.signal == "REFERENCED_ACT":
+            if signal.signal == "referenced_act":
                 values.append(signal.value)
 
     combined_text = " ".join(unit.source_text_combined for unit in rule_units)
@@ -104,6 +109,8 @@ def _build_meaning_brief(rule_units: list[RuleUnit], origin_result: OriginResult
             if re.search(r"\b(except|unless)\b", clause, re.I):
                 exceptions.append(clause)
 
+    referenced_acts = _extract_referenced_acts(rule_units, origin_result)
+
     return MeaningBrief(
         rule_unit_ids=[unit.rule_unit_id for unit in bounded],
         source_node_ids=[node_id for unit in bounded for node_id in unit.source_node_ids],
@@ -111,7 +118,8 @@ def _build_meaning_brief(rule_units: list[RuleUnit], origin_result: OriginResult
         obligations=_unique_preserve_order(obligations)[:8],
         conditions=_unique_preserve_order(conditions)[:6],
         exceptions=_unique_preserve_order(exceptions)[:4],
-        referenced_acts=_extract_referenced_acts(rule_units, origin_result),
+        referenced_acts=referenced_acts,
+        external_reference_needed=bool(referenced_acts),
         truncated=len(usable) > len(bounded),
     )
 
@@ -136,8 +144,12 @@ def _summary_from_brief(brief: MeaningBrief) -> tuple[str | None, list[str]]:
         details.append("It describes requirements that must be met before the covered process can be completed.")
     if brief.conditions or brief.exceptions:
         details.append("It also identifies conditions, limits, or exceptions that affect how those requirements apply.")
-    if brief.referenced_acts:
-        details.append("It references " + ", ".join(brief.referenced_acts) + ", which may provide background for the rule.")
+    if brief.external_reference_needed and brief.referenced_acts:
+        details.append(
+            "Some parts reference outside law: "
+            + ", ".join(brief.referenced_acts)
+            + ". This plain meaning explains the current source text only unless the referenced source is also analyzed."
+        )
     if brief.truncated:
         details.append("The summary is based on a bounded deterministic brief to protect runtime.")
 
