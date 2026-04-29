@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnalyzeForm } from "./components/AnalyzeForm";
-import { Workspace, type PipelineResponse } from "./components/WorkspaceConsole";
+import { ReceiptWorkspace, type PipelineResponse } from "./components/ReceiptWorkspace";
 import { analyzeDocument } from "./lib/api-client";
 
 function App() {
@@ -79,7 +79,7 @@ function App() {
 
       {result ? (
         <div className="flex-1 md:overflow-hidden">
-          <Workspace data={result} />
+          <ReceiptWorkspace data={result} />
         </div>
       ) : !loading && (
         <div className="flex-1 flex items-center justify-center">
