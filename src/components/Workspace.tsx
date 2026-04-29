@@ -4,14 +4,7 @@ interface StructureNode {
   node_id: string;
   section_id: string;
   parent_id: string | null;
-  role:
-    | "PRIMARY_RULE"
-    | "EVIDENCE"
-    | "CONDITION"
-    | "EXCEPTION"
-    | "CONSEQUENCE"
-    | "DEFINITION"
-    | "BOILERPLATE";
+  role: "PRIMARY_RULE" | "EVIDENCE" | "CONDITION" | "EXCEPTION" | "CONSEQUENCE" | "DEFINITION" | "BOILERPLATE";
   depth: number;
   source_span_start: number | null;
   source_span_end: number | null;
@@ -74,6 +67,17 @@ interface RuleUnitData {
   assembly_log: string[];
 }
 
+interface MeaningBrief {
+  rule_unit_ids: string[];
+  source_node_ids: string[];
+  key_terms: string[];
+  obligations: string[];
+  conditions: string[];
+  exceptions: string[];
+  referenced_acts: string[];
+  truncated: boolean;
+}
+
 interface MeaningNodeResult {
   node_id: string;
   source_text: string;
@@ -81,10 +85,7 @@ interface MeaningNodeResult {
   error?: string | null;
   message?: string | null;
   raw_response?: string | null;
-  lenses?: unknown[];
-  detected_scopes?: string[];
   plain_meaning?: string | null;
-  scope_details?: unknown[];
   missing_information?: string[];
 }
 
@@ -93,11 +94,15 @@ interface MeaningData {
   message: string | null;
   node_results: MeaningNodeResult[];
   overall_plain_meaning?: string | null;
+  summary_basis?: string | null;
+  summary_brief?: MeaningBrief | null;
   summary_missing_information?: string[];
 }
 
 interface VerificationNode {
   node_id: string;
+  rule_unit_id?: string | null;
+  source_node_ids?: string[];
   assertion_detected: boolean;
   assertion_type: string | null;
   verification_path_available: boolean;
@@ -179,12 +184,8 @@ type DetailTab = "meaning" | "verification" | "origin";
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex items-start gap-3 border-b border-border/50 py-2 last:border-0">
-      <span className="w-28 shrink-0 text-[11px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-sm leading-relaxed text-foreground">
-        {value || "Not specified"}
-      </span>
+      <span className="w-28 shrink-0 text-[11px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <span className="text-sm leading-relaxed text-foreground">{value || "Not specified"}</span>
     </div>
   );
 }
@@ -192,12 +193,8 @@ function FieldRow({ label, value }: { label: string; value: string | null | unde
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mb-5">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-        {title}
-      </div>
-      <div className="rounded-2xl border border-border/60 bg-surface p-4 md:rounded-xl md:p-3">
-        {children}
-      </div>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">{title}</div>
+      <div className="rounded-2xl border border-border/60 bg-surface p-4 md:rounded-xl md:p-3">{children}</div>
     </div>
   );
 }
@@ -227,15 +224,10 @@ function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[]
 
   return (
     <div className="mt-3">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-        {label}
-      </div>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">{label}</div>
       <div className="space-y-2">
         {items.map((item) => (
-          <div
-            key={`${label}-${item.node_id}`}
-            className="rounded border border-border/40 bg-background/40 p-2 text-sm leading-relaxed text-muted-foreground"
-          >
+          <div key={`${label}-${item.node_id}`} className="rounded border border-border/40 bg-background/40 p-2 text-sm leading-relaxed text-muted-foreground">
             {item.text}
           </div>
         ))}
@@ -244,26 +236,15 @@ function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[]
   );
 }
 
-function chunkSentences(sentences: string[], size: number): string[] {
-  const paragraphs: string[] = [];
-  for (let index = 0; index < sentences.length; index += size) {
-    paragraphs.push(sentences.slice(index, index + size).join(" "));
-  }
-  return paragraphs;
-}
-
 function splitParagraphs(text: string | null | undefined): string[] {
   if (!text || !text.trim()) return [];
-  return text
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+  return text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
 function RuleUnitMeaning({ meaning }: { meaning: MeaningNodeResult | undefined }) {
   if (!meaning) return <EmptyState message="No plain meaning returned for this rule unit." />;
 
-  if (meaning.status !== "executed") {
+  if (meaning.status === "skipped") {
     return <EmptyState message={meaning.message || meaning.error || "Plain meaning unavailable for this rule unit."} />;
   }
 
@@ -287,24 +268,12 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     [ruleUnits]
   );
 
-  // Public Meaning view: prefer the backend's document-level synthesis.
-  // Fall back to grouped rule-unit sentences only if the summary is missing, so the UI remains usable.
-  const overallPlainMeaning = useMemo(() => {
-    const backendSummary = splitParagraphs(data.meaning.overall_plain_meaning);
-    if (backendSummary.length > 0) return backendSummary;
+  const overallPlainMeaning = splitParagraphs(data.meaning.overall_plain_meaning);
 
-    const sentences = ruleUnits
-      .map((unit) => meaningMap.get(unit.rule_unit_id)?.plain_meaning?.trim())
-      .filter((value): value is string => Boolean(value));
-
-    return chunkSentences(sentences, 4);
-  }, [data.meaning.overall_plain_meaning, meaningMap, ruleUnits]);
-
-  // Keep review/debug notes out of the main explanation. They are available only when expanded.
   const meaningIssues = useMemo(() => {
     const summaryMissing = data.meaning.summary_missing_information || [];
     const ruleUnitIssues = data.meaning.node_results
-      .filter((result) => result.status !== "executed" || (result.missing_information && result.missing_information.length > 0))
+      .filter((result) => result.status === "skipped" || (result.missing_information && result.missing_information.length > 0))
       .map((result) => ({
         id: result.node_id,
         message: result.message || result.error || result.missing_information?.join(", ") || "Meaning needs review",
@@ -316,7 +285,6 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     ];
   }, [data.meaning.node_results, data.meaning.summary_missing_information]);
 
-  // Verification stays at the rule-unit level so routing follows coherent legal units, not atomic fragments.
   const verificationSummary = useMemo(() => {
     const routes = new Map<string, { assertionTypes: Set<string>; unitIds: Set<string>; evidence: string[] }>();
     const assertionTypes = new Set<string>();
@@ -324,20 +292,17 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     let routedCount = 0;
 
     for (const result of data.verification.node_results) {
+      const unitId = result.rule_unit_id || result.node_id;
       if (result.assertion_detected) detectedCount += 1;
       if (result.assertion_type) assertionTypes.add(result.assertion_type);
       if (result.expected_record_systems.length > 0) routedCount += 1;
 
       for (const system of result.expected_record_systems) {
-        if (!routes.has(system)) {
-          routes.set(system, { assertionTypes: new Set<string>(), unitIds: new Set<string>(), evidence: [] });
-        }
-
+        if (!routes.has(system)) routes.set(system, { assertionTypes: new Set<string>(), unitIds: new Set<string>(), evidence: [] });
         const route = routes.get(system)!;
-        route.unitIds.add(result.node_id);
+        route.unitIds.add(unitId);
         if (result.assertion_type) route.assertionTypes.add(result.assertion_type);
-
-        const unitText = ruleUnitById.get(result.node_id)?.source_text_combined?.trim();
+        const unitText = ruleUnitById.get(unitId)?.source_text_combined?.trim();
         if (unitText && route.evidence.length < 3 && !route.evidence.includes(unitText)) route.evidence.push(unitText);
       }
     }
@@ -365,14 +330,11 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         <span className="text-border">·</span>
         <span><span className="font-medium text-foreground">{data.selection.selected_nodes.length}</span> selected</span>
         <span className="text-border">·</span>
-        <span><span className="font-medium text-foreground">{data.selection.excluded_nodes.length}</span> excluded</span>
-        <span className="text-border">·</span>
         <span><span className="font-medium text-foreground">{ruleUnits.length}</span> rule units</span>
         <div className="hidden flex-1 md:block" />
         <span>Meaning: <span className="font-medium text-primary">{data.meaning.status}</span></span>
         <span>Origin: <span className="font-medium text-foreground">{data.origin.status}</span></span>
         <span>Verification: <span className="font-medium text-foreground">{data.verification.status}</span></span>
-        <span>Validation: <span className="font-medium text-foreground">{data.structure.validation_report.status}</span></span>
       </div>
 
       {data.errors.length > 0 && (
@@ -392,11 +354,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
               type="button"
               onClick={() => setActiveTab(tab)}
               aria-pressed={activeTab === tab}
-              className={`rounded-full border px-3.5 py-2 text-sm font-medium capitalize transition-colors ${
-                activeTab === tab
-                  ? "border-gold/30 bg-gold/10 text-foreground"
-                  : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"
-              }`}
+              className={`rounded-full border px-3.5 py-2 text-sm font-medium capitalize transition-colors ${activeTab === tab ? "border-gold/30 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
             >
               {tab}
             </button>
@@ -408,92 +366,53 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {activeTab === "meaning" && (
           <div className="space-y-4 p-4">
             <div className="rounded-xl border border-border/60 bg-surface px-4 py-4">
-              <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-                Overall Plain Meaning
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Overall Plain Meaning</div>
+                {data.meaning.summary_basis && <span className="rounded bg-secondary px-2 py-1 text-[11px] text-muted-foreground">{data.meaning.summary_basis}</span>}
               </div>
               {overallPlainMeaning.length > 0 ? (
                 <div className="space-y-3 text-sm leading-relaxed text-foreground">
-                  {overallPlainMeaning.map((paragraph, index) => (
-                    <p key={`overall-meaning-${index}`}>{paragraph}</p>
-                  ))}
+                  {overallPlainMeaning.map((paragraph, index) => <p key={`overall-meaning-${index}`}>{paragraph}</p>)}
                 </div>
               ) : (
                 <EmptyState message="No overall plain meaning is available yet." />
               )}
               {meaningIssues.length > 0 && (
                 <details className="mt-4 rounded-xl border border-border/40 bg-background/30 p-3">
-                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                    Meaning notes
-                  </summary>
+                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Meaning notes</summary>
                   <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    {meaningIssues.map((issue, index) => (
-                      <div key={`meaning-issue-${issue.id}-${index}`}>{issue.id}: {issue.message}</div>
-                    ))}
+                    {meaningIssues.map((issue, index) => <div key={`meaning-issue-${issue.id}-${index}`}>{issue.id}: {issue.message}</div>)}
                   </div>
                 </details>
               )}
             </div>
 
-            {/* Traceability remains accessible without making atomic/rule-unit structure the default reading path. */}
             <details className="rounded-xl border border-border/60 bg-surface px-4 py-4">
-              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                Rule unit breakdown
-              </summary>
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Rule unit breakdown</summary>
               <div className="mt-4 space-y-3">
-                {ruleUnits.length === 0 ? (
-                  <EmptyState message="No rule units available for Meaning." />
-                ) : (
-                  ruleUnits.map((unit, index) => {
-                    const unitMeaning = meaningMap.get(unit.rule_unit_id);
-
-                    return (
-                      <div key={unit.rule_unit_id} className="rounded-xl border border-border/50 bg-background/40 px-4 py-4">
-                        <div className="flex items-start gap-4">
-                          <span className="pt-1 text-base font-medium text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-base font-semibold leading-snug text-foreground">
-                              {unit.primary_text || unit.source_text_combined || "Rule unit needs review"}
-                            </div>
-
-                            <NodeRefList label="Conditions" items={unit.conditions} />
-                            <NodeRefList label="Exceptions" items={unit.exceptions} />
-                            <NodeRefList label="Evidence Requirements" items={unit.evidence_requirements} />
-                            <NodeRefList label="Consequences" items={unit.consequences} />
-                            <NodeRefList label="Definitions" items={unit.definitions} />
-
-                            {unit.assembly_issues.length > 0 && (
-                              <div className="mt-3 rounded border border-border/40 bg-surface p-2 text-sm text-muted-foreground">
-                                Needs review: {unit.assembly_issues.join(", ")}
-                              </div>
-                            )}
-
-                            <div className="mt-4 rounded-xl border border-border/60 bg-surface p-3">
-                              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Plain Meaning</div>
-                              <RuleUnitMeaning meaning={unitMeaning} />
-                            </div>
-
-                            <details className="mt-3 rounded-xl border border-border/40 bg-surface p-3">
-                              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                Rule unit details
-                              </summary>
-                              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                                <div>rule unit: {unit.rule_unit_id}</div>
-                                <div>section: {unit.section_id}</div>
-                                <div>primary node: {unit.primary_node_id || "none"}</div>
-                                <div>assembly: {unit.assembly_status}</div>
-                                <div>review: {unit.review_status}</div>
-                                <div>meaning eligible: {String(unit.meaning_eligible)}</div>
-                                <div>verification eligible: {String(unit.verification_eligible)}</div>
-                                <div>source nodes: {unit.source_node_ids.join(", ") || "none"}</div>
-                                <div>fragments: {unit.fragment_node_ids.join(", ") || "none"}</div>
-                              </div>
-                            </details>
+                {ruleUnits.length === 0 ? <EmptyState message="No rule units available for Meaning." /> : ruleUnits.map((unit, index) => {
+                  const unitMeaning = meaningMap.get(unit.rule_unit_id);
+                  return (
+                    <div key={unit.rule_unit_id} className="rounded-xl border border-border/50 bg-background/40 px-4 py-4">
+                      <div className="flex items-start gap-4">
+                        <span className="pt-1 text-base font-medium text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-base font-semibold leading-snug text-foreground">{unit.primary_text || unit.source_text_combined || "Rule unit needs review"}</div>
+                          <NodeRefList label="Conditions" items={unit.conditions} />
+                          <NodeRefList label="Exceptions" items={unit.exceptions} />
+                          <NodeRefList label="Evidence Requirements" items={unit.evidence_requirements} />
+                          <NodeRefList label="Consequences" items={unit.consequences} />
+                          <NodeRefList label="Definitions" items={unit.definitions} />
+                          {unit.assembly_issues.length > 0 && <div className="mt-3 rounded border border-border/40 bg-surface p-2 text-sm text-muted-foreground">Needs review: {unit.assembly_issues.join(", ")}</div>}
+                          <div className="mt-4 rounded-xl border border-border/60 bg-surface p-3">
+                            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Plain Meaning</div>
+                            <RuleUnitMeaning meaning={unitMeaning} />
                           </div>
                         </div>
                       </div>
-                    );
-                  })
-                )}
+                    </div>
+                  );
+                })}
               </div>
             </details>
           </div>
@@ -502,51 +421,23 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {activeTab === "verification" && (
           <div className="space-y-5 px-5 py-6 pb-12">
             <div className="text-sm font-mono text-muted-foreground">document</div>
-
             <Section title="Document Verification Summary">
               <FieldRow label="status" value={data.verification.status} />
               <FieldRow label="checked" value={`${verificationSummary.total} rule unit(s)`} />
               <FieldRow label="detected" value={`${verificationSummary.detectedCount} rule unit(s) with verification signals`} />
               <FieldRow label="routed" value={`${verificationSummary.routedCount} rule unit(s) routed to record systems`} />
             </Section>
-
             <Section title="Expected Record Systems">
               {verificationSummary.routes.length > 0 ? (
                 <div className="space-y-3">
                   {verificationSummary.routes.map((route) => (
                     <div key={route.system} className="rounded-xl border border-border/50 bg-background/40 p-3">
                       <div className="text-sm font-semibold text-foreground">{route.system}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Triggered by {route.unitIds.length} rule unit(s)
-                        {route.assertionTypes.length > 0 ? ` · ${route.assertionTypes.join(", ")}` : ""}
-                      </div>
-                      {route.evidence.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {route.evidence.map((snippet) => (
-                            <div key={`${route.system}-${snippet}`} className="rounded border border-border/40 bg-surface p-2 text-sm leading-relaxed text-muted-foreground">
-                              {snippet}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <div className="mt-1 text-xs text-muted-foreground">Triggered by {route.unitIds.length} rule unit(s){route.assertionTypes.length > 0 ? ` · ${route.assertionTypes.join(", ")}` : ""}</div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <EmptyState message="No document-level record systems were detected for this input." />
-              )}
-            </Section>
-
-            <Section title="Assertion Types">
-              {verificationSummary.assertionTypes.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {verificationSummary.assertionTypes.map((type) => (
-                    <span key={type} className="rounded bg-secondary px-3 py-2 text-sm font-medium text-foreground">{type}</span>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="No assertion types detected." />
-              )}
+              ) : <EmptyState message="No document-level record systems were detected for this input." />}
             </Section>
           </div>
         )}
@@ -558,13 +449,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             <Section title="Origin Metadata Signals"><OriginSignalList signals={data.origin.origin_metadata_signals} /></Section>
             <Section title="Distribution Signals"><OriginSignalList signals={data.origin.distribution_signals} /></Section>
             <Section title="Evidence Trace">
-              {data.origin.evidence_trace.length > 0 ? (
-                <pre className="overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                  {JSON.stringify(data.origin.evidence_trace, null, 2)}
-                </pre>
-              ) : (
-                <EmptyState message="No evidence trace returned." />
-              )}
+              {data.origin.evidence_trace.length > 0 ? <pre className="overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">{JSON.stringify(data.origin.evidence_trace, null, 2)}</pre> : <EmptyState message="No evidence trace returned." />}
             </Section>
           </div>
         )}
