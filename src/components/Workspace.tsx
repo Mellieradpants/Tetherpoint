@@ -92,6 +92,8 @@ interface MeaningData {
   status: string;
   message: string | null;
   node_results: MeaningNodeResult[];
+  overall_plain_meaning?: string | null;
+  summary_missing_information?: string[];
 }
 
 interface VerificationNode {
@@ -250,6 +252,14 @@ function chunkSentences(sentences: string[], size: number): string[] {
   return paragraphs;
 }
 
+function splitParagraphs(text: string | null | undefined): string[] {
+  if (!text || !text.trim()) return [];
+  return text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 function RuleUnitMeaning({ meaning }: { meaning: MeaningNodeResult | undefined }) {
   if (!meaning) return <EmptyState message="No plain meaning returned for this rule unit." />;
 
@@ -277,25 +287,34 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     [ruleUnits]
   );
 
-  // Public Meaning view: combine rule-unit translations into a readable document-level summary.
-  // Rule units remain underneath as traceable breakdowns, not the first thing the reader has to parse.
+  // Public Meaning view: prefer the backend's document-level synthesis.
+  // Fall back to grouped rule-unit sentences only if the summary is missing, so the UI remains usable.
   const overallPlainMeaning = useMemo(() => {
+    const backendSummary = splitParagraphs(data.meaning.overall_plain_meaning);
+    if (backendSummary.length > 0) return backendSummary;
+
     const sentences = ruleUnits
       .map((unit) => meaningMap.get(unit.rule_unit_id)?.plain_meaning?.trim())
       .filter((value): value is string => Boolean(value));
 
     return chunkSentences(sentences, 4);
-  }, [meaningMap, ruleUnits]);
+  }, [data.meaning.overall_plain_meaning, meaningMap, ruleUnits]);
 
   // Keep review/debug notes out of the main explanation. They are available only when expanded.
   const meaningIssues = useMemo(() => {
-    return data.meaning.node_results
+    const summaryMissing = data.meaning.summary_missing_information || [];
+    const ruleUnitIssues = data.meaning.node_results
       .filter((result) => result.status !== "executed" || (result.missing_information && result.missing_information.length > 0))
       .map((result) => ({
         id: result.node_id,
         message: result.message || result.error || result.missing_information?.join(", ") || "Meaning needs review",
       }));
-  }, [data.meaning.node_results]);
+
+    return [
+      ...summaryMissing.map((message) => ({ id: "summary", message })),
+      ...ruleUnitIssues,
+    ];
+  }, [data.meaning.node_results, data.meaning.summary_missing_information]);
 
   // Verification stays at the rule-unit level so routing follows coherent legal units, not atomic fragments.
   const verificationSummary = useMemo(() => {
@@ -407,8 +426,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                     Meaning notes
                   </summary>
                   <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    {meaningIssues.map((issue) => (
-                      <div key={`meaning-issue-${issue.id}`}>{issue.id}: {issue.message}</div>
+                    {meaningIssues.map((issue, index) => (
+                      <div key={`meaning-issue-${issue.id}-${index}`}>{issue.id}: {issue.message}</div>
                     ))}
                   </div>
                 </details>
