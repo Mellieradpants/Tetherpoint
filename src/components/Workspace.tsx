@@ -200,6 +200,8 @@ export interface PipelineResponse {
 
 type DetailTab = "meaning" | "verification" | "origin";
 
+const ORIGIN_EMPTY_MESSAGE = "Pasted text has no verifiable source metadata. Use official HTML, XML, JSON, or source metadata to enable Origin signals.";
+
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex items-start gap-3 border-b border-border/50 py-2 last:border-0">
@@ -223,7 +225,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
-  if (signals.length === 0) return <EmptyState message="No origin signals in this section." />;
+  if (signals.length === 0) return <EmptyState message={ORIGIN_EMPTY_MESSAGE} />;
 
   return (
     <div>
