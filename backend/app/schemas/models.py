@@ -217,6 +217,57 @@ class VerificationResult(BaseModel):
     node_results: list[VerificationNodeResult] = Field(default_factory=list)
 
 
+GovernanceStatus = Literal[
+    "match",
+    "mismatch_detected",
+    "contradiction_detected",
+    "missing_required_source",
+    "needs_review",
+    "unsupported_downstream_action",
+]
+
+
+class GovernanceRecord(BaseModel):
+    fieldName: str
+    extractedValue: Optional[str] = None
+    sourceAnchor: Optional[str] = None
+    sourceSystem: Optional[str] = None
+    documentType: Optional[str] = None
+
+
+class GovernanceCheckResult(BaseModel):
+    checkName: str
+    status: GovernanceStatus
+    issue: Optional[str] = None
+    missingFields: list[str] = Field(default_factory=list)
+    comparedField: Optional[str] = None
+    firstValue: Optional[str] = None
+    secondValue: Optional[str] = None
+    requestedAction: Optional[str] = None
+    blockingStatus: Optional[GovernanceStatus] = None
+
+
+class GovernanceRecordResult(BaseModel):
+    inputField: Optional[str] = None
+    extractedValue: Optional[str] = None
+    sourceAnchor: Optional[str] = None
+    sourceSystem: Optional[str] = None
+    documentType: Optional[str] = None
+    overallStatus: GovernanceStatus
+    checks: list[GovernanceCheckResult] = Field(default_factory=list)
+    activeIssues: list[GovernanceCheckResult] = Field(default_factory=list)
+    principle: str
+
+
+class GovernanceResult(BaseModel):
+    status: GovernanceStatus
+    record_count: int
+    issue_count: int
+    results: list[GovernanceRecordResult] = Field(default_factory=list)
+    activeIssues: list[GovernanceCheckResult] = Field(default_factory=list)
+    principle: str
+
+
 class OutputResult(BaseModel):
     summary: dict[str, Any]
     total_nodes: int
@@ -228,6 +279,8 @@ class OutputResult(BaseModel):
     meaning_status: str
     origin_status: str
     verification_status: str
+    governance_status: str = "match"
+    governance_issue_count: int = 0
 
 
 PipelineLayerName = Literal[
@@ -238,6 +291,7 @@ PipelineLayerName = Literal[
     "rule_units",
     "verification",
     "meaning",
+    "governance",
     "output",
 ]
 
@@ -256,5 +310,6 @@ class PipelineResponse(BaseModel):
     meaning: MeaningResult
     origin: OriginResult
     verification: VerificationResult
+    governance: GovernanceResult
     output: OutputResult
     errors: list[PipelineError] = Field(default_factory=list)
