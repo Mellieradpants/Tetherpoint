@@ -101,6 +101,9 @@ def _selection_reasons(node: StructureNode) -> list[str]:
     if "origin:document_identity" in node.tags:
         reasons.append("document identity/header node routed to Origin")
 
+    if "fragment:incomplete" in node.tags:
+        reasons.append("incomplete source fragment preserved for Structure only")
+
     if node.validation_status == "invalid":
         reasons.append("hierarchy validation failed")
 
