@@ -1,7 +1,9 @@
 """Meaning layer.
 
-Default Meaning uses a deterministic document-level summary so the pipeline
-returns reliably. Rule units remain available underneath for traceability.
+Meaning is document-level by default. It consumes Rule Units, builds a compact
+brief deterministically, and returns a stable fallback summary without external
+calls. Optional future AI Meaning should make one document-level call over this
+brief, never one call per rule unit and never over raw atomic nodes.
 """
 
 from __future__ import annotations
@@ -9,12 +11,29 @@ from __future__ import annotations
 import re
 
 from app.schemas.models import (
+    MeaningBrief,
     MeaningNodeResult,
     MeaningResult,
     OriginResult,
     RuleUnit,
     VerificationResult,
 )
+
+MAX_BRIEF_RULE_UNITS = 16
+MAX_ITEM_LENGTH = 220
+
+_ACTION_RE = re.compile(
+    r"\b(shall|must|may|is required to|are required to|require|requires|"
+    r"provide|submit|verify|retain|include|accept|issue|enforce|establish|prohibit)\b",
+    re.I,
+)
+_CONDITION_RE = re.compile(r"\b(if|when|unless|except|before|after|provided that|at the time of)\b", re.I)
+_ACT_RE = re.compile(r"\b([A-Z][A-Za-z0-9\s,-]+ Act of \d{4}|REAL ID Act of 2005)\b", re.I)
+_KEY_TERM_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("voter registration", re.compile(r"\b(register to vote|voter registration|elections? for federal office)\b", re.I)),
+    ("documentary proof of United States citizenship", re.compile(r"\b(citizenship|United States citizen|U\.S\. citizen|documentary proof)\b", re.I)),
+    ("identity or citizenship documents", re.compile(r"\b(passport|birth certificate|identification|REAL ID|naturalization|military identification)\b", re.I)),
+]
 
 
 def _clean_text(value: str | None) -> str:
@@ -23,11 +42,18 @@ def _clean_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _shorten(value: str, limit: int = MAX_ITEM_LENGTH) -> str:
+    cleaned = _clean_text(value)
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
 def _unique_preserve_order(values: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
-        cleaned = _clean_text(value)
+        cleaned = _shorten(value)
         if not cleaned:
             continue
         key = cleaned.lower()
@@ -35,6 +61,11 @@ def _unique_preserve_order(values: list[str]) -> list[str]:
             seen.add(key)
             result.append(cleaned)
     return result
+
+
+def _split_clauses(text: str) -> list[str]:
+    clauses = re.split(r"(?<=[.;:])\s+|\s+and\s+", text)
+    return [clause.strip(" ;:.") for clause in clauses if clause.strip(" ;:.")]
 
 
 def _extract_referenced_acts(rule_units: list[RuleUnit], origin_result: OriginResult | None) -> list[str]:
@@ -46,73 +77,91 @@ def _extract_referenced_acts(rule_units: list[RuleUnit], origin_result: OriginRe
                 values.append(signal.value)
 
     combined_text = " ".join(unit.source_text_combined for unit in rule_units)
-    for match in re.finditer(r"([A-Z][A-Za-z0-9\s,-]+ Act of \d{4})", combined_text):
-        values.append(match.group(1))
-    for match in re.finditer(r"(REAL ID Act of 2005)", combined_text, flags=re.I):
-        values.append(match.group(1))
-
+    values.extend(match.group(1) for match in _ACT_RE.finditer(combined_text))
     return _unique_preserve_order(values)
 
 
-def _contains_any(text: str, terms: list[str]) -> bool:
-    lowered = text.lower()
-    return any(term in lowered for term in terms)
-
-
-def _build_deterministic_summary(
-    rule_units: list[RuleUnit],
-    origin_result: OriginResult | None,
-) -> tuple[str | None, list[str]]:
+def _build_meaning_brief(rule_units: list[RuleUnit], origin_result: OriginResult | None) -> MeaningBrief:
     usable = [unit for unit in rule_units if unit.meaning_eligible]
-    if not usable:
+    bounded = usable[:MAX_BRIEF_RULE_UNITS]
+
+    key_terms: list[str] = []
+    obligations: list[str] = []
+    conditions: list[str] = []
+    exceptions: list[str] = []
+
+    for unit in bounded:
+        text = _clean_text(unit.source_text_combined)
+        for label, pattern in _KEY_TERM_PATTERNS:
+            if pattern.search(text):
+                key_terms.append(label)
+
+        for clause in _split_clauses(text):
+            if _ACTION_RE.search(clause):
+                obligations.append(clause)
+            if _CONDITION_RE.search(clause):
+                conditions.append(clause)
+            if re.search(r"\b(except|unless)\b", clause, re.I):
+                exceptions.append(clause)
+
+    return MeaningBrief(
+        rule_unit_ids=[unit.rule_unit_id for unit in bounded],
+        source_node_ids=[node_id for unit in bounded for node_id in unit.source_node_ids],
+        key_terms=_unique_preserve_order(key_terms),
+        obligations=_unique_preserve_order(obligations)[:8],
+        conditions=_unique_preserve_order(conditions)[:6],
+        exceptions=_unique_preserve_order(exceptions)[:4],
+        referenced_acts=_extract_referenced_acts(rule_units, origin_result),
+        truncated=len(usable) > len(bounded),
+    )
+
+
+def _summary_from_brief(brief: MeaningBrief) -> tuple[str | None, list[str]]:
+    if not brief.rule_unit_ids:
         return None, ["meaning_eligible_rule_units"]
 
-    combined_text = " ".join(_clean_text(unit.source_text_combined) for unit in usable)
-    referenced_acts = _extract_referenced_acts(rule_units, origin_result)
-
-    topics: list[str] = []
-    if _contains_any(combined_text, ["voter registration", "register to vote", "elections for federal office"]):
-        topics.append("voter registration for federal elections")
-    if _contains_any(combined_text, ["citizenship", "united states citizen", "u.s. citizen"]):
-        topics.append("proof of United States citizenship")
-    if _contains_any(combined_text, ["identification", "photo id", "real id", "documentary proof"]):
-        topics.append("which identity or citizenship documents may count")
-    if _contains_any(combined_text, ["polling place", "day of election", "election official"]):
-        topics.append("how proof is handled at registration or at the polling place")
-
+    topics = brief.key_terms
     if topics:
-        main_sentence = "This text is mainly about " + ", ".join(topics[:-1])
-        if len(topics) > 1:
-            main_sentence += f", and {topics[-1]}."
+        if len(topics) == 1:
+            main_sentence = f"This text is mainly about {topics[0]}."
         else:
-            main_sentence += "."
+            main_sentence = "This text is mainly about " + ", ".join(topics[:-1]) + f", and {topics[-1]}."
+    elif brief.obligations:
+        main_sentence = f"This text sets out legal requirements: {brief.obligations[0]}."
     else:
         main_sentence = "This text explains legal requirements and related procedures in the source document."
 
     details: list[str] = []
-    if _contains_any(combined_text, ["must", "require", "shall"]):
-        details.append("It describes requirements that must be met before a person can complete the covered process.")
-    if _contains_any(combined_text, ["birth certificate", "consular report", "american indian card", "identification"]):
-        details.append("It also describes types of records or identification that may be used as proof.")
-    if referenced_acts:
-        details.append("It references " + ", ".join(referenced_acts) + ", which may provide important background for the rule.")
+    if brief.obligations:
+        details.append("It describes requirements that must be met before the covered process can be completed.")
+    if brief.conditions or brief.exceptions:
+        details.append("It also identifies conditions, limits, or exceptions that affect how those requirements apply.")
+    if brief.referenced_acts:
+        details.append("It references " + ", ".join(brief.referenced_acts) + ", which may provide background for the rule.")
+    if brief.truncated:
+        details.append("The summary is based on a bounded deterministic brief to protect runtime.")
 
-    summary = " ".join([main_sentence, *details]).strip()
-    return summary, []
+    return " ".join([main_sentence, *details]).strip(), []
 
 
 def _build_trace_result(unit: RuleUnit) -> MeaningNodeResult:
-    # Rule-unit Meaning is trace-only in the default path.
-    # A future deep mode can add per-rule AI calls behind an explicit option.
+    if not unit.meaning_eligible:
+        return MeaningNodeResult(
+            node_id=unit.rule_unit_id,
+            source_text=unit.source_text_combined,
+            status="skipped",
+            plain_meaning=None,
+            missing_information=unit.assembly_issues or ["rule_unit_needs_review"],
+        )
+
+    brief = _build_meaning_brief([unit], origin_result=None)
+    plain_meaning, missing = _summary_from_brief(brief)
     return MeaningNodeResult(
         node_id=unit.rule_unit_id,
         source_text=unit.source_text_combined,
-        status="executed",
-        lenses=[],
-        detected_scopes=[],
-        plain_meaning=None,
-        scope_details=[],
-        missing_information=[] if unit.meaning_eligible else unit.assembly_issues,
+        status="fallback",
+        plain_meaning=plain_meaning,
+        missing_information=missing,
     )
 
 
@@ -122,11 +171,9 @@ def process_meaning(
     origin_result: OriginResult | None = None,
     verification_result: VerificationResult | None = None,
 ) -> MeaningResult:
-    """Process document-level Meaning without external calls.
+    """Process document-level Meaning without external calls."""
+    _ = verification_result
 
-    Default Meaning is deterministic for reliability. Rule units stay available
-    as traceable structure underneath the document-level summary.
-    """
     if not run:
         return MeaningResult(
             status="skipped",
@@ -134,14 +181,14 @@ def process_meaning(
         )
 
     node_results = [_build_trace_result(unit) for unit in rule_units]
-    overall_plain_meaning, summary_missing_information = _build_deterministic_summary(
-        rule_units,
-        origin_result=origin_result,
-    )
+    brief = _build_meaning_brief(rule_units, origin_result=origin_result)
+    overall_plain_meaning, summary_missing_information = _summary_from_brief(brief)
 
     return MeaningResult(
-        status="executed",
+        status="fallback",
         node_results=node_results,
         overall_plain_meaning=overall_plain_meaning,
+        summary_basis="deterministic_brief",
+        summary_brief=brief,
         summary_missing_information=summary_missing_information,
     )

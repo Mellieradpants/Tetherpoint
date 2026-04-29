@@ -2,9 +2,9 @@ openapi: "3.1.0"
 info:
   title: Tetherpoint
   description: >
-    Source-anchored parsing stack. Current executable 7-layer pipeline:
-    Input -> Structure -> Origin -> Selection -> Verification -> Meaning -> Output.
-    Verification routes assertions to candidate record systems; it does not decide truth.
+    Source-anchored parsing stack. Executable pipeline:
+    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Output.
+    Atomic Structure nodes are trace units; Rule Units are interpretation units.
   version: "0.1.0"
   license:
     name: MIT
@@ -19,7 +19,7 @@ paths:
   /analyze:
     post:
       operationId: analyze
-      summary: Run the source-anchored 7-layer pipeline on a source document
+      summary: Run the source-anchored pipeline on a source document
       requestBody:
         required: true
         content:
@@ -89,7 +89,6 @@ components:
       type: apiKey
       in: header
       name: x-analyze-secret
-      description: Shared secret for server-to-backend authentication.
 
   schemas:
     ErrorResponse:
@@ -109,7 +108,6 @@ components:
         run_meaning:
           type: boolean
           default: false
-          description: Optional AI Meaning layer execution.
         run_origin:
           type: boolean
           default: true
@@ -123,7 +121,6 @@ components:
       properties:
         content:
           type: string
-          description: Raw document text
           minLength: 1
           maxLength: 500000
         content_type:
@@ -152,122 +149,69 @@ components:
 
     StructureNode:
       type: object
-      required:
-        - node_id
-        - section_id
-        - role
-        - depth
-        - validation_status
-        - validation_errors
-        - source_anchor
-        - source_text
-        - normalized_text
-        - tags
-        - blocked_flags
+      required: [node_id, section_id, role, source_anchor, source_text, normalized_text]
       properties:
-        node_id:
-          type: string
-        section_id:
-          type: string
-        parent_id:
-          type: ["string", "null"]
+        node_id: { type: string }
+        section_id: { type: string }
+        parent_id: { type: ["string", "null"] }
         role:
           type: string
           enum: [PRIMARY_RULE, EVIDENCE, CONDITION, EXCEPTION, CONSEQUENCE, DEFINITION, BOILERPLATE]
-        depth:
-          type: integer
-        source_span_start:
-          type: ["integer", "null"]
-        source_span_end:
-          type: ["integer", "null"]
+        depth: { type: integer, default: 0 }
+        source_span_start: { type: ["integer", "null"] }
+        source_span_end: { type: ["integer", "null"] }
         validation_status:
           type: string
           enum: [valid, repaired, invalid]
+          default: valid
         validation_errors:
           type: array
-          items:
-            type: string
+          items: { type: string }
           default: []
-        source_anchor:
-          type: string
-        source_text:
-          type: string
-        normalized_text:
-          type: string
-        actor:
-          type: ["string", "null"]
-        action:
-          type: ["string", "null"]
-        condition:
-          type: ["string", "null"]
-        temporal:
-          type: ["string", "null"]
-        jurisdiction:
-          type: ["string", "null"]
-        mechanism:
-          type: ["string", "null"]
+        source_anchor: { type: string }
+        source_text: { type: string }
+        normalized_text: { type: string }
+        actor: { type: ["string", "null"] }
+        action: { type: ["string", "null"] }
+        condition: { type: ["string", "null"] }
+        temporal: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+        mechanism: { type: ["string", "null"] }
         risk:
           oneOf:
             - type: object
-              properties:
-                likelihood:
-                  type: ["string", "null"]
-                impact:
-                  type: ["string", "null"]
+              additionalProperties:
+                type: ["string", "null"]
             - type: "null"
         tags:
           type: array
-          items:
-            type: string
+          items: { type: string }
+          default: []
         blocked_flags:
           type: array
-          items:
-            type: string
-        who:
-          type: ["string", "null"]
-        what:
-          type: ["string", "null"]
-        when:
-          type: ["string", "null"]
-        where:
-          type: ["string", "null"]
-        why:
-          type: ["string", "null"]
-        how:
-          type: ["string", "null"]
-
-    StructureResult:
-      type: object
-      required: [nodes, node_count, section_count, validation_report]
-      properties:
-        nodes:
-          type: array
-          items:
-            $ref: "#/components/schemas/StructureNode"
-        node_count:
-          type: integer
-        section_count:
-          type: integer
-        validation_report:
-          $ref: "#/components/schemas/StructureValidationReport"
+          items: { type: string }
+          default: []
+        who: { type: ["string", "null"] }
+        what: { type: ["string", "null"] }
+        when: { type: ["string", "null"] }
+        where: { type: ["string", "null"] }
+        why: { type: ["string", "null"] }
+        how: { type: ["string", "null"] }
 
     StructureValidationIssue:
       type: object
       required: [section_id, issue_type, message]
       properties:
-        section_id:
-          type: string
+        section_id: { type: string }
         issue_type:
           type: string
           enum: [missing_primary, multiple_primary, boilerplate_leak, oversized_node, unclassified_node, unattached_child]
-        message:
-          type: string
-        node_id:
-          type: ["string", "null"]
+        message: { type: string }
+        node_id: { type: ["string", "null"] }
 
     StructureValidationReport:
       type: object
-      required: [status, issues, repaired_sections]
+      required: [status]
       properties:
         status:
           type: string
@@ -279,9 +223,21 @@ components:
           default: []
         repaired_sections:
           type: array
-          items:
-            type: string
+          items: { type: string }
           default: []
+
+    StructureResult:
+      type: object
+      required: [nodes, node_count, section_count, validation_report]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/StructureNode"
+        node_count: { type: integer }
+        section_count: { type: integer }
+        validation_report:
+          $ref: "#/components/schemas/StructureValidationReport"
 
     SelectionResult:
       type: object
@@ -297,70 +253,78 @@ components:
             $ref: "#/components/schemas/StructureNode"
         selection_log:
           type: array
+          items: { type: string }
+
+    RuleUnitNodeRef:
+      type: object
+      required: [node_id, text, role]
+      properties:
+        node_id: { type: string }
+        text: { type: string }
+        role: { type: string }
+
+    RuleUnit:
+      type: object
+      required: [rule_unit_id, section_id, source_text_combined, assembly_status, meaning_eligible, verification_eligible, review_status]
+      properties:
+        rule_unit_id: { type: string }
+        section_id: { type: string }
+        primary_node_id: { type: ["string", "null"] }
+        primary_text: { type: ["string", "null"] }
+        conditions: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        exceptions: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        evidence_requirements: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        consequences: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        definitions: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        timing: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        jurisdiction: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        mechanisms: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        source_node_ids: { type: array, items: { type: string }, default: [] }
+        fragment_node_ids: { type: array, items: { type: string }, default: [] }
+        source_text_combined: { type: string }
+        assembly_status: { type: string, enum: [complete, needs_review, blocked] }
+        assembly_issues: { type: array, items: { type: string }, default: [] }
+        meaning_eligible: { type: boolean }
+        verification_eligible: { type: boolean }
+        review_status: { type: string, enum: [ready, needs_review, blocked] }
+
+    RuleUnitResult:
+      type: object
+      required: [rule_units, unit_count, ready_count, needs_review_count]
+      properties:
+        rule_units:
+          type: array
           items:
-            type: string
+            $ref: "#/components/schemas/RuleUnit"
+        unit_count: { type: integer }
+        ready_count: { type: integer }
+        needs_review_count: { type: integer }
+        assembly_log: { type: array, items: { type: string }, default: [] }
 
-    MeaningLens:
+    MeaningBrief:
       type: object
-      required: [lens, detected]
       properties:
-        lens:
-          type: string
-          enum: [modality_shift, scope_change, actor_power_shift, action_domain_shift, threshold_standard_shift, obligation_removal]
-        detected:
-          type: boolean
-        detail:
-          type: ["string", "null"]
-
-    MeaningScopeDetail:
-      type: object
-      required: [scope]
-      properties:
-        scope:
-          type: string
-          enum: [modality_shift, scope_change, actor_power_shift, action_domain_shift, threshold_standard_shift, obligation_removal]
-        detail:
-          type: ["string", "null"]
-        evidence:
-          type: ["string", "null"]
+        rule_unit_ids: { type: array, items: { type: string }, default: [] }
+        source_node_ids: { type: array, items: { type: string }, default: [] }
+        key_terms: { type: array, items: { type: string }, default: [] }
+        obligations: { type: array, items: { type: string }, default: [] }
+        conditions: { type: array, items: { type: string }, default: [] }
+        exceptions: { type: array, items: { type: string }, default: [] }
+        referenced_acts: { type: array, items: { type: string }, default: [] }
+        truncated: { type: boolean, default: false }
 
     MeaningNodeResult:
       type: object
-      required: [node_id, source_text, lenses]
+      required: [node_id, source_text]
       properties:
-        node_id:
-          type: string
-        source_text:
-          type: string
-        status:
-          type: ["string", "null"]
-        error:
-          type: ["string", "null"]
-        message:
-          type: ["string", "null"]
-        raw_response:
-          type: ["string", "null"]
-        lenses:
-          type: array
-          items:
-            $ref: "#/components/schemas/MeaningLens"
-        detected_scopes:
-          type: array
-          items:
-            type: string
-          default: []
-        plain_meaning:
-          type: ["string", "null"]
-        scope_details:
-          type: array
-          items:
-            $ref: "#/components/schemas/MeaningScopeDetail"
-          default: []
-        missing_information:
-          type: array
-          items:
-            type: string
-          default: []
+        node_id: { type: string }
+        source_text: { type: string }
+        status: { type: ["string", "null"] }
+        error: { type: ["string", "null"] }
+        message: { type: ["string", "null"] }
+        raw_response: { type: ["string", "null"] }
+        plain_meaning: { type: ["string", "null"] }
+        missing_information: { type: array, items: { type: string }, default: [] }
 
     MeaningResult:
       type: object
@@ -368,109 +332,77 @@ components:
       properties:
         status:
           type: string
-          enum: [executed, skipped, error]
-        message:
-          type: ["string", "null"]
+          enum: [executed, fallback, skipped, error]
+        message: { type: ["string", "null"] }
         node_results:
           type: array
           items:
             $ref: "#/components/schemas/MeaningNodeResult"
           default: []
+        overall_plain_meaning: { type: ["string", "null"] }
+        summary_basis: { type: ["string", "null"] }
+        summary_brief:
+          oneOf:
+            - $ref: "#/components/schemas/MeaningBrief"
+            - type: "null"
+        summary_missing_information: { type: array, items: { type: string }, default: [] }
 
     OriginSignal:
       type: object
       required: [signal, value]
       properties:
-        signal:
-          type: string
-        value:
-          type: string
-        category:
-          type: ["string", "null"]
+        signal: { type: string }
+        value: { type: string }
+        category: { type: ["string", "null"] }
 
     OriginResult:
       type: object
       required: [status]
       properties:
-        status:
-          type: string
-          enum: [executed, skipped]
-        origin_identity_signals:
-          type: array
-          items:
-            $ref: "#/components/schemas/OriginSignal"
-          default: []
-        origin_metadata_signals:
-          type: array
-          items:
-            $ref: "#/components/schemas/OriginSignal"
-          default: []
-        distribution_signals:
-          type: array
-          items:
-            $ref: "#/components/schemas/OriginSignal"
-          default: []
-        evidence_trace:
-          type: array
-          items:
-            type: string
-          default: []
+        status: { type: string, enum: [executed, skipped] }
+        origin_identity_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
+        origin_metadata_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
+        distribution_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
+        evidence_trace: { type: array, items: { type: string }, default: [] }
 
     VerificationNodeResult:
       type: object
       required: [node_id, assertion_detected, verification_path_available]
       properties:
-        node_id:
-          type: string
-        assertion_detected:
-          type: boolean
+        node_id: { type: string }
+        rule_unit_id: { type: ["string", "null"] }
+        source_node_ids: { type: array, items: { type: string }, default: [] }
+        assertion_detected: { type: boolean }
         assertion_type:
           oneOf:
             - type: string
               enum: [legal_legislative, court_case_law, government_publication, scientific_biomedical, statistical_public_data, corporate_financial, infrastructure_energy, historical_archival]
             - type: "null"
-        verification_path_available:
-          type: boolean
-        expected_record_systems:
-          type: array
-          items:
-            type: string
-          default: []
-        verification_notes:
-          type: ["string", "null"]
+        verification_path_available: { type: boolean }
+        expected_record_systems: { type: array, items: { type: string }, default: [] }
+        verification_notes: { type: ["string", "null"] }
 
     VerificationResult:
       type: object
       required: [status]
       properties:
-        status:
-          type: string
-          enum: [executed, skipped]
-        node_results:
-          type: array
-          items:
-            $ref: "#/components/schemas/VerificationNodeResult"
-          default: []
+        status: { type: string, enum: [executed, skipped] }
+        node_results: { type: array, items: { $ref: "#/components/schemas/VerificationNodeResult" }, default: [] }
 
     OutputResult:
       type: object
       required: [summary, total_nodes, selected_count, excluded_count, meaning_status, origin_status, verification_status]
       properties:
-        summary:
-          type: object
-          additionalProperties: true
-        total_nodes:
-          type: integer
-        selected_count:
-          type: integer
-        excluded_count:
-          type: integer
-        meaning_status:
-          type: string
-        origin_status:
-          type: string
-        verification_status:
-          type: string
+        summary: { type: object, additionalProperties: true }
+        total_nodes: { type: integer }
+        selected_count: { type: integer }
+        excluded_count: { type: integer }
+        rule_unit_count: { type: integer, default: 0 }
+        ready_rule_unit_count: { type: integer, default: 0 }
+        needs_review_rule_unit_count: { type: integer, default: 0 }
+        meaning_status: { type: string }
+        origin_status: { type: string }
+        verification_status: { type: string }
 
     PipelineError:
       type: object
@@ -478,36 +410,23 @@ components:
       properties:
         layer:
           type: string
-          enum: [input, structure, selection, meaning, origin, verification, output]
-        error:
-          type: string
-        fatal:
-          type: boolean
-          default: false
+          enum: [input, structure, origin, selection, rule_units, verification, meaning, output]
+        error: { type: string }
+        fatal: { type: boolean, default: false }
 
     PipelineResponse:
       type: object
-      required: [input, structure, selection, meaning, origin, verification, output]
+      required: [input, structure, selection, rule_units, meaning, origin, verification, output]
       properties:
-        input:
-          $ref: "#/components/schemas/InputResult"
-        structure:
-          $ref: "#/components/schemas/StructureResult"
-        selection:
-          $ref: "#/components/schemas/SelectionResult"
-        meaning:
-          $ref: "#/components/schemas/MeaningResult"
-        origin:
-          $ref: "#/components/schemas/OriginResult"
-        verification:
-          $ref: "#/components/schemas/VerificationResult"
-        output:
-          $ref: "#/components/schemas/OutputResult"
-        errors:
-          type: array
-          items:
-            $ref: "#/components/schemas/PipelineError"
-          default: []
+        input: { $ref: "#/components/schemas/InputResult" }
+        structure: { $ref: "#/components/schemas/StructureResult" }
+        selection: { $ref: "#/components/schemas/SelectionResult" }
+        rule_units: { $ref: "#/components/schemas/RuleUnitResult" }
+        meaning: { $ref: "#/components/schemas/MeaningResult" }
+        origin: { $ref: "#/components/schemas/OriginResult" }
+        verification: { $ref: "#/components/schemas/VerificationResult" }
+        output: { $ref: "#/components/schemas/OutputResult" }
+        errors: { type: array, items: { $ref: "#/components/schemas/PipelineError" }, default: [] }
 
     ValidationError:
       type: object
@@ -517,14 +436,3 @@ components:
           type: array
           items:
             type: object
-            properties:
-              loc:
-                type: array
-                items:
-                  oneOf:
-                    - type: string
-                    - type: integer
-              msg:
-                type: string
-              type:
-                type: string

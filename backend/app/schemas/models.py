@@ -143,26 +143,15 @@ class RuleUnitResult(BaseModel):
     assembly_log: list[str] = Field(default_factory=list)
 
 
-MeaningLensName = Literal[
-    "modality_shift",
-    "scope_change",
-    "actor_power_shift",
-    "action_domain_shift",
-    "threshold_standard_shift",
-    "obligation_removal",
-]
-
-
-class MeaningLens(BaseModel):
-    lens: MeaningLensName
-    detected: bool
-    detail: Optional[str] = None
-
-
-class MeaningScopeDetail(BaseModel):
-    scope: MeaningLensName
-    detail: Optional[str] = None
-    evidence: Optional[str] = None
+class MeaningBrief(BaseModel):
+    rule_unit_ids: list[str] = Field(default_factory=list)
+    source_node_ids: list[str] = Field(default_factory=list)
+    key_terms: list[str] = Field(default_factory=list)
+    obligations: list[str] = Field(default_factory=list)
+    conditions: list[str] = Field(default_factory=list)
+    exceptions: list[str] = Field(default_factory=list)
+    referenced_acts: list[str] = Field(default_factory=list)
+    truncated: bool = False
 
 
 class MeaningNodeResult(BaseModel):
@@ -172,18 +161,17 @@ class MeaningNodeResult(BaseModel):
     error: Optional[str] = None
     message: Optional[str] = None
     raw_response: Optional[str] = None
-    lenses: list[MeaningLens]
-    detected_scopes: list[str] = Field(default_factory=list)
     plain_meaning: Optional[str] = None
-    scope_details: list[MeaningScopeDetail] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
 
 
 class MeaningResult(BaseModel):
-    status: Literal["executed", "skipped", "error"]
+    status: Literal["executed", "fallback", "skipped", "error"]
     message: Optional[str] = None
     node_results: list[MeaningNodeResult] = Field(default_factory=list)
     overall_plain_meaning: Optional[str] = None
+    summary_basis: Optional[str] = None
+    summary_brief: Optional[MeaningBrief] = None
     summary_missing_information: list[str] = Field(default_factory=list)
 
 
@@ -215,6 +203,8 @@ AssertionType = Literal[
 
 class VerificationNodeResult(BaseModel):
     node_id: str
+    rule_unit_id: Optional[str] = None
+    source_node_ids: list[str] = Field(default_factory=list)
     assertion_detected: bool
     assertion_type: Optional[AssertionType] = None
     verification_path_available: bool
@@ -243,11 +233,11 @@ class OutputResult(BaseModel):
 PipelineLayerName = Literal[
     "input",
     "structure",
+    "origin",
     "selection",
     "rule_units",
-    "meaning",
-    "origin",
     "verification",
+    "meaning",
     "output",
 ]
 
