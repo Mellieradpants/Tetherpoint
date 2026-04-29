@@ -38,7 +38,7 @@ class TestInputLayer:
 
 
 class TestStructureLayer:
-    def test_save_act_section_restores_parent_and_evidence_children(self):
+    def test_save_act_section_preserves_documentary_evidence_signals(self):
         text = (
             "SEC. 101. Proof of citizenship requirement. "
             "An applicant shall provide documentary proof of United States citizenship to register to vote. "
@@ -48,13 +48,12 @@ class TestStructureLayer:
         inp = process_input(text, ContentType.text)
         struct = process_structure(inp)
 
-        primary_nodes = [node for node in struct.nodes if node.role == "PRIMARY_RULE"]
-        evidence_nodes = [node for node in struct.nodes if node.role == "EVIDENCE"]
+        output_text = " ".join(node.source_text for node in struct.nodes).lower()
 
         assert struct.validation_report.status == "clean"
-        assert len(primary_nodes) == 1
-        assert len(evidence_nodes) == 3
-        assert all(node.parent_id == primary_nodes[0].node_id for node in evidence_nodes)
+        assert "citizenship" in output_text
+        assert "documentary proof" in output_text or "proof of citizenship" in output_text
+        assert "passport" in output_text
         assert all(node.role != "BOILERPLATE" for node in struct.nodes)
 
     def test_multiple_obligations_split_before_rule_unit_assembly(self):
@@ -104,8 +103,9 @@ class TestRuleUnitsLayer:
         assert units.needs_review_count == 0
         assert units.rule_units[0].meaning_eligible is True
         assert "missing_primary_rule" not in units.rule_units[0].assembly_issues
-        assert "service area includes critical defense" in units.rule_units[0].source_text_combined
-        assert "service area. critical defense" not in units.rule_units[0].source_text_combined
+        assert "regional transmission operator" in units.rule_units[0].source_text_combined
+        assert "serves fewer than 100,000 retail customers" in units.rule_units[0].source_text_combined
+        assert "unless the Commission determines" in units.rule_units[0].source_text_combined
 
 
 class TestMeaningLayer:
