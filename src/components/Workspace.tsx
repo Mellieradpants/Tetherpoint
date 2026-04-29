@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 interface StructureNode {
   node_id: string;
@@ -35,6 +35,43 @@ interface StructureNode {
   where: string | null;
   why: string | null;
   how: string | null;
+}
+
+interface RuleUnitNodeRef {
+  node_id: string;
+  text: string;
+  role: string;
+}
+
+interface RuleUnit {
+  rule_unit_id: string;
+  section_id: string;
+  primary_node_id: string | null;
+  primary_text: string | null;
+  conditions: RuleUnitNodeRef[];
+  exceptions: RuleUnitNodeRef[];
+  evidence_requirements: RuleUnitNodeRef[];
+  consequences: RuleUnitNodeRef[];
+  definitions: RuleUnitNodeRef[];
+  timing: RuleUnitNodeRef[];
+  jurisdiction: RuleUnitNodeRef[];
+  mechanisms: RuleUnitNodeRef[];
+  source_node_ids: string[];
+  fragment_node_ids: string[];
+  source_text_combined: string;
+  assembly_status: "complete" | "needs_review" | "blocked";
+  assembly_issues: string[];
+  meaning_eligible: boolean;
+  verification_eligible: boolean;
+  review_status: "ready" | "needs_review" | "blocked";
+}
+
+interface RuleUnitData {
+  rule_units: RuleUnit[];
+  unit_count: number;
+  ready_count: number;
+  needs_review_count: number;
+  assembly_log: string[];
 }
 
 interface MeaningLens {
@@ -102,7 +139,7 @@ interface StructureValidationIssue {
 interface VerificationRouteSummary {
   system: string;
   assertionTypes: string[];
-  nodeIds: string[];
+  unitIds: string[];
   evidence: string[];
 }
 
@@ -129,6 +166,7 @@ export interface PipelineResponse {
     excluded_nodes: StructureNode[];
     selection_log: string[];
   };
+  rule_units: RuleUnitData;
   meaning: MeaningData;
   origin: OriginData;
   verification: { status: string; node_results: VerificationNode[] };
@@ -136,6 +174,9 @@ export interface PipelineResponse {
     total_nodes: number;
     selected_count: number;
     excluded_count: number;
+    rule_unit_count?: number;
+    ready_rule_unit_count?: number;
+    needs_review_rule_unit_count?: number;
     meaning_status: string;
     origin_status: string;
     verification_status: string;
@@ -145,13 +186,7 @@ export interface PipelineResponse {
 
 type DetailTab = "meaning" | "verification" | "origin";
 
-function FieldRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null | undefined;
-}) {
+function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex items-start gap-3 border-b border-border/50 py-2 last:border-0">
       <span className="w-28 shrink-0 text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -164,13 +199,7 @@ function FieldRow({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mb-5">
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
@@ -205,15 +234,37 @@ function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
   );
 }
 
+function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+        {label}
+      </div>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={`${label}-${item.node_id}`}
+            className="rounded border border-border/40 bg-background/40 p-2 text-sm leading-relaxed text-muted-foreground"
+          >
+            {item.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined }) {
   if (!meaning) {
-    return <EmptyState message="No Meaning data for this node." />;
+    return <EmptyState message="No Meaning data for this rule unit." />;
   }
 
   if (meaning.status !== "executed") {
     return (
       <EmptyState
-        message={meaning.message || meaning.error || "Meaning unavailable for this node."}
+        message={meaning.message || meaning.error || "Meaning unavailable for this rule unit."}
       />
     );
   }
@@ -248,7 +299,7 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
             ))}
           </div>
         ) : (
-          <EmptyState message="No Meaning scopes detected for this node." />
+          <EmptyState message="No Meaning scopes detected for this rule unit." />
         )}
       </div>
 
@@ -261,7 +312,7 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
             {meaning.plain_meaning}
           </div>
         ) : (
-          <EmptyState message="Plain-language Meaning was not returned for this node." />
+          <EmptyState message="Plain-language Meaning was not returned for this rule unit." />
         )}
       </div>
 
@@ -302,10 +353,7 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
           </div>
           <div className="space-y-1">
             {missingInformation.map((item) => (
-              <div
-                key={`${meaning.node_id}-${item}`}
-                className="text-sm leading-relaxed text-muted-foreground"
-              >
+              <div key={`${meaning.node_id}-${item}`} className="text-sm leading-relaxed text-muted-foreground">
                 {item}
               </div>
             ))}
@@ -319,50 +367,39 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
 export function Workspace({ data }: { data: PipelineResponse }) {
   const [activeTab, setActiveTab] = useState<DetailTab>("meaning");
 
-  const displayNodes = useMemo(
-    () => data.selection.selected_nodes,
-    [data.selection.selected_nodes]
-  );
+  const ruleUnits = data.rule_units?.rule_units ?? [];
   const meaningMap = useMemo(
     () => new Map(data.meaning.node_results.map((node) => [node.node_id, node])),
     [data.meaning.node_results]
   );
+  const ruleUnitById = useMemo(
+    () => new Map(ruleUnits.map((unit) => [unit.rule_unit_id, unit])),
+    [ruleUnits]
+  );
+
   const verificationSummary = useMemo(() => {
-    const nodeById = new Map(data.structure.nodes.map((node) => [node.node_id, node]));
-    const routes = new Map<string, { assertionTypes: Set<string>; nodeIds: Set<string>; evidence: string[] }>();
+    const routes = new Map<string, { assertionTypes: Set<string>; unitIds: Set<string>; evidence: string[] }>();
     const assertionTypes = new Set<string>();
     let detectedCount = 0;
     let routedCount = 0;
 
     for (const result of data.verification.node_results) {
-      if (result.assertion_detected) {
-        detectedCount += 1;
-      }
-      if (result.assertion_type) {
-        assertionTypes.add(result.assertion_type);
-      }
-      if (result.expected_record_systems.length > 0) {
-        routedCount += 1;
-      }
+      if (result.assertion_detected) detectedCount += 1;
+      if (result.assertion_type) assertionTypes.add(result.assertion_type);
+      if (result.expected_record_systems.length > 0) routedCount += 1;
 
       for (const system of result.expected_record_systems) {
         if (!routes.has(system)) {
-          routes.set(system, {
-            assertionTypes: new Set<string>(),
-            nodeIds: new Set<string>(),
-            evidence: [],
-          });
+          routes.set(system, { assertionTypes: new Set<string>(), unitIds: new Set<string>(), evidence: [] });
         }
 
         const route = routes.get(system)!;
-        route.nodeIds.add(result.node_id);
-        if (result.assertion_type) {
-          route.assertionTypes.add(result.assertion_type);
-        }
+        route.unitIds.add(result.node_id);
+        if (result.assertion_type) route.assertionTypes.add(result.assertion_type);
 
-        const nodeText = nodeById.get(result.node_id)?.source_text?.trim();
-        if (nodeText && route.evidence.length < 3 && !route.evidence.includes(nodeText)) {
-          route.evidence.push(nodeText);
+        const unitText = ruleUnitById.get(result.node_id)?.source_text_combined?.trim();
+        if (unitText && route.evidence.length < 3 && !route.evidence.includes(unitText)) {
+          route.evidence.push(unitText);
         }
       }
     }
@@ -375,11 +412,11 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       routes: Array.from(routes.entries()).map(([system, route]): VerificationRouteSummary => ({
         system,
         assertionTypes: Array.from(route.assertionTypes),
-        nodeIds: Array.from(route.nodeIds),
+        unitIds: Array.from(route.unitIds),
         evidence: route.evidence,
       })),
     };
-  }, [data.structure.nodes, data.verification.node_results]);
+  }, [data.verification.node_results, ruleUnitById]);
 
   const repairedNodes = useMemo(
     () => data.structure.nodes.filter((node) => node.validation_status === "repaired"),
@@ -389,46 +426,20 @@ export function Workspace({ data }: { data: PipelineResponse }) {
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 text-[11px] text-muted-foreground">
-        <span>
-          <span className="font-medium text-foreground">{data.structure.node_count}</span>{" "}
-          nodes
-        </span>
+        <span><span className="font-medium text-foreground">{data.structure.node_count}</span> nodes</span>
         <span className="text-border">·</span>
-        <span>
-          <span className="font-medium text-foreground">{data.structure.section_count}</span>{" "}
-          sections
-        </span>
+        <span><span className="font-medium text-foreground">{data.structure.section_count}</span> sections</span>
         <span className="text-border">·</span>
-        <span>
-          <span className="font-medium text-foreground">
-            {data.selection.selected_nodes.length}
-          </span>{" "}
-          selected
-        </span>
+        <span><span className="font-medium text-foreground">{data.selection.selected_nodes.length}</span> selected</span>
         <span className="text-border">·</span>
-        <span>
-          <span className="font-medium text-foreground">
-            {data.selection.excluded_nodes.length}
-          </span>{" "}
-          excluded
-        </span>
+        <span><span className="font-medium text-foreground">{data.selection.excluded_nodes.length}</span> excluded</span>
+        <span className="text-border">·</span>
+        <span><span className="font-medium text-foreground">{ruleUnits.length}</span> rule units</span>
         <div className="hidden flex-1 md:block" />
-        <span>
-          Meaning: <span className="font-medium text-primary">{data.meaning.status}</span>
-        </span>
-        <span>
-          Origin: <span className="font-medium text-foreground">{data.origin.status}</span>
-        </span>
-        <span>
-          Verification:{" "}
-          <span className="font-medium text-foreground">{data.verification.status}</span>
-        </span>
-        <span>
-          Validation:{" "}
-          <span className="font-medium text-foreground">
-            {data.structure.validation_report.status}
-          </span>
-        </span>
+        <span>Meaning: <span className="font-medium text-primary">{data.meaning.status}</span></span>
+        <span>Origin: <span className="font-medium text-foreground">{data.origin.status}</span></span>
+        <span>Verification: <span className="font-medium text-foreground">{data.verification.status}</span></span>
+        <span>Validation: <span className="font-medium text-foreground">{data.structure.validation_report.status}</span></span>
       </div>
 
       {data.errors.length > 0 && (
@@ -436,9 +447,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
           <strong>Errors</strong>
           <ul className="mt-1 list-inside list-disc text-xs">
             {data.errors.map((error, index) => (
-              <li key={`${error.layer}-${index}`}>
-                {error.layer}: {error.error}
-              </li>
+              <li key={`${error.layer}-${index}`}>{error.layer}: {error.error}</li>
             ))}
           </ul>
         </div>
@@ -463,8 +472,22 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             </div>
           )}
           {repairedNodes.length > 0 && (
-            <div className="mt-2">
-              repaired nodes: {repairedNodes.map((node) => node.node_id).join(", ")}
+            <div className="mt-2">repaired nodes: {repairedNodes.map((node) => node.node_id).join(", ")}</div>
+          )}
+        </div>
+      )}
+
+      {data.rule_units && data.rule_units.needs_review_count > 0 && (
+        <div className="mx-4 mt-3 rounded-md border border-border/60 bg-surface p-3 text-xs text-muted-foreground">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+            Rule unit assembly
+          </div>
+          <div>{data.rule_units.ready_count} ready · {data.rule_units.needs_review_count} needs review</div>
+          {data.rule_units.assembly_log.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {data.rule_units.assembly_log.map((item, index) => (
+                <div key={`assembly-${index}`}>{item}</div>
+              ))}
             </div>
           )}
         </div>
@@ -493,50 +516,56 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       <div className="flex-1 overflow-y-auto">
         {activeTab === "meaning" && (
           <div className="space-y-2 p-4">
-            {displayNodes.length === 0 ? (
-              <EmptyState message="No selected nodes available for Meaning." />
+            {ruleUnits.length === 0 ? (
+              <EmptyState message="No rule units available for Meaning." />
             ) : (
-              displayNodes.map((node, index) => {
-                const nodeMeaning = meaningMap.get(node.node_id);
+              ruleUnits.map((unit, index) => {
+                const unitMeaning = meaningMap.get(unit.rule_unit_id);
 
                 return (
-                  <div
-                    key={node.node_id}
-                    className="rounded-xl border border-border/60 bg-surface px-4 py-4"
-                  >
+                  <div key={unit.rule_unit_id} className="rounded-xl border border-border/60 bg-surface px-4 py-4">
                     <div className="flex items-start gap-4">
                       <span className="pt-1 text-base font-medium text-muted-foreground">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="text-lg font-semibold leading-snug text-foreground">
-                          {node.source_text}
+                          {unit.primary_text || unit.source_text_combined || "Rule unit needs review"}
                         </div>
+
+                        <NodeRefList label="Conditions" items={unit.conditions} />
+                        <NodeRefList label="Exceptions" items={unit.exceptions} />
+                        <NodeRefList label="Evidence Requirements" items={unit.evidence_requirements} />
+                        <NodeRefList label="Consequences" items={unit.consequences} />
+                        <NodeRefList label="Definitions" items={unit.definitions} />
+
+                        {unit.assembly_issues.length > 0 && (
+                          <div className="mt-3 rounded border border-border/40 bg-background/40 p-2 text-sm text-muted-foreground">
+                            Needs review: {unit.assembly_issues.join(", ")}
+                          </div>
+                        )}
+
                         <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
                           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
                             Meaning
                           </div>
-                          <MeaningSummary meaning={nodeMeaning} />
+                          <MeaningSummary meaning={unitMeaning} />
                         </div>
+
                         <details className="mt-3 rounded-xl border border-border/40 bg-background/30 p-3">
                           <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            Structure details
+                            Rule unit details
                           </summary>
                           <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                            <div>node: {node.node_id}</div>
-                            <div>section: {node.section_id}</div>
-                            <div>role: {node.role}</div>
-                            <div>depth: {node.depth}</div>
-                            <div>validation: {node.validation_status}</div>
-                            <div>anchor: {node.source_anchor}</div>
-                            {node.parent_id && <div>parent: {node.parent_id}</div>}
-                            {node.tags.length > 0 && <div>tags: {node.tags.join(", ")}</div>}
-                            {node.blocked_flags.length > 0 && (
-                              <div>blocked flags: {node.blocked_flags.join(", ")}</div>
-                            )}
-                            {node.validation_errors.length > 0 && (
-                              <div>validation errors: {node.validation_errors.join("; ")}</div>
-                            )}
+                            <div>rule unit: {unit.rule_unit_id}</div>
+                            <div>section: {unit.section_id}</div>
+                            <div>primary node: {unit.primary_node_id || "none"}</div>
+                            <div>assembly: {unit.assembly_status}</div>
+                            <div>review: {unit.review_status}</div>
+                            <div>meaning eligible: {String(unit.meaning_eligible)}</div>
+                            <div>verification eligible: {String(unit.verification_eligible)}</div>
+                            <div>source nodes: {unit.source_node_ids.join(", ") || "none"}</div>
+                            <div>fragments: {unit.fragment_node_ids.join(", ") || "none"}</div>
                           </div>
                         </details>
                       </div>
@@ -554,44 +583,25 @@ export function Workspace({ data }: { data: PipelineResponse }) {
 
             <Section title="Document Verification Summary">
               <FieldRow label="status" value={data.verification.status} />
-              <FieldRow
-                label="checked"
-                value={`${verificationSummary.total} selected node(s)`}
-              />
-              <FieldRow
-                label="detected"
-                value={`${verificationSummary.detectedCount} node(s) with verification signals`}
-              />
-              <FieldRow
-                label="routed"
-                value={`${verificationSummary.routedCount} node(s) routed to record systems`}
-              />
+              <FieldRow label="checked" value={`${verificationSummary.total} rule unit(s)`} />
+              <FieldRow label="detected" value={`${verificationSummary.detectedCount} rule unit(s) with verification signals`} />
+              <FieldRow label="routed" value={`${verificationSummary.routedCount} rule unit(s) routed to record systems`} />
             </Section>
 
             <Section title="Expected Record Systems">
               {verificationSummary.routes.length > 0 ? (
                 <div className="space-y-3">
                   {verificationSummary.routes.map((route) => (
-                    <div
-                      key={route.system}
-                      className="rounded-xl border border-border/50 bg-background/40 p-3"
-                    >
-                      <div className="text-sm font-semibold text-foreground">
-                        {route.system}
-                      </div>
+                    <div key={route.system} className="rounded-xl border border-border/50 bg-background/40 p-3">
+                      <div className="text-sm font-semibold text-foreground">{route.system}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        Triggered by {route.nodeIds.length} selected node(s)
-                        {route.assertionTypes.length > 0
-                          ? ` · ${route.assertionTypes.join(", ")}`
-                          : ""}
+                        Triggered by {route.unitIds.length} rule unit(s)
+                        {route.assertionTypes.length > 0 ? ` · ${route.assertionTypes.join(", ")}` : ""}
                       </div>
                       {route.evidence.length > 0 && (
                         <div className="mt-3 space-y-2">
                           {route.evidence.map((snippet) => (
-                            <div
-                              key={`${route.system}-${snippet}`}
-                              className="rounded border border-border/40 bg-surface p-2 text-sm leading-relaxed text-muted-foreground"
-                            >
+                            <div key={`${route.system}-${snippet}`} className="rounded border border-border/40 bg-surface p-2 text-sm leading-relaxed text-muted-foreground">
                               {snippet}
                             </div>
                           ))}
@@ -609,10 +619,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
               {verificationSummary.assertionTypes.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {verificationSummary.assertionTypes.map((type) => (
-                    <span
-                      key={type}
-                      className="rounded bg-secondary px-3 py-2 text-sm font-medium text-foreground"
-                    >
+                    <span key={type} className="rounded bg-secondary px-3 py-2 text-sm font-medium text-foreground">
                       {type}
                     </span>
                   ))}
