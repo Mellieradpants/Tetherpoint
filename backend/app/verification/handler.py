@@ -9,12 +9,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from app.schemas.models import StructureNode, VerificationNodeResult, VerificationResult
+from app.schemas.models import RuleUnit, VerificationNodeResult, VerificationResult
 
-
-# ---------------------------------------------------------------------------
-# Assertion type detection (pattern-based, deterministic)
-# ---------------------------------------------------------------------------
 
 _ASSERTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("legal_legislative", re.compile(
@@ -39,11 +35,6 @@ _ASSERTION_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"\b(archive|historical|record|museum|manuscript|primary source|collection)\b", re.I)),
 ]
 
-
-# ---------------------------------------------------------------------------
-# Verification routing library
-# ---------------------------------------------------------------------------
-
 _RECORD_SYSTEMS: dict[str, list[str]] = {
     "legal_legislative": ["Congress.gov", "GovInfo", "Federal Register"],
     "court_case_law": ["CourtListener", "GovInfo"],
@@ -57,29 +48,42 @@ _RECORD_SYSTEMS: dict[str, list[str]] = {
 
 
 def _detect_assertion(text: str) -> tuple[bool, Optional[str]]:
-    """Detect if text contains an assertion and classify its type."""
     for atype, pattern in _ASSERTION_PATTERNS:
         if pattern.search(text):
             return True, atype
     return False, None
 
 
-def _process_node(node: StructureNode) -> VerificationNodeResult:
-    detected, atype = _detect_assertion(node.normalized_text)
+def _process_unit(unit: RuleUnit) -> VerificationNodeResult:
+    if not unit.verification_eligible:
+        return VerificationNodeResult(
+            node_id=unit.rule_unit_id,
+            assertion_detected=False,
+            assertion_type=None,
+            verification_path_available=False,
+            expected_record_systems=[],
+            verification_notes="Rule unit not eligible for verification routing",
+        )
+
+    detected, atype = _detect_assertion(unit.source_text_combined)
 
     if detected and atype:
         systems = _RECORD_SYSTEMS.get(atype, [])
         return VerificationNodeResult(
-            node_id=node.node_id,
+            node_id=unit.rule_unit_id,
             assertion_detected=True,
             assertion_type=atype,
             verification_path_available=len(systems) > 0,
             expected_record_systems=systems,
-            verification_notes=f"Assertion type '{atype}' detected; routed to {len(systems)} record system(s)",
+            verification_notes=(
+                f"Assertion type '{atype}' detected for rule unit; "
+                f"routed to {len(systems)} record system(s). "
+                f"Supporting nodes: {', '.join(unit.source_node_ids)}"
+            ),
         )
 
     return VerificationNodeResult(
-        node_id=node.node_id,
+        node_id=unit.rule_unit_id,
         assertion_detected=False,
         assertion_type=None,
         verification_path_available=False,
@@ -89,14 +93,14 @@ def _process_node(node: StructureNode) -> VerificationNodeResult:
 
 
 def process_verification(
-    selected_nodes: list[StructureNode],
+    rule_units: list[RuleUnit],
     run: bool = True,
 ) -> VerificationResult:
-    """Route selected nodes to candidate verification record systems."""
+    """Route rule units to candidate verification record systems."""
     if not run:
         return VerificationResult(status="skipped")
 
     return VerificationResult(
         status="executed",
-        node_results=[_process_node(node) for node in selected_nodes],
+        node_results=[_process_unit(unit) for unit in rule_units],
     )
