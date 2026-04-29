@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnalyzeForm } from "./components/AnalyzeForm";
-import { Workspace, type PipelineResponse } from "./components/Workspace";
+import { Workspace, type PipelineResponse } from "./components/WorkspaceConsole";
 import { analyzeDocument } from "./lib/api-client";
 
 function App() {
