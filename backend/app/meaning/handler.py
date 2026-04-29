@@ -155,7 +155,7 @@ def _summary_from_brief(brief: MeaningBrief) -> tuple[str | None, list[str]]:
             "This document depends on outside law: "
             + _join_names(brief.referenced_acts)
             + ". The plain meaning above explains the current source text only. "
-            + "To understand these acts, see the Origin referenced source and copy/paste that text into the Tetherpoint input."
+            + "To understand these acts, open the Origin referenced source, copy the official bill text, and paste that text into the Tetherpoint input."
         )
 
     return " ".join([main_sentence, *details]).strip(), []
