@@ -280,6 +280,7 @@ components:
         timing: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
         jurisdiction: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
         mechanisms: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
+        external_references: { type: array, items: { type: string }, default: [] }
         source_node_ids: { type: array, items: { type: string }, default: [] }
         fragment_node_ids: { type: array, items: { type: string }, default: [] }
         source_text_combined: { type: string }
@@ -312,6 +313,7 @@ components:
         conditions: { type: array, items: { type: string }, default: [] }
         exceptions: { type: array, items: { type: string }, default: [] }
         referenced_acts: { type: array, items: { type: string }, default: [] }
+        external_reference_needed: { type: boolean, default: false }
         truncated: { type: boolean, default: false }
 
     MeaningNodeResult:
