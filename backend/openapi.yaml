@@ -358,6 +358,19 @@ components:
         value: { type: string }
         category: { type: ["string", "null"] }
 
+    ReferencedSource:
+      type: object
+      required: [reference_id, name, reference_type, matched_text]
+      properties:
+        reference_id: { type: string }
+        name: { type: string }
+        reference_type: { type: string }
+        matched_text: { type: string }
+        source_system: { type: ["string", "null"] }
+        official_source_url: { type: ["string", "null"] }
+        why_it_matters: { type: ["string", "null"] }
+        status: { type: string, default: official_reference_detected }
+
     OriginResult:
       type: object
       required: [status]
@@ -366,6 +379,7 @@ components:
         origin_identity_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
         origin_metadata_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
         distribution_signals: { type: array, items: { $ref: "#/components/schemas/OriginSignal" }, default: [] }
+        referenced_sources: { type: array, items: { $ref: "#/components/schemas/ReferencedSource" }, default: [] }
         evidence_trace: { type: array, items: { type: string }, default: [] }
 
     VerificationNodeResult:
