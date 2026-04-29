@@ -15,20 +15,22 @@ The current backend executes this order:
 | 5 | Rule Units | Assemble selected structure nodes into coherent interpretation units. | No |
 | 6 | Verification | Verification-path routing for rule units only. | No |
 | 7 | Meaning | Document-level plain meaning from a bounded Rule Unit brief. | No by default; future optional AI must stay document-level and bounded |
-| 8 | Output | Assemble upstream results. No new meaning. | No |
+| 8 | Governance | Deterministic source-support, consistency, and action-safety checks. | No |
+| 9 | Output | Assemble upstream results. No new meaning. | No |
 
 This order matches `backend/app/pipeline/runner.py`.
 
-Atomic Structure nodes are traceability units. Rule Units are coherent interpretation units. Verification and Meaning operate on Rule Units, not raw atomic nodes.
+Atomic Structure nodes are traceability units. Rule Units are coherent interpretation units. Verification and Meaning operate on Rule Units, not raw atomic nodes. Governance evaluates normalized anchored records before final output assembly.
 
 ## Hard constraints
 
-- No inference in Input, Structure, Origin, Selection, Rule Units, Verification, or Output.
+- No inference in Input, Structure, Origin, Selection, Rule Units, Verification, Governance, or Output.
 - Atomic nodes are source/trace pieces, not public Meaning targets.
 - Rule Units are interpretation units.
 - Meaning must not use scope labels, shift labels, or comparison taxonomy in the default Tetherpoint path.
 - Origin traces provenance and reference signals only; it does not judge credibility.
 - Verification routes to record systems only and does not decide truth.
+- Governance checks support and action safety only; it does not decide truth, resolve conflicts, repair values, or overwrite values.
 - Output presents upstream results and should not transform meaning.
 - Fail rather than guess.
 - Absence is not permission to invent.
@@ -37,7 +39,7 @@ Atomic Structure nodes are traceability units. Rule Units are coherent interpret
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/analyze` | Run the 8-layer pipeline on a document |
+| POST | `/analyze` | Run the 9-layer pipeline on a document |
 | GET | `/health` | Liveness check |
 | GET | `/docs` | Interactive OpenAPI documentation |
 | GET | `/redoc` | ReDoc documentation |
@@ -71,12 +73,37 @@ See `openapi.yaml` for the full OpenAPI 3.1 specification.
   "meaning": {},
   "origin": {},
   "verification": {},
+  "governance": {},
   "output": {},
   "errors": []
 }
 ```
 
 Each layer produces its own distinct section. Layers are not merged.
+
+### Governance response
+
+Governance emits a structured result object:
+
+```json
+{
+  "status": "match",
+  "record_count": 2,
+  "issue_count": 0,
+  "results": [],
+  "activeIssues": [],
+  "principle": "The governance layer does not decide what is true; it determines whether a record is sufficiently supported and safe to act on."
+}
+```
+
+The output summary also exposes:
+
+```json
+{
+  "governance_status": "match",
+  "governance_issue_count": 0
+}
+```
 
 ## Authentication
 
@@ -167,6 +194,12 @@ cd backend
 python -m pytest app/tests/ -v
 ```
 
+Governance-specific tests live in:
+
+```text
+backend/app/tests/test_governance.py
+```
+
 ## What each layer does
 
 1. Input — Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
@@ -183,7 +216,9 @@ python -m pytest app/tests/ -v
 
 7. Meaning — Produces document-level plain meaning from a deterministic Rule Unit brief. It does not use scope labels, shift labels, or comparison lenses.
 
-8. Output — Assembles the final response from upstream layers. Presentation only.
+8. Governance — Evaluates normalized anchored records for required source support, field-level contradictions when comparison records are supplied, and downstream action safety when an action is requested. It emits review status only; it does not decide truth or repair data.
+
+9. Output — Assembles the final response from upstream layers. Presentation only.
 
 ## Project structure
 
@@ -207,12 +242,15 @@ backend/
       handler.py         # Layer 6: Verification
     meaning/
       handler.py         # Layer 7: Meaning
+    governance/
+      handler.py         # Layer 8: Governance
     output/
-      handler.py         # Layer 8: Output
+      handler.py         # Layer 9: Output
     pipeline/
       runner.py          # Orchestrates executable layer order
     tests/
-      test_pipeline.py   # Backend tests
+      test_pipeline.py   # Backend pipeline tests
+      test_governance.py # Governance constraint tests
   openapi.yaml           # OpenAPI 3.1 spec
   requirements.txt
   Dockerfile
