@@ -217,9 +217,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
-  if (signals.length === 0) {
-    return <EmptyState message="No origin signals in this section." />;
-  }
+  if (signals.length === 0) return <EmptyState message="No origin signals in this section." />;
 
   return (
     <div>
@@ -257,16 +255,10 @@ function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[]
 }
 
 function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined }) {
-  if (!meaning) {
-    return <EmptyState message="No Meaning data for this rule unit." />;
-  }
+  if (!meaning) return <EmptyState message="No Meaning data for this rule unit." />;
 
   if (meaning.status !== "executed") {
-    return (
-      <EmptyState
-        message={meaning.message || meaning.error || "Meaning unavailable for this rule unit."}
-      />
-    );
+    return <EmptyState message={meaning.message || meaning.error || "Meaning unavailable for this rule unit."} />;
   }
 
   const detectedScopes =
@@ -290,10 +282,7 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
         {detectedScopes.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {detectedScopes.map((scope) => (
-              <span
-                key={`${meaning.node_id}-${scope}`}
-                className="rounded bg-secondary px-2.5 py-1 text-[11px] text-foreground"
-              >
+              <span key={`${meaning.node_id}-${scope}`} className="rounded bg-secondary px-2.5 py-1 text-[11px] text-foreground">
                 {scope}
               </span>
             ))}
@@ -308,9 +297,7 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
           Plain Meaning
         </div>
         {meaning.plain_meaning ? (
-          <div className="text-sm leading-relaxed text-foreground">
-            {meaning.plain_meaning}
-          </div>
+          <div className="text-sm leading-relaxed text-foreground">{meaning.plain_meaning}</div>
         ) : (
           <EmptyState message="Plain-language Meaning was not returned for this rule unit." />
         )}
@@ -323,23 +310,12 @@ function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined })
           </div>
           <div className="space-y-2">
             {scopeDetails.map((detail) => (
-              <div
-                key={`${meaning.node_id}-${detail.scope}`}
-                className="rounded border border-border/50 bg-background/40 p-2"
-              >
+              <div key={`${meaning.node_id}-${detail.scope}`} className="rounded border border-border/50 bg-background/40 p-2">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
                   {detail.scope}
                 </div>
-                {detail.detail && (
-                  <div className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                    {detail.detail}
-                  </div>
-                )}
-                {detail.evidence && (
-                  <div className="mt-1 text-sm leading-relaxed text-foreground">
-                    {detail.evidence}
-                  </div>
-                )}
+                {detail.detail && <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{detail.detail}</div>}
+                {detail.evidence && <div className="mt-1 text-sm leading-relaxed text-foreground">{detail.evidence}</div>}
               </div>
             ))}
           </div>
@@ -398,9 +374,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         if (result.assertion_type) route.assertionTypes.add(result.assertion_type);
 
         const unitText = ruleUnitById.get(result.node_id)?.source_text_combined?.trim();
-        if (unitText && route.evidence.length < 3 && !route.evidence.includes(unitText)) {
-          route.evidence.push(unitText);
-        }
+        if (unitText && route.evidence.length < 3 && !route.evidence.includes(unitText)) route.evidence.push(unitText);
       }
     }
 
@@ -446,51 +420,52 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         <div className="mx-4 mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           <strong>Errors</strong>
           <ul className="mt-1 list-inside list-disc text-xs">
-            {data.errors.map((error, index) => (
-              <li key={`${error.layer}-${index}`}>{error.layer}: {error.error}</li>
-            ))}
+            {data.errors.map((error, index) => <li key={`${error.layer}-${index}`}>{error.layer}: {error.error}</li>)}
           </ul>
         </div>
       )}
 
-      {data.structure.validation_report.status !== "clean" && (
-        <div className="mx-4 mt-3 rounded-md border border-border/60 bg-surface p-3 text-xs text-muted-foreground">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-            Validation details
-          </div>
-          <div>status: {data.structure.validation_report.status}</div>
-          {data.structure.validation_report.repaired_sections.length > 0 && (
-            <div>repaired sections: {data.structure.validation_report.repaired_sections.join(", ")}</div>
-          )}
-          {data.structure.validation_report.issues.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {data.structure.validation_report.issues.map((issue, index) => (
-                <div key={`${issue.section_id}-${issue.issue_type}-${index}`}>
-                  {issue.section_id}: {issue.message}
+      {(data.structure.validation_report.status !== "clean" || (data.rule_units && data.rule_units.needs_review_count > 0)) && (
+        <details className="mx-4 mt-3 rounded-md border border-border/60 bg-surface p-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+            Debug details
+          </summary>
+          <div className="mt-3 space-y-3">
+            {data.structure.validation_report.status !== "clean" && (
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
+                  Validation
                 </div>
-              ))}
-            </div>
-          )}
-          {repairedNodes.length > 0 && (
-            <div className="mt-2">repaired nodes: {repairedNodes.map((node) => node.node_id).join(", ")}</div>
-          )}
-        </div>
-      )}
+                <div>status: {data.structure.validation_report.status}</div>
+                {data.structure.validation_report.repaired_sections.length > 0 && (
+                  <div>repaired sections: {data.structure.validation_report.repaired_sections.join(", ")}</div>
+                )}
+                {data.structure.validation_report.issues.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {data.structure.validation_report.issues.map((issue, index) => (
+                      <div key={`${issue.section_id}-${issue.issue_type}-${index}`}>{issue.section_id}: {issue.message}</div>
+                    ))}
+                  </div>
+                )}
+                {repairedNodes.length > 0 && <div className="mt-2">repaired nodes: {repairedNodes.map((node) => node.node_id).join(", ")}</div>}
+              </div>
+            )}
 
-      {data.rule_units && data.rule_units.needs_review_count > 0 && (
-        <div className="mx-4 mt-3 rounded-md border border-border/60 bg-surface p-3 text-xs text-muted-foreground">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-            Rule unit assembly
+            {data.rule_units && data.rule_units.needs_review_count > 0 && (
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
+                  Rule unit assembly
+                </div>
+                <div>{data.rule_units.ready_count} ready · {data.rule_units.needs_review_count} needs review</div>
+                {data.rule_units.assembly_log.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {data.rule_units.assembly_log.map((item, index) => <div key={`assembly-${index}`}>{item}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div>{data.rule_units.ready_count} ready · {data.rule_units.needs_review_count} needs review</div>
-          {data.rule_units.assembly_log.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {data.rule_units.assembly_log.map((item, index) => (
-                <div key={`assembly-${index}`}>{item}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        </details>
       )}
 
       <div className="border-b border-border bg-surface/30 px-4 py-3">
@@ -525,9 +500,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                 return (
                   <div key={unit.rule_unit_id} className="rounded-xl border border-border/60 bg-surface px-4 py-4">
                     <div className="flex items-start gap-4">
-                      <span className="pt-1 text-base font-medium text-muted-foreground">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
+                      <span className="pt-1 text-base font-medium text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
                       <div className="min-w-0 flex-1">
                         <div className="text-lg font-semibold leading-snug text-foreground">
                           {unit.primary_text || unit.source_text_combined || "Rule unit needs review"}
@@ -546,9 +519,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                         )}
 
                         <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
-                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-                            Meaning
-                          </div>
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Meaning</div>
                           <MeaningSummary meaning={unitMeaning} />
                         </div>
 
@@ -619,9 +590,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
               {verificationSummary.assertionTypes.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {verificationSummary.assertionTypes.map((type) => (
-                    <span key={type} className="rounded bg-secondary px-3 py-2 text-sm font-medium text-foreground">
-                      {type}
-                    </span>
+                    <span key={type} className="rounded bg-secondary px-3 py-2 text-sm font-medium text-foreground">{type}</span>
                   ))}
                 </div>
               ) : (
@@ -634,18 +603,9 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         {activeTab === "origin" && (
           <div className="space-y-5 px-5 py-6 pb-12">
             <div className="text-sm font-mono text-muted-foreground">document</div>
-            <Section title="Origin Identity Signals">
-              <OriginSignalList signals={data.origin.origin_identity_signals} />
-            </Section>
-
-            <Section title="Origin Metadata Signals">
-              <OriginSignalList signals={data.origin.origin_metadata_signals} />
-            </Section>
-
-            <Section title="Distribution Signals">
-              <OriginSignalList signals={data.origin.distribution_signals} />
-            </Section>
-
+            <Section title="Origin Identity Signals"><OriginSignalList signals={data.origin.origin_identity_signals} /></Section>
+            <Section title="Origin Metadata Signals"><OriginSignalList signals={data.origin.origin_metadata_signals} /></Section>
+            <Section title="Distribution Signals"><OriginSignalList signals={data.origin.distribution_signals} /></Section>
             <Section title="Evidence Trace">
               {data.origin.evidence_trace.length > 0 ? (
                 <pre className="overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
