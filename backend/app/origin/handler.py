@@ -17,6 +17,7 @@ from app.schemas.models import (
     InputResult,
     OriginResult,
     OriginSignal,
+    ReferencedSource,
     StructureResult,
 )
 
@@ -37,6 +38,25 @@ _USC_CITATION_RE = re.compile(r"\b\d+\s+U\.?S\.?C\.?\s*\d+[a-zA-Z0-9.-]*\b", re.
 _NAMED_ACT_RE = re.compile(r"\b(?:[A-Z][A-Za-z]+(?:\s+|\-)){1,8}Act of \d{4}\b")
 _SECTION_AMEND_RE = re.compile(r"\bSection\s+\d+[A-Za-z0-9.-]*\b[^.]{0,120}\bis amended\b", re.I)
 _FEDERAL_CONTEXT_RE = re.compile(r"\b(Federal office|United States citizenship|Secretary of State|Department of Homeland Security|REAL ID)\b", re.I)
+
+_KNOWN_REFERENCED_SOURCES = {
+    "national voter registration act of 1993": {
+        "reference_id": "national-voter-registration-act-1993",
+        "name": "National Voter Registration Act of 1993",
+        "reference_type": "Federal act",
+        "source_system": "Congress.gov",
+        "official_source_url": "https://www.congress.gov/bill/103rd-congress/house-bill/2/text",
+        "why_it_matters": "The current text references or amends this federal voter-registration framework.",
+    },
+    "real id act of 2005": {
+        "reference_id": "real-id-act-2005",
+        "name": "REAL ID Act of 2005",
+        "reference_type": "Federal act",
+        "source_system": "Congress.gov",
+        "official_source_url": "https://www.congress.gov/bill/109th-congress/house-bill/418/text",
+        "why_it_matters": "The current text relies on identification-document requirements associated with this act.",
+    },
+}
 
 _TEXT_IDENTITY_LABELS = {
     "source system": "source_system",
@@ -88,6 +108,38 @@ def _append_unique_signal(
         return
     signals.append(OriginSignal(signal=signal, value=cleaned, category=category))
     trace.append(f"{signal} -> {reason}")
+
+
+def _build_referenced_source(matched_text: str) -> ReferencedSource:
+    cleaned = " ".join(matched_text.split()).strip(" .;,")
+    known = _KNOWN_REFERENCED_SOURCES.get(cleaned.lower())
+    if known:
+        return ReferencedSource(matched_text=cleaned, **known)
+    return ReferencedSource(
+        reference_id=re.sub(r"[^a-z0-9]+", "-", cleaned.lower()).strip("-"),
+        name=cleaned,
+        reference_type="Referenced legal source",
+        matched_text=cleaned,
+        status="reference_detected_no_known_link",
+        why_it_matters="The current text references this outside legal source, but no official link is mapped yet.",
+    )
+
+
+def _referenced_sources_from_signals(signals: list[OriginSignal], trace: list[str]) -> list[ReferencedSource]:
+    referenced_sources: list[ReferencedSource] = []
+    seen: set[str] = set()
+
+    for signal in signals:
+        if signal.signal != "referenced_act":
+            continue
+        source = _build_referenced_source(signal.value)
+        if source.reference_id in seen:
+            continue
+        seen.add(source.reference_id)
+        referenced_sources.append(source)
+        trace.append(f"referenced_source -> card created for {source.name}")
+
+    return referenced_sources
 
 
 def _extract_inferred_text_origin(
@@ -190,6 +242,8 @@ def _extract_html_origin(content: str) -> dict:
         except (json.JSONDecodeError, TypeError):
             pass
 
+    _extract_inferred_text_origin(soup.get_text("\n"), identity, metadata, trace)
+
     return {"identity": identity, "metadata": metadata, "distribution": distribution, "trace": trace}
 
 
@@ -222,6 +276,8 @@ def _extract_json_origin(content: str) -> dict:
             metadata.append(OriginSignal(signal="title", value=val))
             trace.append(f"title -> JSON top-level key ({key})")
 
+    _extract_inferred_text_origin(content, identity, metadata, trace)
+
     return {"identity": identity, "metadata": metadata, "distribution": [], "trace": trace}
 
 
@@ -253,6 +309,8 @@ def _extract_xml_origin(content: str) -> dict:
         elif tag in title_tags:
             metadata.append(OriginSignal(signal="title", value=text))
             trace.append(f"title -> XML element ({elem.tag})")
+
+    _extract_inferred_text_origin(content, identity, metadata, trace)
 
     return {"identity": identity, "metadata": metadata, "distribution": [], "trace": trace}
 
@@ -358,11 +416,13 @@ def process_origin(
 
     result = extractors[ct](input_result.raw_content)
     result["trace"].extend(_apply_document_anchor_tags(structure_result))
+    referenced_sources = _referenced_sources_from_signals(result["identity"], result["trace"])
 
     return OriginResult(
         status="executed",
         origin_identity_signals=result["identity"],
         origin_metadata_signals=result["metadata"],
         distribution_signals=result.get("distribution", []),
+        referenced_sources=referenced_sources,
         evidence_trace=result["trace"],
     )
