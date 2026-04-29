@@ -86,7 +86,7 @@ function App() {
           <div className="text-center">
             <div className="text-lg font-semibold text-primary mb-1">Tetherpoint</div>
             <div className="text-xs text-muted-foreground">
-              Paste content and run the 7-layer pipeline
+              Paste content and run the 9-layer pipeline
             </div>
           </div>
         </div>
