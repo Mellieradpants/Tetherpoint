@@ -181,11 +181,23 @@ class OriginSignal(BaseModel):
     category: Optional[str] = None
 
 
+class ReferencedSource(BaseModel):
+    reference_id: str
+    name: str
+    reference_type: str
+    matched_text: str
+    source_system: Optional[str] = None
+    official_source_url: Optional[str] = None
+    why_it_matters: Optional[str] = None
+    status: str = "official_reference_detected"
+
+
 class OriginResult(BaseModel):
     status: Literal["executed", "skipped"]
     origin_identity_signals: list[OriginSignal] = Field(default_factory=list)
     origin_metadata_signals: list[OriginSignal] = Field(default_factory=list)
     distribution_signals: list[OriginSignal] = Field(default_factory=list)
+    referenced_sources: list[ReferencedSource] = Field(default_factory=list)
     evidence_trace: list[str] = Field(default_factory=list)
 
 
