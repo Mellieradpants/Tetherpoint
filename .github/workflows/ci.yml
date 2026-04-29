@@ -34,6 +34,9 @@ jobs:
       run:
         working-directory: backend
 
+    env:
+      ANALYZE_SECRET: ci-test-secret
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
