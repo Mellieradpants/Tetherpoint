@@ -1,32 +1,34 @@
 ### Architecture
 
-Tetherpoint is a constraint-based parsing and traceability system.
+Tetherpoint is a source-anchored parsing and traceability system.
 
-The system is structured as a simple pipeline:
+The current backend executes a locked 7-layer pipeline:
 
-1. Input Layer  
-   Raw text or structured content (JSON, HTML, XML, plain text)
+1. Input
+   Raw text or structured content enters the system. Supported content types are text, HTML, XML, and JSON. This layer validates well-formedness and preserves the original input.
 
-2. Parsing Layer (Constraint-Based)  
-   - Splits input into discrete statements (nodes)  
-   - Extracts explicit fields (actor, action, condition, etc.)  
-   - Does not allow inferred data  
-   - Preserves missing information as "not specified"  
-   - Anchors all output to source text  
+2. Structure
+   Deterministic parsing creates source-anchored nodes. This layer performs normalization, statement extraction, hierarchy assignment, explicit field extraction, constraint flags, and validation. It does not use AI.
 
-3. Output Layer  
-   Structured, traceable representation of meaning
+3. Origin
+   Source and provenance signals are extracted from the document where available. This includes metadata, canonical links, JSON-LD, Open Graph tags, Twitter card tags, and explicit source fields. Origin does not judge credibility.
 
-### Parsing Layer
+4. Selection
+   Nodes are selected or excluded using deterministic eligibility rules. Selection passes eligible nodes forward unchanged.
 
-The system does not perform free-form interpretation.
+5. Verification
+   Selected assertions are routed to likely record systems. This layer identifies broad assertion types and returns candidate systems such as Congress.gov, Federal Register, CourtListener, PubMed, SEC EDGAR, FERC, NERC, EIA, JSTOR, and National Archives. Verification does not decide whether a claim is true.
 
-Instead, it enforces structured parsing under strict constraints:
+6. Meaning
+   Meaning is the only AI layer. It receives selected nodes plus read-only Origin and Verification context. Its job is to produce constrained plain-language explanation without changing the source text or inventing unsupported claims.
 
-- Input text is split into discrete statements (nodes)
-- Each node is parsed into explicit fields (actor, action, condition, etc.)
-- No inferred data is allowed
-- Missing information is preserved as "not specified"
-- All outputs remain anchored to source text
+7. Output
+   Final response assembly. Output presents upstream layer results and should not create new meaning.
 
-This ensures that interpretation is constrained, traceable, and auditable.
+### Core rule
+
+Tetherpoint separates structure, provenance, verification routing, and meaning so each output can be traced back to explicit source text.
+
+### Non-goals
+
+Tetherpoint is not a fact checker, legal advice tool, credibility score, political recommendation system, or general chatbot.
