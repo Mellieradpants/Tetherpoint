@@ -145,12 +145,25 @@
 
 @layer components {
   .border-b.border-border.bg-surface\/30 > .flex.flex-wrap.gap-2 {
-    flex-wrap: nowrap;
+    flex-wrap: nowrap !important;
     overflow-x: auto;
     padding-bottom: 0.25rem;
   }
 
   .border-b.border-border.bg-surface\/30 > .flex.flex-wrap.gap-2 > button {
     flex: 0 0 auto;
+  }
+
+  @media (max-width: 640px) {
+    div:has(> button[aria-pressed]) {
+      flex-wrap: nowrap !important;
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    div:has(> button[aria-pressed]) > button {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
   }
 }
