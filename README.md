@@ -2,7 +2,7 @@
 
 Tetherpoint is a source-anchored parsing and traceability system.
 
-It takes source content, breaks it into traceable nodes, applies deterministic structure and selection rules, routes factual assertions to likely record systems, and optionally runs a constrained AI Meaning layer on selected nodes.
+It takes source content, breaks it into traceable nodes, assembles coherent Rule Units, applies deterministic structure and selection rules, routes assertions to likely record systems, and produces document-level plain meaning from a bounded Meaning brief.
 
 The project is not a truth engine and does not decide whether claims are true or false.
 
@@ -13,8 +13,8 @@ This repository contains a working full-stack prototype:
 - React/Vite frontend
 - Vercel serverless proxy at `/api/analyze`
 - FastAPI backend under `backend/`
-- Deterministic structure, selection, origin, and verification-routing layers
-- Optional AI Meaning layer
+- Deterministic structure, origin, selection, rule-unit, and verification-routing layers
+- Document-level plain Meaning from a deterministic Rule Unit brief
 - OpenAPI contract under `backend/openapi.yaml`
 - Backend tests under `backend/app/tests/`
 
@@ -26,11 +26,12 @@ The current backend executes layers in this order:
 2. Structure
 3. Origin
 4. Selection
-5. Verification
-6. Meaning
-7. Output
+5. Rule Units
+6. Verification
+7. Meaning
+8. Output
 
-This order matters. Meaning runs after Origin and Verification so it can use their outputs as read-only grounding context.
+This order matters. Atomic Structure nodes are traceability units. Rule Units are the coherent interpretation units used by Verification and Meaning.
 
 ## Layer responsibilities
 
@@ -38,18 +39,20 @@ This order matters. Meaning runs after Origin and Verification so it can use the
 |---|---|---|
 | Input | Intake and well-formedness validation | No |
 | Structure | Deterministic parsing, normalization, hierarchy, source anchors | No |
-| Origin | Provenance and source-signal extraction | No |
+| Origin | Provenance, document identity, and source-signal extraction | No |
 | Selection | Deterministic node eligibility | No |
-| Verification | Route assertions to likely record systems | No |
-| Meaning | Plain-language explanation of selected nodes | Yes |
+| Rule Units | Assemble selected structure nodes into coherent interpretation units | No |
+| Verification | Route rule units to likely record systems | No |
+| Meaning | Plain-language document explanation from a bounded Rule Unit brief | No by default; future optional AI must stay document-level and bounded |
 | Output | Assemble upstream layer results | No |
 
 ## Hard constraints
 
 - No source span, no output.
 - No anchor, no meaning.
-- Input, Structure, Origin, Selection, Verification, and Output do not use AI.
-- Meaning is the only AI interpretation layer.
+- Atomic Structure nodes are traceability units, not public Meaning targets.
+- Rule Units are interpretation units.
+- Meaning must not use scope or shift-label taxonomy in the default Tetherpoint path.
 - Verification routing does not decide truth.
 - Origin tracing does not judge credibility.
 - Output presents upstream results and should not create new meaning.
@@ -82,7 +85,7 @@ See `backend/openapi.yaml` for the current API contract.
 
 Tetherpoint is best described as a source-anchored parsing pipeline and verification-routing prototype.
 
-It is designed to make dense source text inspectable by separating structure, provenance, verification routing, and plain-language meaning.
+It is designed to make dense source text inspectable by separating structure, provenance, rule-unit assembly, verification routing, and plain-language meaning.
 
 ## What this project is not
 
@@ -91,9 +94,10 @@ Tetherpoint is not:
 - a fact checker
 - a legal advice tool
 - a credibility score
-- a summarizer
+- a general summarizer
 - a political recommendation system
 - a general chatbot
+- a comparison-taxonomy tool
 
 ## Reviewer note
 
