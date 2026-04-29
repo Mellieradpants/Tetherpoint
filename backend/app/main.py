@@ -5,6 +5,7 @@ import os
 
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from app.pipeline.runner import run_pipeline
 from app.schemas.models import AnalyzeRequest, PipelineResponse
@@ -29,22 +30,23 @@ _default_origins = (
     "https://37017f8b-59ad-473e-bfb5-253a00e3a6f0.lovableproject.com"
 )
 _raw = os.environ.get("ALLOWED_ORIGINS", _default_origins)
-ALLOWED_ORIGINS = [o.strip() for o in _raw.split(",") if o.strip()]
+ALLOWED_ORIGINS = [origin.strip() for origin in _raw.split(",") if origin.strip()]
 
 logger.info("CORS allowed origins: %s", ALLOWED_ORIGINS)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-from fastapi.responses import Response
+
 
 @app.options("/analyze")
 async def options_analyze():
     return Response(status_code=200)
+
 
 @app.post("/analyze", response_model=PipelineResponse)
 def analyze(
