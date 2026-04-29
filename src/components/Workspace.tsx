@@ -74,18 +74,6 @@ interface RuleUnitData {
   assembly_log: string[];
 }
 
-interface MeaningLens {
-  lens: string;
-  detected: boolean;
-  detail?: string | null;
-}
-
-interface MeaningScopeDetail {
-  scope: string;
-  detail?: string | null;
-  evidence?: string | null;
-}
-
 interface MeaningNodeResult {
   node_id: string;
   source_text: string;
@@ -93,10 +81,10 @@ interface MeaningNodeResult {
   error?: string | null;
   message?: string | null;
   raw_response?: string | null;
-  lenses: MeaningLens[];
+  lenses?: unknown[];
   detected_scopes?: string[];
   plain_meaning?: string | null;
-  scope_details?: MeaningScopeDetail[];
+  scope_details?: unknown[];
   missing_information?: string[];
 }
 
@@ -255,72 +243,23 @@ function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[]
 }
 
 function MeaningSummary({ meaning }: { meaning: MeaningNodeResult | undefined }) {
-  if (!meaning) return <EmptyState message="No Meaning data for this rule unit." />;
+  if (!meaning) return <EmptyState message="No plain meaning returned for this rule unit." />;
 
   if (meaning.status !== "executed") {
-    return <EmptyState message={meaning.message || meaning.error || "Meaning unavailable for this rule unit."} />;
+    return <EmptyState message={meaning.message || meaning.error || "Plain meaning unavailable for this rule unit."} />;
   }
 
-  const detectedScopes =
-    meaning.detected_scopes && meaning.detected_scopes.length > 0
-      ? meaning.detected_scopes
-      : meaning.lenses.filter((lens) => lens.detected).map((lens) => lens.lens);
-  const scopeDetails =
-    meaning.scope_details && meaning.scope_details.length > 0
-      ? meaning.scope_details
-      : meaning.lenses
-          .filter((lens) => lens.detected && lens.detail)
-          .map((lens) => ({ scope: lens.lens, detail: lens.detail }));
   const missingInformation = meaning.missing_information || [];
 
   return (
     <div className="space-y-3">
       <div>
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-          Detected Scopes
-        </div>
-        {detectedScopes.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {detectedScopes.map((scope) => (
-              <span key={`${meaning.node_id}-${scope}`} className="rounded bg-secondary px-2.5 py-1 text-[11px] text-foreground">
-                {scope}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <EmptyState message="No Meaning scopes detected for this rule unit." />
-        )}
-      </div>
-
-      <div>
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-          Plain Meaning
-        </div>
         {meaning.plain_meaning ? (
           <div className="text-sm leading-relaxed text-foreground">{meaning.plain_meaning}</div>
         ) : (
-          <EmptyState message="Plain-language Meaning was not returned for this rule unit." />
+          <EmptyState message="Plain meaning was not returned for this rule unit." />
         )}
       </div>
-
-      {scopeDetails.length > 0 && (
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-            Scope Details
-          </div>
-          <div className="space-y-2">
-            {scopeDetails.map((detail) => (
-              <div key={`${meaning.node_id}-${detail.scope}`} className="rounded border border-border/50 bg-background/40 p-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
-                  {detail.scope}
-                </div>
-                {detail.detail && <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{detail.detail}</div>}
-                {detail.evidence && <div className="mt-1 text-sm leading-relaxed text-foreground">{detail.evidence}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {missingInformation.length > 0 && (
         <div>
@@ -392,11 +331,6 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     };
   }, [data.verification.node_results, ruleUnitById]);
 
-  const repairedNodes = useMemo(
-    () => data.structure.nodes.filter((node) => node.validation_status === "repaired"),
-    [data.structure.nodes]
-  );
-
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 text-[11px] text-muted-foreground">
@@ -423,49 +357,6 @@ export function Workspace({ data }: { data: PipelineResponse }) {
             {data.errors.map((error, index) => <li key={`${error.layer}-${index}`}>{error.layer}: {error.error}</li>)}
           </ul>
         </div>
-      )}
-
-      {(data.structure.validation_report.status !== "clean" || (data.rule_units && data.rule_units.needs_review_count > 0)) && (
-        <details className="mx-4 mt-3 rounded-md border border-border/60 bg-surface p-3 text-xs text-muted-foreground">
-          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-            Debug details
-          </summary>
-          <div className="mt-3 space-y-3">
-            {data.structure.validation_report.status !== "clean" && (
-              <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
-                  Validation
-                </div>
-                <div>status: {data.structure.validation_report.status}</div>
-                {data.structure.validation_report.repaired_sections.length > 0 && (
-                  <div>repaired sections: {data.structure.validation_report.repaired_sections.join(", ")}</div>
-                )}
-                {data.structure.validation_report.issues.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {data.structure.validation_report.issues.map((issue, index) => (
-                      <div key={`${issue.section_id}-${issue.issue_type}-${index}`}>{issue.section_id}: {issue.message}</div>
-                    ))}
-                  </div>
-                )}
-                {repairedNodes.length > 0 && <div className="mt-2">repaired nodes: {repairedNodes.map((node) => node.node_id).join(", ")}</div>}
-              </div>
-            )}
-
-            {data.rule_units && data.rule_units.needs_review_count > 0 && (
-              <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-muted">
-                  Rule unit assembly
-                </div>
-                <div>{data.rule_units.ready_count} ready · {data.rule_units.needs_review_count} needs review</div>
-                {data.rule_units.assembly_log.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {data.rule_units.assembly_log.map((item, index) => <div key={`assembly-${index}`}>{item}</div>)}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </details>
       )}
 
       <div className="border-b border-border bg-surface/30 px-4 py-3">
@@ -519,7 +410,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                         )}
 
                         <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
-                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Meaning</div>
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Plain Meaning</div>
                           <MeaningSummary meaning={unitMeaning} />
                         </div>
 
