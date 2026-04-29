@@ -110,6 +110,55 @@ def _build_prompt(
     )
 
 
+def _build_document_summary_prompt(
+    rule_units: list[RuleUnit],
+    node_results: list[MeaningNodeResult],
+    origin_result: OriginResult | None = None,
+) -> str:
+    summary_context = []
+    result_by_id = {result.node_id: result for result in node_results}
+
+    for unit in rule_units:
+        result = result_by_id.get(unit.rule_unit_id)
+        if not result or not result.plain_meaning:
+            continue
+        summary_context.append({
+            "rule_unit_id": unit.rule_unit_id,
+            "section_id": unit.section_id,
+            "primary_text": unit.primary_text,
+            "plain_meaning": result.plain_meaning,
+            "conditions": [_model_dump(item) for item in unit.conditions],
+            "exceptions": [_model_dump(item) for item in unit.exceptions],
+            "evidence_requirements": [_model_dump(item) for item in unit.evidence_requirements],
+            "timing": [_model_dump(item) for item in unit.timing],
+            "jurisdiction": [_model_dump(item) for item in unit.jurisdiction],
+        })
+
+    context = {
+        "rule_unit_meanings": summary_context,
+        "origin": _model_dump(origin_result) if origin_result is not None else None,
+    }
+
+    return (
+        "You are the document-level Meaning summarizer for a source-anchored legislative parsing pipeline. "
+        "Synthesize the provided rule-unit plain meanings into one concise public explanation. "
+        "Do not classify scopes. Do not use shift labels. Do not list every rule unit. "
+        "Do not repeat the same requirement over and over. Group repeated ideas into one explanation.\n\n"
+        "Your job: explain what this document or section is mainly doing in plain language. "
+        "Mention major referenced laws or acts if they are central to the text. "
+        "Do not provide legal advice. Do not add claims beyond the provided rule-unit meanings.\n\n"
+        "Context JSON:\n"
+        f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
+        "Output requirements:\n"
+        "- Return ONLY valid JSON.\n"
+        "- Return one object with exactly these keys: overall_plain_meaning, summary_missing_information.\n"
+        "- overall_plain_meaning must be one or two short paragraphs.\n"
+        "- summary_missing_information must be an array of short strings, empty if nothing important is missing.\n\n"
+        "Example output:\n"
+        "{\"overall_plain_meaning\":\"This section is mainly about voter registration and proof of citizenship. It explains what kinds of documents can count as proof, when an applicant must show them, and which election officials receive them.\",\"summary_missing_information\":[]}"
+    )
+
+
 def _parse_json_payload(content: str) -> Any | dict[str, str]:
     cleaned = content.strip()
     candidates: list[str] = []
@@ -264,6 +313,30 @@ def _build_error_result(unit: RuleUnit, error: str, message: str | None = None) 
     )
 
 
+def _build_document_summary(
+    rule_units: list[RuleUnit],
+    node_results: list[MeaningNodeResult],
+    origin_result: OriginResult | None,
+) -> tuple[str | None, list[str]]:
+    usable = [result for result in node_results if result.status == "executed" and result.plain_meaning]
+    if not usable:
+        return None, ["plain_meaning"]
+
+    prompt = _build_document_summary_prompt(rule_units, node_results, origin_result=origin_result)
+    raw = _call_openai(prompt)
+
+    if isinstance(raw, dict) and "error" in raw:
+        return None, [raw.get("message") or raw.get("error") or "summary_generation_failed"]
+
+    summary = raw.get("overall_plain_meaning") if isinstance(raw, dict) else None
+    missing = _as_string_list(raw.get("summary_missing_information")) if isinstance(raw, dict) else []
+
+    if not isinstance(summary, str) or not summary.strip():
+        return None, missing or ["overall_plain_meaning"]
+
+    return summary.strip(), missing
+
+
 def process_meaning(
     rule_units: list[RuleUnit],
     run: bool = True,
@@ -361,4 +434,15 @@ def process_meaning(
             )
         )
 
-    return MeaningResult(status="executed", node_results=node_results)
+    overall_plain_meaning, summary_missing_information = _build_document_summary(
+        rule_units,
+        node_results,
+        origin_result=origin_result,
+    )
+
+    return MeaningResult(
+        status="executed",
+        node_results=node_results,
+        overall_plain_meaning=overall_plain_meaning,
+        summary_missing_information=summary_missing_information,
+    )
