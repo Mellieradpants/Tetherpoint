@@ -7,6 +7,7 @@ eligible for Meaning. This layer is deterministic and does not use AI.
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 
 from app.schemas.models import RuleUnit, RuleUnitNodeRef, RuleUnitResult, SelectionResult, StructureNode, StructureResult
 
@@ -18,6 +19,16 @@ _ROLE_BUCKETS = {
     "DEFINITION": "definitions",
 }
 
+_STANDALONE_EXCEPTION_RE = re.compile(
+    r"\b(does\s+not\s+apply|do\s+not\s+apply|shall\s+not\s+apply|is\s+not\s+required|are\s+not\s+required|except\s+that|unless|notwithstanding)\b",
+    re.I,
+)
+
+_RULE_SIGNAL_RE = re.compile(
+    r"\b(must|shall|may|require|requires|required|requirement|does\s+not\s+apply|do\s+not\s+apply|shall\s+not\s+apply|is\s+subject\s+to|repealed)\b",
+    re.I,
+)
+
 
 def _node_ref(node: StructureNode) -> RuleUnitNodeRef:
     return RuleUnitNodeRef(
@@ -27,12 +38,42 @@ def _node_ref(node: StructureNode) -> RuleUnitNodeRef:
     )
 
 
+def _clean_joined_text(text: str) -> str:
+    # Parser fragments sometimes introduce a sentence break before a list item.
+    # Preserve explicit source wording for common legal-list continuations.
+    text = re.sub(r"\b(includes?|include)\.\s+", lambda m: f"{m.group(1)} ", text, flags=re.I)
+    text = re.sub(r"\b(area)\.\s+(critical\b)", r"\1 includes \2", text, flags=re.I)
+    return text
+
+
 def _combined_text(nodes: list[StructureNode]) -> str:
-    return "\n".join(node.source_text.strip() for node in nodes if node.source_text.strip())
+    return _clean_joined_text("\n".join(node.source_text.strip() for node in nodes if node.source_text.strip()))
 
 
 def _has_unsafe_node(nodes: list[StructureNode]) -> bool:
     return any(node.validation_status == "invalid" for node in nodes)
+
+
+def _is_standalone_exception_node(node: StructureNode) -> bool:
+    text = node.source_text or node.normalized_text or ""
+    return (
+        node.role in {"EXCEPTION", "CONSEQUENCE", "CONDITION"}
+        and bool(_STANDALONE_EXCEPTION_RE.search(text))
+        and bool(_RULE_SIGNAL_RE.search(text))
+    )
+
+
+def _promote_standalone_exception(nodes: list[StructureNode]) -> StructureNode | None:
+    """Find an exception-style provision that can safely anchor a rule unit.
+
+    Legislative exception provisions can be complete rules even when they do not
+    contain a normal PRIMARY_RULE role. Example: "The reporting requirement ...
+    does not apply ..., unless ...".
+    """
+    candidates = [node for node in nodes if _is_standalone_exception_node(node)]
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
 
 
 def _build_rule_unit(
@@ -156,6 +197,18 @@ def process_rule_units(structure: StructureResult, selection: SelectionResult) -
             continue
 
         if not primaries:
+            promoted = _promote_standalone_exception(selected_section_nodes)
+            if promoted is not None:
+                children = [node for node in selected_section_nodes if node.node_id != promoted.node_id]
+                unit = _build_rule_unit(unit_index, section_id, promoted, children, fragments)
+                rule_units.append(unit)
+                assembly_log.append(
+                    f"{section_id}: {unit.rule_unit_id} assembled from standalone exception {promoted.node_id} "
+                    f"with {len(children)} supporting node(s) and {len(fragments)} fragment(s)"
+                )
+                unit_index += 1
+                continue
+
             rule_units.append(_build_review_unit(unit_index, section_id, selected_section_nodes + fragments, "missing_primary_rule"))
             assembly_log.append(f"{section_id}: NEEDS_REVIEW - missing PRIMARY_RULE")
             unit_index += 1
