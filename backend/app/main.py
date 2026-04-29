@@ -24,11 +24,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-_default_origins = (
-    "https://anchored-flow-stack.lovable.app,"
-    "https://id-preview--37017f8b-59ad-473e-bfb5-253a00e3a6f0.lovable.app,"
-    "https://37017f8b-59ad-473e-bfb5-253a00e3a6f0.lovableproject.com"
-)
+_default_origins = "http://localhost:5173"
 _raw = os.environ.get("ALLOWED_ORIGINS", _default_origins)
 ALLOWED_ORIGINS = [origin.strip() for origin in _raw.split(",") if origin.strip()]
 
@@ -54,7 +50,7 @@ def analyze(
     request: Request,
     x_analyze_secret: str = Header(..., alias="x-analyze-secret"),
 ) -> PipelineResponse:
-    """Run the locked 7-layer pipeline on the provided document."""
+    """Run the locked 9-layer pipeline on the provided document."""
     _ = x_analyze_secret
     body = enforce_security(body, request)
     return run_pipeline(body)
