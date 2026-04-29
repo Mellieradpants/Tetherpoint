@@ -1,7 +1,7 @@
 """Meaning layer: the ONLY AI interpretation layer.
 
-Operates only on selected nodes. If no API key is available,
-returns explicit 'meaning not executed' status.
+Meaning operates on Rule Units, not raw atomic Structure nodes. Atomic nodes
+remain traceability units underneath the Rule Unit.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from app.schemas.models import (
     MeaningResult,
     MeaningScopeDetail,
     OriginResult,
-    StructureNode,
+    RuleUnit,
     VerificationNodeResult,
     VerificationResult,
 )
@@ -42,37 +42,31 @@ def _model_dump(value: Any) -> Any:
     return value
 
 
-def _verification_for_node(
+def _verification_for_unit(
     verification_result: VerificationResult | None,
-    node_id: str,
+    rule_unit_id: str,
 ) -> VerificationNodeResult | None:
     if verification_result is None:
         return None
     for result in verification_result.node_results:
-        if result.node_id == node_id:
+        if result.node_id == rule_unit_id:
             return result
     return None
 
 
 def _missing_information(
-    node: StructureNode,
+    unit: RuleUnit,
     origin_result: OriginResult | None,
     verification_node: VerificationNodeResult | None,
 ) -> list[str]:
-    """Return source-grounding gaps that may limit Meaning output.
-
-    These are prompts for the Meaning layer, not automatic insufficiency labels.
-    Origin and Verification gaps are grounding gaps only; they should not by
-    themselves suppress a source-text-supported plain explanation.
-    """
     missing: list[str] = []
 
-    if not (node.source_text or "").strip():
-        missing.append("selected_node_text")
-    if not any([node.actor, node.who]):
-        missing.append("explicit_actor_or_affected_party")
-    if not any([node.action, node.what]):
-        missing.append("explicit_action_or_requirement")
+    if not unit.source_text_combined.strip():
+        missing.append("rule_unit_text")
+    if not unit.primary_node_id:
+        missing.append("primary_rule")
+    if unit.review_status != "ready":
+        missing.append("ready_rule_unit")
     if origin_result is None:
         missing.append("origin_context")
     if verification_node is None:
@@ -82,49 +76,30 @@ def _missing_information(
 
 
 def _build_prompt(
-    node: StructureNode,
+    unit: RuleUnit,
     origin_result: OriginResult | None = None,
     verification_node: VerificationNodeResult | None = None,
 ) -> str:
     context = {
-        "node": {
-            "node_id": node.node_id,
-            "section_id": node.section_id,
-            "parent_id": node.parent_id,
-            "role": node.role,
-            "depth": node.depth,
-            "source_anchor": node.source_anchor,
-            "source_text": node.source_text,
-            "normalized_text": node.normalized_text,
-            "actor": node.actor,
-            "action": node.action,
-            "condition": node.condition,
-            "temporal": node.temporal,
-            "jurisdiction": node.jurisdiction,
-            "mechanism": node.mechanism,
-            "risk": node.risk,
-            "tags": node.tags,
-            "blocked_flags": node.blocked_flags,
-            "who": node.who,
-            "what": node.what,
-            "when": node.when,
-            "where": node.where,
-            "why": node.why,
-            "how": node.how,
-        },
+        "rule_unit": _model_dump(unit),
         "origin": _model_dump(origin_result) if origin_result is not None else None,
         "verification": _model_dump(verification_node) if verification_node is not None else None,
-        "candidate_missing_information": _missing_information(node, origin_result, verification_node),
+        "candidate_missing_information": _missing_information(unit, origin_result, verification_node),
     }
 
     return (
         "You are the constrained Meaning layer for a source-anchored public explanation pipeline. "
-        "Analyze exactly one selected text unit using only the provided deterministic context. "
+        "Analyze exactly one Rule Unit using only the provided deterministic context. "
         "Do not create structure. Do not invent verification. Do not infer motive, intent, "
         "legal advice, political framing, or unsupported outcome. Fail rather than guess.\n\n"
-        "Your job is to explain what the selected text means in everyday public language. "
-        "Use the selected text, parsed who/what/when/where/how fields, origin signals, "
-        "and verification routing only as read-only grounding.\n\n"
+        "Important architecture rule: atomic nodes are traceability units, not interpretation targets. "
+        "Explain the Rule Unit as a coherent unit. Use source_node_ids only for traceability. "
+        "Do not explain fragment_node_ids independently.\n\n"
+        "If assembly_status is not complete or review_status is not ready, return plain_meaning as null "
+        "and include a missing_information item explaining why Meaning is blocked or limited.\n\n"
+        "Your job is to explain what the Rule Unit means in everyday public language. "
+        "Use the primary text, conditions, exceptions, evidence requirements, timing, jurisdiction, "
+        "mechanisms, origin signals, and verification routing only as read-only grounding.\n\n"
         "Context JSON:\n"
         f"{json.dumps(context, ensure_ascii=False, sort_keys=True)}\n\n"
         "Evaluate these Meaning scopes:\n"
@@ -140,32 +115,30 @@ def _build_prompt(
         "- Explain who does what, when, where, or how.\n"
         "- Say what happens in real life.\n"
         "- Use common words first.\n"
-        "- Prefer: approve instead of adopt; use instead of utilize; remove instead of redact; send in instead of submit; show instead of demonstrate; can instead of may; must instead of shall; not allowed to instead of prohibited; person instead of individual.\n"
         "- Do not copy the source sentence with only small word changes.\n"
-        "- Do not add extra claims beyond the selected text.\n"
+        "- Do not add extra claims beyond the Rule Unit.\n"
         "- Do not use internal system words in plain_meaning.\n"
-        "- Banned in plain_meaning: node, operational, operationally, operational effect, indicates, the text indicates, engage, facilitate, utilize, affected actor, process can proceed.\n\n"
+        "- Banned in plain_meaning: node, rule unit, operational, operationally, operational effect, indicates, the text indicates, engage, facilitate, utilize, affected actor, process can proceed.\n\n"
         "Output requirements:\n"
         "- Return ONLY valid JSON.\n"
         "- Do not include markdown fences or text outside JSON.\n"
         "- Return one top-level JSON object with exactly these keys: detected_scopes, plain_meaning, scope_details, missing_information, lenses.\n"
-        "- detected_scopes must be an array of scope names from the allowed list, only when supported by the selected text.\n"
-        "- plain_meaning must be one or two short public-language sentences, or null only if the selected text is too incomplete to explain.\n"
+        "- detected_scopes must be an array of scope names from the allowed list, only when supported by the Rule Unit.\n"
+        "- plain_meaning must be one or two short public-language sentences, or null only if the Rule Unit is not safe to explain.\n"
         "- scope_details must be an array of objects with scope, detail, and evidence. Include only detected scopes.\n"
-        "- missing_information must be an array of short strings. Include items only when the selected text lacks details needed for the explanation.\n"
-        "- lenses must be an array of objects with lens, detected, and detail for all six scopes, preserving compatibility.\n"
-        "- Do not mark missing origin or verification context as insufficient if the selected text itself supports a plain explanation.\n"
-        "- If no scopes are detected but the selected text is still clear, detected_scopes and scope_details may be empty and plain_meaning should explain the explicit meaning.\n\n"
+        "- missing_information must be an array of short strings.\n"
+        "- lenses must be an array of objects with lens, detected, and detail for all six scopes.\n"
+        "- Do not mark missing origin or verification context as insufficient if the Rule Unit itself supports a plain explanation.\n\n"
         "Example output:\n"
         "{"
         "\"detected_scopes\":[\"modality_shift\"],"
         "\"plain_meaning\":\"The agency has 30 days to update the public list after it approves the rule.\","
         "\"scope_details\":["
-        "{\"scope\":\"modality_shift\",\"detail\":\"The text creates a required action.\",\"evidence\":\"shall update\"}"
+        "{\"scope\":\"modality_shift\",\"detail\":\"The rule creates a required action.\",\"evidence\":\"shall update\"}"
         "],"
         "\"missing_information\":[],"
         "\"lenses\":["
-        "{\"lens\":\"modality_shift\",\"detected\":true,\"detail\":\"The text creates a required action.\"},"
+        "{\"lens\":\"modality_shift\",\"detected\":true,\"detail\":\"The rule creates a required action.\"},"
         "{\"lens\":\"scope_change\",\"detected\":false,\"detail\":null},"
         "{\"lens\":\"actor_power_shift\",\"detected\":false,\"detail\":null},"
         "{\"lens\":\"action_domain_shift\",\"detected\":false,\"detail\":null},"
@@ -243,7 +216,6 @@ def _as_string_list(value: Any, allowed: set[str] | None = None) -> list[str]:
 
 
 def _normalize_meaning_payload(content: str) -> dict[str, Any] | dict[str, str]:
-    """Parse model output into the Meaning Buddy object contract."""
     payload = _parse_json_payload(content)
     if isinstance(payload, dict) and "error" in payload:
         return payload
@@ -286,7 +258,6 @@ def _normalize_meaning_payload(content: str) -> dict[str, Any] | dict[str, str]:
 
 
 def _call_openai(prompt: str) -> dict[str, Any] | dict[str, str]:
-    """Call OpenAI-compatible API. Returns parsed meaning output or a structured error."""
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         return {
@@ -404,13 +375,25 @@ def _coerce_scope_details(value: Any) -> list[MeaningScopeDetail]:
     return details
 
 
+def _build_error_result(unit: RuleUnit, error: str, message: str | None = None) -> MeaningNodeResult:
+    return MeaningNodeResult(
+        node_id=unit.rule_unit_id,
+        source_text=unit.source_text_combined,
+        status="error",
+        error=error,
+        message=message,
+        lenses=[],
+        missing_information=unit.assembly_issues,
+    )
+
+
 def process_meaning(
-    selected_nodes: list[StructureNode],
+    rule_units: list[RuleUnit],
     run: bool = True,
     origin_result: OriginResult | None = None,
     verification_result: VerificationResult | None = None,
 ) -> MeaningResult:
-    """Process meaning for selected nodes. AI layer."""
+    """Process Meaning for rule units. AI layer."""
     if not run:
         return MeaningResult(
             status="skipped",
@@ -419,10 +402,18 @@ def process_meaning(
 
     node_results: list[MeaningNodeResult] = []
 
-    for node in selected_nodes:
-        verification_node = _verification_for_node(verification_result, node.node_id)
+    for unit in rule_units:
+        if not unit.meaning_eligible:
+            node_results.append(_build_error_result(
+                unit,
+                "rule_unit_not_meaning_eligible",
+                "Rule unit was not safe to explain independently.",
+            ))
+            continue
+
+        verification_node = _verification_for_unit(verification_result, unit.rule_unit_id)
         prompt = _build_prompt(
-            node,
+            unit,
             origin_result=origin_result,
             verification_node=verification_node,
         )
@@ -431,8 +422,8 @@ def process_meaning(
         if isinstance(raw, dict) and "error" in raw:
             node_results.append(
                 MeaningNodeResult(
-                    node_id=node.node_id,
-                    source_text=node.source_text,
+                    node_id=unit.rule_unit_id,
+                    source_text=unit.source_text_combined,
                     status="error",
                     error=raw["error"],
                     message=raw.get("message"),
@@ -445,8 +436,8 @@ def process_meaning(
         if not raw:
             node_results.append(
                 MeaningNodeResult(
-                    node_id=node.node_id,
-                    source_text=node.source_text,
+                    node_id=unit.rule_unit_id,
+                    source_text=unit.source_text_combined,
                     status="empty",
                     message="No meaning output returned",
                     lenses=[],
@@ -458,8 +449,8 @@ def process_meaning(
         if isinstance(lenses, dict):
             node_results.append(
                 MeaningNodeResult(
-                    node_id=node.node_id,
-                    source_text=node.source_text,
+                    node_id=unit.rule_unit_id,
+                    source_text=unit.source_text_combined,
                     status="error",
                     error=lenses["error"],
                     message=lenses.get("message"),
@@ -483,8 +474,8 @@ def process_meaning(
         if plain_meaning is None and not missing_information:
             node_results.append(
                 MeaningNodeResult(
-                    node_id=node.node_id,
-                    source_text=node.source_text,
+                    node_id=unit.rule_unit_id,
+                    source_text=unit.source_text_combined,
                     status="error",
                     error="plain_meaning_missing",
                     message="Meaning response did not include plain_meaning or missing_information",
@@ -498,8 +489,8 @@ def process_meaning(
 
         node_results.append(
             MeaningNodeResult(
-                node_id=node.node_id,
-                source_text=node.source_text,
+                node_id=unit.rule_unit_id,
+                source_text=unit.source_text_combined,
                 status="executed",
                 lenses=lenses,
                 detected_scopes=detected_scopes,
