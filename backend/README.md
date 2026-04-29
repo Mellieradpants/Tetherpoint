@@ -1,42 +1,46 @@
-# Tetherpoint
+# Tetherpoint Backend
 
 Source-anchored parsing stack. API-first.
 
-## Locked Layer Order
+## Executable layer order
 
-| # | Layer        | Purpose                                      | AI |
-|---|--------------|----------------------------------------------|----|
-| 1 | Input        | Intake only. No inference.                   | No |
-| 2 | Structure    | Deterministic parse and normalize.           | No |
-| 3 | Selection    | Deterministic node eligibility.              | No |
-| 4 | Meaning      | AI interpretation (only AI layer).           | Yes|
-| 5 | Origin       | Provenance / source tracing only.            | No |
-| 6 | Verification | Verification-path routing only.              | No |
-| 7 | Output       | Presentation only. No transformation.        | No |
+The current backend executes this order:
 
-This order is locked. Layers are not merged, collapsed, or reordered.
+| # | Layer | Purpose | AI |
+|---|---|---|---|
+| 1 | Input | Intake and well-formedness validation. No inference. | No |
+| 2 | Structure | Deterministic parse, normalization, hierarchy, and source anchors. | No |
+| 3 | Origin | Provenance and source-signal extraction. | No |
+| 4 | Selection | Deterministic node eligibility. | No |
+| 5 | Verification | Verification-path routing only. | No |
+| 6 | Meaning | Plain-language explanation of selected nodes. | Yes |
+| 7 | Output | Assemble upstream results. No new meaning. | No |
 
-## Hard Constraints
+This order matches `backend/app/pipeline/runner.py`.
 
-- No inference in Input, Structure, or Selection
-- Meaning is the only AI layer
-- Selection passes eligible unchanged nodes forward
-- Origin traces provenance only — no credibility judgment
-- Verification routes to record systems — no true/false decisions
-- Output presents upstream results — no transformation
-- Fail > guess
-- Absence is not permission to invent
+Meaning runs after Origin and Verification so it can use provenance signals and verification routes as read-only grounding context.
+
+## Hard constraints
+
+- No inference in Input, Structure, Origin, Selection, Verification, or Output.
+- Meaning is the only AI layer.
+- Selection passes eligible nodes forward unchanged.
+- Origin traces provenance only and does not judge credibility.
+- Verification routes to record systems only and does not decide truth.
+- Output presents upstream results and should not transform meaning.
+- Fail rather than guess.
+- Absence is not permission to invent.
 
 ## Endpoints
 
-| Method | Path      | Description                                |
-|--------|-----------|--------------------------------------------|
-| POST   | /analyze  | Run the 7-layer pipeline on a document     |
-| GET    | /health   | Liveness check                             |
-| GET    | /docs     | Interactive OpenAPI documentation (Swagger)|
-| GET    | /redoc    | ReDoc documentation                        |
+| Method | Path | Description |
+|---|---|---|
+| POST | `/analyze` | Run the 7-layer pipeline on a document |
+| GET | `/health` | Liveness check |
+| GET | `/docs` | Interactive OpenAPI documentation |
+| GET | `/redoc` | ReDoc documentation |
 
-## API Contract
+## API contract
 
 See `openapi.yaml` for the full OpenAPI 3.1 specification.
 
@@ -58,20 +62,32 @@ See `openapi.yaml` for the full OpenAPI 3.1 specification.
 
 ```json
 {
-  "input": { ... },
-  "structure": { ... },
-  "selection": { ... },
-  "meaning": { ... },
-  "origin": { ... },
-  "verification": { ... },
-  "output": { ... },
-  "errors": [ ... ]
+  "input": {},
+  "structure": {},
+  "selection": {},
+  "meaning": {},
+  "origin": {},
+  "verification": {},
+  "output": {},
+  "errors": []
 }
 ```
 
-Each layer produces its own distinct section. No layers are merged.
+Each layer produces its own distinct section. Layers are not merged.
 
-## Run Backend
+## Authentication
+
+The backend `/analyze` endpoint is intended to be called by the server-side Vercel proxy, not directly by the browser.
+
+The backend requires this header when `ANALYZE_SECRET` is configured:
+
+```text
+x-analyze-secret: <shared secret>
+```
+
+The browser calls `/api/analyze`; the Vercel function attaches the backend secret before forwarding the request.
+
+## Run backend locally
 
 ### Prerequisites
 
@@ -88,13 +104,21 @@ source venv/bin/activate    # Linux/macOS
 pip install -r requirements.txt
 ```
 
-### Environment Variables
+### Environment variables
 
 ```bash
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY if you want the Meaning layer to execute.
-# Without it, Meaning returns status="skipped" — all other layers still run.
 ```
+
+Set these as needed:
+
+```text
+ANALYZE_SECRET=<shared secret for server-to-server calls>
+OPENAI_API_KEY=<optional, only needed for Meaning>
+ALLOWED_ORIGINS=http://localhost:5173,https://your-frontend.example
+```
+
+Without `OPENAI_API_KEY`, the Meaning layer returns explicit per-node errors or skipped status depending on the request path. Other layers can still run.
 
 ### Start
 
@@ -102,14 +126,18 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-API docs at http://localhost:8000/docs
+API docs are available at:
+
+```text
+http://localhost:8000/docs
+```
 
 ### Docker
 
 ```bash
 cd backend
 docker build -t tetherpoint .
-docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... tetherpoint
+docker run -p 8000:8000 -e ANALYZE_SECRET=dev-secret tetherpoint
 ```
 
 ## Sample curl
@@ -117,6 +145,7 @@ docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... tetherpoint
 ```bash
 curl -X POST http://localhost:8000/analyze \
   -H "Content-Type: application/json" \
+  -H "x-analyze-secret: dev-secret" \
   -d '{
     "content": "The SEC must enforce compliance by March 2025. Congress enacted Public Law 118-1.",
     "content_type": "text",
@@ -128,65 +157,56 @@ curl -X POST http://localhost:8000/analyze \
   }'
 ```
 
-## Run Tests
+## Run tests
 
 ```bash
 cd backend
 python -m pytest app/tests/ -v
 ```
 
-## What Meaning Requires
+## What each layer does
 
-The Meaning layer (Layer 4) is the only layer that uses AI. It requires:
+1. Input — Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
 
-- An OpenAI-compatible API key set as `OPENAI_API_KEY` environment variable
-- Network access to `https://api.openai.com/v1/chat/completions`
+2. Structure — Deterministic parsing via 10 subsystems: SSE, LNS, CFS, 5W1H, AAC, TPS, SJM, MPS, RDS, and ISC. Each node carries source anchors for traceability.
 
-If the key is not set, Meaning returns `{"status": "skipped", "message": "Meaning not executed: no OPENAI_API_KEY configured"}`. No fake output is produced. All other layers continue to execute normally.
+3. Origin — Extracts provenance signals from the source document. For HTML, this includes canonical URL, author, publish time, JSON-LD publisher, Open Graph tags, and Twitter card tags. For JSON/XML, this includes explicit metadata fields. Distribution metadata stays separate from origin identity.
 
-## What Each Layer Does
+4. Selection — Deterministic eligibility check. Nodes must have source text, must not be CFS-blocked, and must contain at least one structured signal. Nodes pass through unchanged.
 
-1. **Input** — Accepts raw content (xml/html/json/text). Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
+5. Verification — Routes assertions to candidate record systems. Detects broad assertion types and maps them to record systems such as Congress.gov, PubMed, SEC EDGAR, FERC, and National Archives. This is routing logic, not truth logic.
 
-2. **Structure** — Deterministic parsing via 10 subsystems: SSE (statement extraction), LNS (whitespace normalization), CFS (constraint filtering), 5W1H (explicit who/what/when/where/why/how), AAC (actor/action/condition), TPS (temporal parsing), SJM (jurisdiction mapping), MPS (mechanism parsing), RDS (risk decomposition), ISC (node assembly). Each node carries source anchors for traceability.
+6. Meaning — The only AI layer. Evaluates selected nodes against constrained meaning lenses and produces plain-language explanation. It does not alter original node text.
 
-3. **Selection** — Deterministic eligibility check. Nodes must have source text, not be CFS-blocked, and contain at least one structured signal. Nodes pass through unchanged. No rewriting, no summarizing.
+7. Output — Assembles the final response from upstream layers. Presentation only.
 
-4. **Meaning** — The only AI layer. Evaluates each selected node against 6 analytical lenses: modality shift, scope change, actor power shift, action domain shift, threshold/standard shift, obligation removal. Does not alter original node text.
+## Project structure
 
-5. **Origin** — Extracts provenance signals from the source document. For HTML: canonical URL, author, publish time, JSON-LD publisher, OG tags, Twitter cards. For JSON/XML: top-level metadata fields. Distribution metadata is explicitly separated from origin identity.
-
-6. **Verification** — Routes assertions to candidate record systems. Detects assertion types (legal, court, government, scientific, statistical, corporate, infrastructure, historical) and maps them to record systems (Congress.gov, PubMed, SEC EDGAR, FERC, etc.). This is routing logic, not truth logic.
-
-7. **Output** — Assembles final response from all upstream layers. No transformation. Presentation only.
-
-## Project Structure
-
-```
+```text
 backend/
   app/
-    main.py              # FastAPI app, endpoints
+    main.py              # FastAPI app, endpoints, CORS
     schemas/
-      models.py          # All Pydantic models (matches openapi.yaml)
+      models.py          # Pydantic models
     input/
       handler.py         # Layer 1: Input
     structure/
       handler.py         # Layer 2: Structure
     selection/
-      handler.py         # Layer 3: Selection
+      handler.py         # Layer 4: Selection
     meaning/
-      handler.py         # Layer 4: Meaning (AI)
+      handler.py         # Layer 6: Meaning
     origin/
-      handler.py         # Layer 5: Origin
+      handler.py         # Layer 3: Origin
     verification/
-      handler.py         # Layer 6: Verification
+      handler.py         # Layer 5: Verification
     output/
       handler.py         # Layer 7: Output
     pipeline/
-      runner.py          # Orchestrates layers in locked order
+      runner.py          # Orchestrates executable layer order
     tests/
       test_pipeline.py   # Backend tests
-  openapi.yaml           # OpenAPI 3.1 spec (source of truth)
+  openapi.yaml           # OpenAPI 3.1 spec
   requirements.txt
   Dockerfile
   .env.example
