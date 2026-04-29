@@ -277,6 +277,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     [ruleUnits]
   );
 
+  // Public Meaning view: combine rule-unit translations into a readable document-level summary.
+  // Rule units remain underneath as traceable breakdowns, not the first thing the reader has to parse.
   const overallPlainMeaning = useMemo(() => {
     const sentences = ruleUnits
       .map((unit) => meaningMap.get(unit.rule_unit_id)?.plain_meaning?.trim())
@@ -285,6 +287,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
     return chunkSentences(sentences, 4);
   }, [meaningMap, ruleUnits]);
 
+  // Keep review/debug notes out of the main explanation. They are available only when expanded.
   const meaningIssues = useMemo(() => {
     return data.meaning.node_results
       .filter((result) => result.status !== "executed" || (result.missing_information && result.missing_information.length > 0))
@@ -294,6 +297,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       }));
   }, [data.meaning.node_results]);
 
+  // Verification stays at the rule-unit level so routing follows coherent legal units, not atomic fragments.
   const verificationSummary = useMemo(() => {
     const routes = new Map<string, { assertionTypes: Set<string>; unitIds: Set<string>; evidence: string[] }>();
     const assertionTypes = new Set<string>();
@@ -411,6 +415,7 @@ export function Workspace({ data }: { data: PipelineResponse }) {
               )}
             </div>
 
+            {/* Traceability remains accessible without making atomic/rule-unit structure the default reading path. */}
             <details className="rounded-xl border border-border/60 bg-surface px-4 py-4">
               <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                 Rule unit breakdown
