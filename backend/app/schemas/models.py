@@ -125,6 +125,7 @@ class RuleUnit(BaseModel):
     timing: list[RuleUnitNodeRef] = Field(default_factory=list)
     jurisdiction: list[RuleUnitNodeRef] = Field(default_factory=list)
     mechanisms: list[RuleUnitNodeRef] = Field(default_factory=list)
+    external_references: list[str] = Field(default_factory=list)
     source_node_ids: list[str] = Field(default_factory=list)
     fragment_node_ids: list[str] = Field(default_factory=list)
     source_text_combined: str
@@ -151,6 +152,7 @@ class MeaningBrief(BaseModel):
     conditions: list[str] = Field(default_factory=list)
     exceptions: list[str] = Field(default_factory=list)
     referenced_acts: list[str] = Field(default_factory=list)
+    external_reference_needed: bool = False
     truncated: bool = False
 
 
