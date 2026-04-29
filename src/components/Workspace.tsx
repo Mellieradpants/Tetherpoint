@@ -210,7 +210,7 @@ export interface PipelineResponse {
   errors: Array<{ layer: string; error: string; fatal?: boolean }>;
 }
 
-type DetailTab = "meaning" | "verification" | "origin" | "governance";
+type DetailTab = "meaning" | "rule_units" | "verification" | "origin" | "governance" | "errors";
 
 const ORIGIN_EMPTY_MESSAGE = "Pasted text has no verifiable source metadata. Use official HTML, XML, JSON, or source metadata to enable Origin signals.";
 
@@ -225,6 +225,18 @@ const ASSERTION_TYPE_LABELS: Record<string, string> = {
   historical_archival: "Historical / archival records",
 };
 
+const PIPELINE_LAYERS = [
+  "Input",
+  "Structure",
+  "Origin",
+  "Selection",
+  "Rule Units",
+  "Verification",
+  "Meaning",
+  "Governance",
+  "Output",
+];
+
 function formatAssertionType(assertionType: string): string {
   return ASSERTION_TYPE_LABELS[assertionType] ?? assertionType.replaceAll("_", " ");
 }
@@ -232,6 +244,20 @@ function formatAssertionType(assertionType: string): string {
 function formatStatus(status: string | null | undefined): string {
   if (!status) return "Not specified";
   return status.replaceAll("_", " ");
+}
+
+function getStatusTone(status: string | null | undefined): string {
+  const normalized = status?.toLowerCase() ?? "";
+  if (["error", "blocked", "failed", "fatal"].some((token) => normalized.includes(token))) {
+    return "border-destructive/50 bg-destructive/10 text-destructive";
+  }
+  if (["needs_review", "fallback", "repaired", "skipped"].some((token) => normalized.includes(token))) {
+    return "border-gold/30 bg-gold/10 text-gold-muted";
+  }
+  if (["executed", "ok", "clean", "match", "ready", "complete"].some((token) => normalized.includes(token))) {
+    return "border-primary/30 bg-primary/10 text-primary";
+  }
+  return "border-border/60 bg-background/30 text-muted-foreground";
 }
 
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -254,6 +280,74 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function EmptyState({ message }: { message: string }) {
   return <div className="text-sm italic text-muted-foreground">{message}</div>;
+}
+
+function StatusPill({ label, status }: { label: string; status: string | null | undefined }) {
+  return (
+    <div className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-widest ${getStatusTone(status)}`}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="mx-1 text-border">/</span>
+      <span>{formatStatus(status)}</span>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-surface/80 p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-xl font-semibold text-foreground">{value}</div>
+      {detail && <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{detail}</div>}
+    </div>
+  );
+}
+
+function EngineTraceHeader({ data, routeCount }: { data: PipelineResponse; routeCount: number }) {
+  const governanceStatus = data.governance?.status ?? data.output.governance_status ?? "not returned";
+  const governanceIssues = data.governance?.issue_count ?? data.output.governance_issue_count ?? 0;
+  const layerStatuses: Record<string, string> = {
+    Input: data.input.parse_status,
+    Structure: data.structure.validation_report.status,
+    Origin: data.origin.status,
+    Selection: `${data.selection.selected_nodes.length} selected`,
+    "Rule Units": `${data.rule_units.ready_count} ready`,
+    Verification: data.verification.status,
+    Meaning: data.meaning.status,
+    Governance: governanceStatus,
+    Output: data.errors.length > 0 ? "review" : "assembled",
+  };
+
+  return (
+    <div className="border-b border-border bg-surface/40 px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gold-muted">Engine Trace Console</div>
+          <div className="mt-1 text-xs text-muted-foreground">9-layer source-anchored pipeline execution</div>
+        </div>
+        <StatusPill label="governance" status={governanceStatus} />
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-9">
+        {PIPELINE_LAYERS.map((layer, index) => (
+          <div key={layer} className="rounded-xl border border-border/50 bg-background/30 p-2">
+            <div className="text-[10px] text-muted-foreground">{String(index + 1).padStart(2, "0")}</div>
+            <div className="mt-1 text-xs font-semibold text-foreground">{layer}</div>
+            <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] ${getStatusTone(layerStatuses[layer])}`}>
+              {formatStatus(layerStatuses[layer])}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <MetricCard label="Source nodes" value={data.structure.node_count} detail={`${data.structure.section_count} section(s)`} />
+        <MetricCard label="Selected nodes" value={data.selection.selected_nodes.length} detail={`${data.selection.excluded_nodes.length} excluded`} />
+        <MetricCard label="Rule Units" value={data.rule_units.unit_count} detail={`${data.rule_units.ready_count} ready · ${data.rule_units.needs_review_count} review`} />
+        <MetricCard label="Verification routes" value={routeCount} detail={`${data.verification.node_results.length} checked`} />
+        <MetricCard label="Governance issues" value={governanceIssues} detail={formatStatus(governanceStatus)} />
+      </div>
+    </div>
+  );
 }
 
 function OriginSignalList({ signals }: { signals: OriginSignal[] }) {
@@ -343,10 +437,38 @@ function NodeRefList({ label, items }: { label: string; items: RuleUnitNodeRef[]
       <div className="space-y-2">
         {items.map((item) => (
           <div key={`${label}-${item.node_id}`} className="rounded border border-border/40 bg-background/40 p-2 text-sm leading-relaxed text-muted-foreground">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{item.node_id} · {formatStatus(item.role)}</div>
             {item.text}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SourceAnchorList({ unit }: { unit: RuleUnit }) {
+  const anchors = [...unit.source_node_ids, ...unit.fragment_node_ids.filter((id) => !unit.source_node_ids.includes(id))];
+
+  if (anchors.length === 0 && !unit.source_text_combined) {
+    return <EmptyState message="No source anchors returned for this rule unit." />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {anchors.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {anchors.map((anchor) => (
+            <span key={anchor} className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 font-mono text-[10px] text-muted-foreground">
+              {anchor}
+            </span>
+          ))}
+        </div>
+      )}
+      {unit.source_text_combined && (
+        <div className="rounded-xl border border-border/50 bg-background/40 p-3 text-sm leading-relaxed text-foreground">
+          {unit.source_text_combined}
+        </div>
+      )}
     </div>
   );
 }
@@ -367,6 +489,81 @@ function RuleUnitMeaning({ meaning }: { meaning: MeaningNodeResult | undefined }
     <div className="text-sm leading-relaxed text-foreground">{meaning.plain_meaning}</div>
   ) : (
     <EmptyState message="Plain meaning was not returned for this rule unit." />
+  );
+}
+
+function RuleUnitsDetails({ ruleUnits, meaningMap }: { ruleUnits: RuleUnit[]; meaningMap: Map<string, MeaningNodeResult> }) {
+  return (
+    <div className="space-y-4 p-4 pb-12">
+      <div className="rounded-xl border border-border/60 bg-surface px-4 py-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Rule Units</div>
+        <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Rule Units are the interpretation units assembled from selected source nodes. Meaning and Verification operate on these units, not loose text fragments.
+        </div>
+      </div>
+
+      {ruleUnits.length === 0 ? <EmptyState message="No rule units were assembled for this input." /> : ruleUnits.map((unit, index) => {
+        const unitMeaning = meaningMap.get(unit.rule_unit_id);
+        return (
+          <div key={unit.rule_unit_id} className="rounded-xl border border-border/50 bg-surface px-4 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{String(index + 1).padStart(2, "0")} · {unit.rule_unit_id}</div>
+                <div className="mt-2 text-base font-semibold leading-snug text-foreground">{unit.primary_text || unit.source_text_combined || "Rule unit needs review"}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <StatusPill label="assembly" status={unit.assembly_status} />
+                <StatusPill label="review" status={unit.review_status} />
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <MetricCard label="Meaning eligible" value={unit.meaning_eligible ? "yes" : "no"} />
+              <MetricCard label="Verification eligible" value={unit.verification_eligible ? "yes" : "no"} />
+              <MetricCard label="Source nodes" value={unit.source_node_ids.length} />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <Section title="Source Anchors"><SourceAnchorList unit={unit} /></Section>
+              <Section title="Plain Meaning"><RuleUnitMeaning meaning={unitMeaning} /></Section>
+            </div>
+
+            <NodeRefList label="Conditions" items={unit.conditions} />
+            <NodeRefList label="Exceptions" items={unit.exceptions} />
+            <NodeRefList label="Evidence Requirements" items={unit.evidence_requirements} />
+            <NodeRefList label="Consequences" items={unit.consequences} />
+            <NodeRefList label="Definitions" items={unit.definitions} />
+            <NodeRefList label="Timing" items={unit.timing} />
+            <NodeRefList label="Jurisdiction" items={unit.jurisdiction} />
+            <NodeRefList label="Mechanisms" items={unit.mechanisms} />
+
+            {unit.assembly_issues.length > 0 && (
+              <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-3 text-sm text-gold-muted">
+                Needs review: {unit.assembly_issues.join(", ")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ErrorsDetails({ errors }: { errors: PipelineResponse["errors"] }) {
+  if (errors.length === 0) {
+    return <div className="p-5"><EmptyState message="No pipeline errors were returned." /></div>;
+  }
+
+  return (
+    <div className="space-y-3 p-5 pb-12">
+      {errors.map((error, index) => (
+        <div key={`${error.layer}-${index}`} className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="font-semibold uppercase tracking-widest">{error.layer}</div>
+          <div className="mt-2 leading-relaxed">{error.error}</div>
+          {error.fatal && <div className="mt-2 text-xs uppercase tracking-widest">fatal</div>}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -438,33 +635,17 @@ export function Workspace({ data }: { data: PipelineResponse }) {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 text-[11px] text-muted-foreground">
-        <span><span className="font-medium text-foreground">{data.structure.node_count}</span> nodes</span>
-        <span className="text-border">·</span>
-        <span><span className="font-medium text-foreground">{data.structure.section_count}</span> sections</span>
-        <span className="text-border">·</span>
-        <span><span className="font-medium text-foreground">{data.selection.selected_nodes.length}</span> selected</span>
-        <span className="text-border">·</span>
-        <span><span className="font-medium text-foreground">{ruleUnits.length}</span> rule units</span>
-        <div className="hidden flex-1 md:block" />
-        <span>Meaning: <span className="font-medium text-primary">{data.meaning.status}</span></span>
-        <span>Origin: <span className="font-medium text-foreground">{data.origin.status}</span></span>
-        <span>Verification: <span className="font-medium text-foreground">{data.verification.status}</span></span>
-        {data.governance && <span>Governance: <span className="font-medium text-foreground">{data.governance.status}</span></span>}
-      </div>
+      <EngineTraceHeader data={data} routeCount={verificationSummary.routes.length} />
 
       {data.errors.length > 0 && (
         <div className="mx-4 mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <strong>Errors</strong>
-          <ul className="mt-1 list-inside list-disc text-xs">
-            {data.errors.map((error, index) => <li key={`${error.layer}-${index}`}>{error.layer}: {error.error}</li>)}
-          </ul>
+          Errors returned by pipeline. Open the Errors tab for details.
         </div>
       )}
 
       <div className="border-b border-border bg-surface/30 px-4 py-3">
         <div className="flex flex-wrap gap-2">
-          {(["meaning", "verification", "origin", "governance"] as DetailTab[]).map((tab) => (
+          {(["meaning", "rule_units", "verification", "origin", "governance", "errors"] as DetailTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -472,7 +653,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
               aria-pressed={activeTab === tab}
               className={`rounded-full border px-3.5 py-2 text-sm font-medium capitalize transition-colors ${activeTab === tab ? "border-gold/30 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
             >
-              {tab}
+              {tab.replace("_", " ")}
+              {tab === "errors" && data.errors.length > 0 ? ` (${data.errors.length})` : ""}
             </button>
           ))}
         </div>
@@ -501,37 +683,10 @@ export function Workspace({ data }: { data: PipelineResponse }) {
                 </details>
               )}
             </div>
-
-            <details className="rounded-xl border border-border/60 bg-surface px-4 py-4">
-              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Rule unit breakdown</summary>
-              <div className="mt-4 space-y-3">
-                {ruleUnits.length === 0 ? <EmptyState message="No rule units available for Meaning." /> : ruleUnits.map((unit, index) => {
-                  const unitMeaning = meaningMap.get(unit.rule_unit_id);
-                  return (
-                    <div key={unit.rule_unit_id} className="rounded-xl border border-border/50 bg-background/40 px-4 py-4">
-                      <div className="flex items-start gap-4">
-                        <span className="pt-1 text-base font-medium text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-base font-semibold leading-snug text-foreground">{unit.primary_text || unit.source_text_combined || "Rule unit needs review"}</div>
-                          <NodeRefList label="Conditions" items={unit.conditions} />
-                          <NodeRefList label="Exceptions" items={unit.exceptions} />
-                          <NodeRefList label="Evidence Requirements" items={unit.evidence_requirements} />
-                          <NodeRefList label="Consequences" items={unit.consequences} />
-                          <NodeRefList label="Definitions" items={unit.definitions} />
-                          {unit.assembly_issues.length > 0 && <div className="mt-3 rounded border border-border/40 bg-surface p-2 text-sm text-muted-foreground">Needs review: {unit.assembly_issues.join(", ")}</div>}
-                          <div className="mt-4 rounded-xl border border-border/60 bg-surface p-3">
-                            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Plain Meaning</div>
-                            <RuleUnitMeaning meaning={unitMeaning} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
           </div>
         )}
+
+        {activeTab === "rule_units" && <RuleUnitsDetails ruleUnits={ruleUnits} meaningMap={meaningMap} />}
 
         {activeTab === "verification" && (
           <div className="space-y-5 px-5 py-6 pb-12">
@@ -574,6 +729,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
         )}
 
         {activeTab === "governance" && <GovernanceDetails governance={data.governance} />}
+
+        {activeTab === "errors" && <ErrorsDetails errors={data.errors} />}
       </div>
     </div>
   );
