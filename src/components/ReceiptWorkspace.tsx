@@ -15,9 +15,12 @@ type GovernanceCheck = {
 };
 
 type GovernanceRecord = {
-  extractedValue?: string;
-  sourceSystem?: string;
-  overallStatus?: string;
+  inputField?: string | null;
+  extractedValue?: string | null;
+  sourceAnchor?: string | null;
+  sourceSystem?: string | null;
+  documentType?: string | null;
+  overallStatus?: string | null;
   activeIssues?: GovernanceCheck[];
 };
 
@@ -63,8 +66,7 @@ function displayStatus(value: string | null | undefined): string {
 }
 
 function rawStatus(value: string | null | undefined): string {
-  if (!value) return "";
-  return value.toLowerCase();
+  return value?.toLowerCase() ?? "";
 }
 
 function hideAtomicReferences(value: string | null | undefined): string {
@@ -167,9 +169,7 @@ function buildResultText(data: PipelineResponse) {
   const systems = new Set<string>();
 
   for (const result of safeArray(data.verification?.node_results)) {
-    for (const system of safeArray(result.expected_record_systems)) {
-      systems.add(system);
-    }
+    for (const system of safeArray(result.expected_record_systems)) systems.add(system);
   }
 
   return [
@@ -386,6 +386,11 @@ function OriginTab({ data }: { data: PipelineResponse }) {
 function VerificationTab({ data }: { data: PipelineResponse }) {
   const sourceByRule = ruleTextById(data);
   const results = safeArray(data.verification?.node_results);
+  const visibleResults = results.filter((result) => (
+    result.assertion_detected ||
+    result.verification_path_available ||
+    safeArray(result.expected_record_systems).length > 0
+  ));
   const routed = results.filter((result) => safeArray(result.expected_record_systems).length > 0);
 
   return (
@@ -399,17 +404,17 @@ function VerificationTab({ data }: { data: PipelineResponse }) {
       </Section>
 
       <Section title="Verification Routes">
-        {results.length > 0 ? (
+        {visibleResults.length > 0 ? (
           <div className="space-y-3">
-            {results.map((result, index) => {
+            {visibleResults.map((result, index) => {
               const systems = safeArray(result.expected_record_systems);
               const sourceText = sourceByRule.get(result.rule_unit_id || result.node_id);
               const notes = hideAtomicReferences(result.verification_notes);
               return (
                 <div key={`verification-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill label="assertion" status={result.assertion_detected ? "detected" : "not detected"} />
-                    <StatusPill label="path" status={result.verification_path_available ? "available" : "unavailable"} />
+                    {result.assertion_detected && <StatusPill label="assertion" status="detected" />}
+                    {result.verification_path_available && <StatusPill label="path" status="available" />}
                   </div>
                   {result.assertion_type && <div className="mt-3 text-sm leading-6 text-muted-foreground">Assertion type: {displayStatus(result.assertion_type)}</div>}
                   {systems.length > 0 && (
@@ -423,7 +428,7 @@ function VerificationTab({ data }: { data: PipelineResponse }) {
               );
             })}
           </div>
-        ) : <EmptyState>No verification details were returned.</EmptyState>}
+        ) : <EmptyState>No verification routes were detected for this input.</EmptyState>}
       </Section>
     </div>
   );
@@ -448,11 +453,12 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
           <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>{issueCount} issue(s)</span>
           <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{governance?.record_count ?? records.length} checked</span>
         </div>
+        {issueCount === 0 && records.length > 0 && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance checked {records.length} source-backed record(s) and found no review issues.</p>}
         {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(governance.principle)}</p>}
       </Section>
 
-      <Section title="Review Items">
-        {activeIssues.length > 0 ? (
+      {activeIssues.length > 0 && (
+        <Section title="Review Items">
           <div className="space-y-3">
             {activeIssues.map((issue, index) => (
               <div key={`${issue.checkName}-${index}`} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
@@ -463,31 +469,35 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
               </div>
             ))}
           </div>
-        ) : <EmptyState>No governance review items were returned.</EmptyState>}
-      </Section>
+        </Section>
+      )}
 
-      <Section title="Backed Governance Results">
+      <Section title="Records Checked">
         {records.length > 0 ? (
-          <div className="space-y-3">
-            {records.map((record, index) => {
-              const issues = safeArray(record.activeIssues);
-              return (
-                <div key={`governance-record-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
-                  <div className="flex flex-wrap gap-2">
-                    <StatusPill label="result" status={record.overallStatus} />
-                    {record.sourceSystem && <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-medium text-muted-foreground">{displayStatus(record.sourceSystem)}</span>}
-                  </div>
-                  {record.extractedValue && <div className="mt-3"><SourceQuote>{hideAtomicReferences(record.extractedValue)}</SourceQuote></div>}
-                  {issues.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {issues.map((issue, issueIndex) => <div key={`${issue.checkName}-${issueIndex}`} className="text-sm leading-6 text-gold-muted">{issue.checkName || "Check"}: {hideAtomicReferences(issue.issue || displayStatus(issue.status))}</div>)}
+          <details className="rounded-lg border border-border/50 bg-background/30 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">View source-backed records used for the governance check</summary>
+            <div className="mt-3 space-y-3">
+              {records.map((record, index) => {
+                const issues = safeArray(record.activeIssues);
+                return (
+                  <div key={`governance-record-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                    <div className="flex flex-wrap gap-2">
+                      <StatusPill label="checked record" status={record.overallStatus} />
+                      {record.inputField && <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-medium text-muted-foreground">{record.inputField}</span>}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : <EmptyState>No governance records were returned.</EmptyState>}
+                    {record.extractedValue && <div className="mt-3"><SourceQuote>{hideAtomicReferences(record.extractedValue)}</SourceQuote></div>}
+                    {record.sourceAnchor && <div className="mt-2 text-xs leading-5 text-muted-foreground">Source backing: {hideAtomicReferences(record.sourceAnchor)}</div>}
+                    {issues.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {issues.map((issue, issueIndex) => <div key={`${issue.checkName}-${issueIndex}`} className="text-sm leading-6 text-gold-muted">{issue.checkName || "Check"}: {hideAtomicReferences(issue.issue || displayStatus(issue.status))}</div>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ) : <EmptyState>No governance records were available to check.</EmptyState>}
       </Section>
     </div>
   );
