@@ -152,9 +152,13 @@
   p,
   div,
   span,
-  a,
-  button {
+  a {
     overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  button {
+    overflow-wrap: normal;
     word-break: normal;
   }
 }
@@ -168,6 +172,7 @@
 
   .border-b.border-border.bg-surface\/30 > .flex.flex-wrap.gap-2 > button {
     flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   @media (max-width: 640px) {
@@ -179,7 +184,10 @@
 
     div:has(> button[aria-pressed]) > button {
       flex: 0 0 auto;
+      min-width: max-content;
       white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: normal;
     }
   }
 }
