@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { translatePlainMeaning } from "../lib/api-client";
 import type { PipelineResponse } from "./Workspace";
 
 export type { PipelineResponse } from "./Workspace";
@@ -19,6 +20,17 @@ type GovernanceRecord = {
   overallStatus?: string;
   activeIssues?: GovernanceCheck[];
 };
+
+const TRANSLATION_LANGUAGES = [
+  { code: "es", label: "Spanish" },
+  { code: "zh", label: "Chinese" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "ko", label: "Korean" },
+  { code: "tl", label: "Tagalog" },
+  { code: "fr", label: "French" },
+];
 
 function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
@@ -121,8 +133,138 @@ function ruleTextById(data: PipelineResponse): Map<string, string> {
   return map;
 }
 
+function buildResultText(data: PipelineResponse) {
+  const governanceStatus = data.governance?.status ?? data.output?.governance_status;
+  const governanceIssues = data.governance?.issue_count ?? data.output?.governance_issue_count ?? 0;
+  const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "No plain meaning returned.");
+  const systems = new Set<string>();
+
+  for (const result of safeArray(data.verification?.node_results)) {
+    for (const system of safeArray(result.expected_record_systems)) {
+      systems.add(system);
+    }
+  }
+
+  return [
+    "Tetherpoint Result",
+    "",
+    "Plain Meaning",
+    plainMeaning,
+    "",
+    "Origin",
+    `Status: ${formatStatus(data.origin?.status)}`,
+    "",
+    "Verification",
+    systems.size > 0 ? `Record systems: ${Array.from(systems).join(", ")}` : "No verification record systems returned.",
+    "",
+    "Governance",
+    `Status: ${formatStatus(governanceStatus)}`,
+    `Issue count: ${governanceIssues}`,
+  ].join("\n");
+}
+
+function exportText(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function ResultActions({ data }: { data: PipelineResponse }) {
+  const [status, setStatus] = useState<string | null>(null);
+  const resultText = buildResultText(data);
+
+  const copyResult = async () => {
+    try {
+      await navigator.clipboard.writeText(resultText);
+      setStatus("Result copied.");
+    } catch {
+      setStatus("Copy failed. Use export instead.");
+    }
+  };
+
+  const exportResult = () => {
+    exportText("tetherpoint-result.txt", resultText);
+    setStatus("Result exported.");
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={copyResult} className="rounded-md border border-border/60 bg-background/30 px-3 py-2 text-xs font-semibold text-foreground hover:border-primary/40">
+          Copy result
+        </button>
+        <button type="button" onClick={exportResult} className="rounded-md border border-border/60 bg-background/30 px-3 py-2 text-xs font-semibold text-foreground hover:border-primary/40">
+          Export result
+        </button>
+      </div>
+      {status && <div className="text-xs text-muted-foreground">{status}</div>}
+    </div>
+  );
+}
+
+function PlainMeaningTranslation({ text }: { text: string }) {
+  const [language, setLanguage] = useState(TRANSLATION_LANGUAGES[0].code);
+  const [translatedText, setTranslatedText] = useState("");
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+
+  const translate = async () => {
+    setTranslating(true);
+    setTranslationError(null);
+    setTranslatedText("");
+
+    try {
+      const result = await translatePlainMeaning({ text, language });
+      setTranslatedText(result.translated_text);
+    } catch (error) {
+      setTranslationError(error instanceof Error ? error.message : "Translation failed.");
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  return (
+    <Section title="Translate Plain Meaning">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-48 flex-1 text-sm font-medium text-foreground">
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Target language</span>
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {TRANSLATION_LANGUAGES.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={translate}
+          disabled={translating || !text.trim()}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+        >
+          {translating ? "Translating..." : "Translate after meaning"}
+        </button>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">
+        Translation runs only on the plain meaning returned by the Meaning step. It does not rerun analysis or change source-backed results.
+      </p>
+      {translationError && <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{translationError}</div>}
+      {translatedText && <div className="mt-4"><SourceQuote>{translatedText}</SourceQuote></div>}
+    </Section>
+  );
+}
+
 function PlainMeaningTab({ data }: { data: PipelineResponse }) {
-  const paragraphs = splitParagraphs(data.meaning?.overall_plain_meaning || data.meaning?.message);
+  const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
+  const paragraphs = splitParagraphs(plainMeaning);
   const sourceByRule = ruleTextById(data);
 
   return (
@@ -134,6 +276,8 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
           </div>
         ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
+
+      {plainMeaning && <PlainMeaningTranslation text={plainMeaning} />}
 
       <Section title="Backed By Source Text">
         {safeArray(data.meaning?.node_results).length > 0 ? (
@@ -327,9 +471,12 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
               <h2 className="mt-2 text-2xl font-semibold text-foreground">Source-backed review</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Review the plain meaning first, then check the source origin, verification route, and governance status before relying on the result.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <StatusPill label="meaning" status={data.meaning?.status} />
-              <StatusPill label="governance" status={data.governance?.status ?? data.output?.governance_status} />
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <StatusPill label="meaning" status={data.meaning?.status} />
+                <StatusPill label="governance" status={data.governance?.status ?? data.output?.governance_status} />
+              </div>
+              <ResultActions data={data} />
             </div>
           </div>
         </section>
