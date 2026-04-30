@@ -137,9 +137,25 @@
     border-color: var(--color-border);
   }
 
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+
+  p,
+  div,
+  span,
+  a,
+  button {
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 }
 
