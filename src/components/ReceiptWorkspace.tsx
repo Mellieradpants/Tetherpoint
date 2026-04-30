@@ -6,6 +6,12 @@ export type { PipelineResponse } from "./Workspace";
 type StageKey = "input" | "structure" | "origin" | "selection" | "rule_units" | "meaning" | "verification" | "governance" | "output";
 type StageTone = "pass" | "warning" | "error" | "neutral";
 
+type Finding = {
+  label: string;
+  detail: string;
+  tone: StageTone;
+};
+
 type Stage = {
   key: StageKey;
   label: string;
@@ -19,11 +25,9 @@ type Stage = {
   sourceSupport: string;
 };
 
-type Finding = {
-  label: string;
-  detail: string;
-  tone: StageTone;
-};
+function safeArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
 
 function formatStatus(value: string | null | undefined): string {
   if (!value) return "Not returned";
@@ -37,18 +41,11 @@ function toneClass(tone: StageTone): string {
   return "border-border/60 bg-background/30 text-muted-foreground";
 }
 
-function toneText(tone: StageTone): string {
-  if (tone === "pass") return "text-primary";
-  if (tone === "warning") return "text-gold-muted";
-  if (tone === "error") return "text-destructive";
-  return "text-muted-foreground";
-}
-
 function getToneFromStatus(status: string | null | undefined): StageTone {
   const value = status?.toLowerCase() ?? "";
   if (["blocked", "error", "failed", "fatal"].some((token) => value.includes(token))) return "error";
   if (["review", "fallback", "repaired", "missing", "skipped"].some((token) => value.includes(token))) return "warning";
-  if (["ok", "clean", "match", "ready", "complete", "executed", "cleared", "passed"].some((token) => value.includes(token))) return "pass";
+  if (["ok", "clean", "match", "ready", "complete", "executed", "cleared", "passed", "assembled"].some((token) => value.includes(token))) return "pass";
   return "neutral";
 }
 
@@ -64,27 +61,35 @@ function downloadText(filename: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildReadableResult(data: PipelineResponse): string {
-  const governanceStatus = data.governance?.status ?? data.output.governance_status ?? "not returned";
+function collectSupportSystems(data: PipelineResponse): Set<string> {
   const supportSystems = new Set<string>();
-
-  for (const result of data.verification.node_results) {
-    for (const system of result.expected_record_systems) supportSystems.add(system);
+  for (const result of safeArray(data.verification?.node_results)) {
+    for (const system of safeArray(result.expected_record_systems)) {
+      supportSystems.add(system);
+    }
   }
+  return supportSystems;
+}
+
+function buildReadableResult(data: PipelineResponse): string {
+  const governanceStatus = data.governance?.status ?? data.output?.governance_status ?? "not returned";
+  const supportSystems = collectSupportSystems(data);
+  const structureIssues = safeArray(data.structure?.validation_report?.issues);
+  const errors = safeArray(data.errors);
 
   return [
     "Tetherpoint Result",
     "",
-    `Input: ${formatStatus(data.input.parse_status)} (${data.input.content_type})`,
-    `Structure: ${data.structure.node_count} source node(s), ${data.structure.validation_report.issues.length} issue(s)`,
-    `Rule units: ${data.rule_units.unit_count} total, ${data.rule_units.needs_review_count} review`,
-    `Meaning: ${formatStatus(data.meaning.status)}`,
+    `Input: ${formatStatus(data.input?.parse_status)} (${data.input?.content_type ?? "unknown"})`,
+    `Structure: ${data.structure?.node_count ?? 0} source node(s), ${structureIssues.length} issue(s)`,
+    `Rule units: ${data.rule_units?.unit_count ?? 0} total, ${data.rule_units?.needs_review_count ?? 0} review`,
+    `Meaning: ${formatStatus(data.meaning?.status)}`,
     `Verification: ${supportSystems.size} route(s) found`,
     `Governance: ${formatStatus(governanceStatus)}`,
-    `Errors: ${data.errors.length}`,
+    `Errors: ${errors.length}`,
     "",
     "Plain-language result:",
-    data.meaning.overall_plain_meaning || data.meaning.message || "No overall plain-language result returned.",
+    data.meaning?.overall_plain_meaning || data.meaning?.message || "No overall plain-language result returned.",
   ].join("\n");
 }
 
@@ -222,92 +227,127 @@ function TechnicalTrace({ data }: { data: PipelineResponse }) {
 }
 
 function buildStages(data: PipelineResponse): Stage[] {
-  const governanceStatus = data.governance?.status ?? data.output.governance_status ?? "not returned";
-  const governanceIssues = data.governance?.issue_count ?? data.output.governance_issue_count ?? 0;
-  const supportSystems = new Set<string>();
+  const input = data.input;
+  const structure = data.structure;
+  const validationReport = structure?.validation_report;
+  const selection = data.selection;
+  const ruleUnitData = data.rule_units;
+  const meaning = data.meaning;
+  const origin = data.origin;
+  const verification = data.verification;
+  const governance = data.governance;
+  const output = data.output;
 
-  for (const result of data.verification.node_results) {
-    for (const system of result.expected_record_systems) supportSystems.add(system);
-  }
+  const parseErrors = safeArray(input?.parse_errors);
+  const structureIssues = safeArray(validationReport?.issues);
+  const selectedNodes = safeArray(selection?.selected_nodes);
+  const excludedNodes = safeArray(selection?.excluded_nodes);
+  const ruleUnits = safeArray(ruleUnitData?.rule_units);
+  const meaningResults = safeArray(meaning?.node_results);
+  const verificationResults = safeArray(verification?.node_results);
+  const errors = safeArray(data.errors);
+  const activeIssues = safeArray(governance?.activeIssues);
 
-  const errors = data.errors.map((error) => ({
+  const originIdentitySignals = safeArray(origin?.origin_identity_signals);
+  const originMetadataSignals = safeArray(origin?.origin_metadata_signals);
+  const distributionSignals = safeArray(origin?.distribution_signals);
+  const originWarnings = safeArray((origin as unknown as { warnings?: string[] } | undefined)?.warnings);
+
+  const governanceStatus = governance?.status ?? output?.governance_status ?? "not returned";
+  const governanceIssues = governance?.issue_count ?? output?.governance_issue_count ?? activeIssues.length;
+  const supportSystems = collectSupportSystems(data);
+
+  const pipelineErrors: Finding[] = errors.map((error) => ({
     label: `${error.layer} error`,
     detail: error.error,
-    tone: error.fatal ? "error" as StageTone : "warning" as StageTone,
+    tone: error.fatal ? "error" : "warning",
   }));
 
   return [
     {
       key: "input",
       label: "Input",
-      status: formatStatus(data.input.parse_status),
-      tone: getToneFromStatus(data.input.parse_status),
+      status: formatStatus(input?.parse_status),
+      tone: getToneFromStatus(input?.parse_status),
       summary: "Checks the submitted content before the pipeline runs.",
       whatItDoes: "Validates document content, content type, size, and parsing readiness.",
       whatItChecks: "Checks that the source is present, supported, and available for processing.",
       howToUseIt: "Start here when a result looks wrong. Input problems usually mean the submitted source was empty, malformed, or the wrong type.",
-      sourceSupport: `${data.input.size} character(s) received as ${data.input.content_type}.`,
-      findings: data.input.parse_errors.map((error) => ({ label: "Input parse issue", detail: error, tone: "error" as StageTone })),
+      sourceSupport: `${input?.size ?? 0} character(s) received as ${input?.content_type ?? "unknown"}.`,
+      findings: parseErrors.map((error) => ({ label: "Input parse issue", detail: error, tone: "error" })),
     },
     {
       key: "structure",
       label: "Structure",
-      status: formatStatus(data.structure.validation_report.status),
-      tone: data.structure.validation_report.status === "clean" ? "pass" : getToneFromStatus(data.structure.validation_report.status),
+      status: formatStatus(validationReport?.status),
+      tone: validationReport?.status === "clean" ? "pass" : getToneFromStatus(validationReport?.status),
       summary: "Breaks the document into usable source-backed sections.",
       whatItDoes: "Separates source text into structured pieces without changing what the source says.",
       whatItChecks: "Checks source nodes, section boundaries, structure validation, repairs, and unsupported fragments.",
       howToUseIt: "Use this function to see whether the source was cleanly separated before meaning or verification is applied.",
-      sourceSupport: `${data.structure.node_count} source node(s), ${data.structure.section_count} section(s).`,
-      findings: data.structure.validation_report.issues.map((issue) => ({ label: issue.issue_type, detail: issue.message, tone: issue.severity === "error" ? "error" as StageTone : "warning" as StageTone })),
+      sourceSupport: `${structure?.node_count ?? 0} source node(s), ${structure?.section_count ?? 0} section(s).`,
+      findings: structureIssues.map((issue) => {
+        const severity = (issue as unknown as { severity?: string }).severity;
+        return {
+          label: issue.issue_type,
+          detail: issue.message,
+          tone: severity === "error" ? "error" : "warning",
+        };
+      }),
     },
     {
       key: "origin",
       label: "Origin",
-      status: formatStatus(data.origin.status),
-      tone: getToneFromStatus(data.origin.status),
+      status: formatStatus(origin?.status),
+      tone: getToneFromStatus(origin?.status),
       summary: "Looks for source identity and metadata signals.",
       whatItDoes: "Checks whether the document carries visible origin, metadata, or reference signals.",
       whatItChecks: "Checks identity signals, metadata signals, distribution signals, and referenced sources.",
       howToUseIt: "Use this function to understand what source information was visible in the submitted document.",
-      sourceSupport: `${data.origin.origin_identity_signals.length + data.origin.origin_metadata_signals.length + data.origin.distribution_signals.length} origin signal(s) returned.`,
-      findings: data.origin.warnings.map((warning) => ({ label: "Origin warning", detail: warning, tone: "warning" as StageTone })),
+      sourceSupport: `${originIdentitySignals.length + originMetadataSignals.length + distributionSignals.length} origin signal(s) returned.`,
+      findings: originWarnings.map((warning) => ({ label: "Origin warning", detail: warning, tone: "warning" })),
     },
     {
       key: "selection",
       label: "Selection",
-      status: `${data.selection.selected_nodes.length} selected`,
-      tone: data.selection.excluded_nodes.length > 0 ? "warning" : "pass",
+      status: `${selectedNodes.length} selected`,
+      tone: excludedNodes.length > 0 ? "warning" : "pass",
       summary: "Filters which source pieces move forward.",
       whatItDoes: "Separates usable source-backed material from excluded or blocked material.",
       whatItChecks: "Checks selected nodes, excluded nodes, blocked flags, and selection status.",
       howToUseIt: "Use this function to see what the system allowed into later stages and what it left out.",
-      sourceSupport: `${data.selection.selected_nodes.length} selected, ${data.selection.excluded_nodes.length} excluded.`,
-      findings: data.selection.excluded_nodes.slice(0, 5).map((node) => ({ label: "Excluded source piece", detail: node.source_text || node.node_id, tone: "warning" as StageTone })),
+      sourceSupport: `${selectedNodes.length} selected, ${excludedNodes.length} excluded.`,
+      findings: excludedNodes.slice(0, 5).map((node) => ({ label: "Excluded source piece", detail: node.source_text || node.node_id, tone: "warning" })),
     },
     {
       key: "rule_units",
       label: "Rule Units",
-      status: `${data.rule_units.unit_count} unit(s)`,
-      tone: data.rule_units.needs_review_count > 0 ? "warning" : "pass",
+      status: `${ruleUnitData?.unit_count ?? ruleUnits.length} unit(s)`,
+      tone: (ruleUnitData?.needs_review_count ?? 0) > 0 ? "warning" : "pass",
       summary: "Groups related source pieces into interpretable units.",
       whatItDoes: "Builds rule units from selected source material so the result can be inspected one unit at a time.",
       whatItChecks: "Checks assembly status, review state, source-node links, and whether each unit is eligible for meaning or verification.",
       howToUseIt: "Use this function to see whether the source material grouped cleanly before final output.",
-      sourceSupport: `${data.rule_units.ready_count} ready, ${data.rule_units.needs_review_count} need review.`,
-      findings: data.rule_units.rule_units.filter((unit) => unit.review_status !== "ready" || unit.assembly_issues.length > 0).slice(0, 5).map((unit) => ({ label: unit.rule_unit_id, detail: unit.assembly_issues.join(", ") || formatStatus(unit.review_status), tone: "warning" as StageTone })),
+      sourceSupport: `${ruleUnitData?.ready_count ?? 0} ready, ${ruleUnitData?.needs_review_count ?? 0} need review.`,
+      findings: ruleUnits
+        .filter((unit) => unit.review_status !== "ready" || safeArray(unit.assembly_issues).length > 0)
+        .slice(0, 5)
+        .map((unit) => ({ label: unit.rule_unit_id, detail: safeArray(unit.assembly_issues).join(", ") || formatStatus(unit.review_status), tone: "warning" })),
     },
     {
       key: "meaning",
       label: "Meaning",
-      status: formatStatus(data.meaning.status),
-      tone: getToneFromStatus(data.meaning.status),
+      status: formatStatus(meaning?.status),
+      tone: getToneFromStatus(meaning?.status),
       summary: "Turns supported structure into plain-language output.",
       whatItDoes: "Explains supported source structure in plain language without treating unsupported text as final meaning.",
       whatItChecks: "Checks whether meaning ran, skipped, used fallback, or returned errors.",
       howToUseIt: "Use this function to read the plain-language result and verify whether it was generated normally or through fallback.",
-      sourceSupport: data.meaning.summary_basis ? `Summary basis: ${formatStatus(data.meaning.summary_basis)}.` : "No summary basis returned.",
-      findings: data.meaning.node_results.filter((node) => node.status !== "ok" && node.status !== "fallback").slice(0, 5).map((node) => ({ label: node.node_id, detail: node.message || node.error || formatStatus(node.status), tone: getToneFromStatus(node.status) })),
+      sourceSupport: meaning?.summary_basis ? `Summary basis: ${formatStatus(meaning.summary_basis)}.` : "No summary basis returned.",
+      findings: meaningResults
+        .filter((node) => node.status !== "ok" && node.status !== "fallback")
+        .slice(0, 5)
+        .map((node) => ({ label: node.node_id, detail: node.message || node.error || formatStatus(node.status), tone: getToneFromStatus(node.status) })),
     },
     {
       key: "verification",
@@ -319,7 +359,10 @@ function buildStages(data: PipelineResponse): Stage[] {
       whatItChecks: "Checks assertion type, verification path availability, expected record systems, and verification notes.",
       howToUseIt: "Use this function to see where the claim should be checked next outside the app.",
       sourceSupport: supportSystems.size > 0 ? Array.from(supportSystems).join(", ") : "No external record systems returned.",
-      findings: data.verification.node_results.filter((node) => !node.verification_path_available).slice(0, 5).map((node) => ({ label: node.rule_unit_id || node.node_id, detail: node.verification_notes || "No verification path returned.", tone: "warning" as StageTone })),
+      findings: verificationResults
+        .filter((node) => !node.verification_path_available)
+        .slice(0, 5)
+        .map((node) => ({ label: node.rule_unit_id || node.node_id, detail: node.verification_notes || "No verification path returned.", tone: "warning" })),
     },
     {
       key: "governance",
@@ -330,20 +373,24 @@ function buildStages(data: PipelineResponse): Stage[] {
       whatItDoes: "Confirms that the result has enough source support and follows required rules and checks.",
       whatItChecks: "Checks missing anchors, contradictions, unsupported actions, active issues, and review flags.",
       howToUseIt: "Use this to confirm the output is supported. If governance shows review or blocked, inspect the flagged issue before relying on the result.",
-      sourceSupport: `${data.governance?.record_count ?? 0} governance record(s), ${governanceIssues} issue(s).`,
-      findings: data.governance?.activeIssues.map((issue) => ({ label: issue.checkName, detail: issue.issue || issue.missingFields?.join(", ") || formatStatus(issue.status), tone: issue.status === "contradiction" ? "error" as StageTone : "warning" as StageTone })) ?? [],
+      sourceSupport: `${governance?.record_count ?? 0} governance record(s), ${governanceIssues} issue(s).`,
+      findings: activeIssues.map((issue) => ({
+        label: issue.checkName,
+        detail: issue.issue || safeArray(issue.missingFields).join(", ") || formatStatus(issue.status),
+        tone: issue.status === "contradiction" ? "error" : "warning",
+      })),
     },
     {
       key: "output",
       label: "Output",
-      status: data.errors.length > 0 ? `${data.errors.length} error(s)` : "assembled",
-      tone: data.errors.length > 0 ? "error" : "pass",
+      status: errors.length > 0 ? `${errors.length} error(s)` : "assembled",
+      tone: errors.length > 0 ? "error" : "pass",
       summary: "Assembles the final traceable result.",
       whatItDoes: "Collects the completed pipeline outputs into the visible result.",
       whatItChecks: "Checks output assembly, errors, and whether technical trace is available.",
       howToUseIt: "Use this function to confirm the result is complete before copying or exporting it.",
-      sourceSupport: `Output contains ${data.errors.length} pipeline error(s).`,
-      findings: errors,
+      sourceSupport: `Output contains ${errors.length} pipeline error(s).`,
+      findings: pipelineErrors,
     },
   ];
 }
