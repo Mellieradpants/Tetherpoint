@@ -94,7 +94,8 @@ function toneClass(tone: Tone): string {
 function splitParagraphs(text: string | null | undefined): string[] {
   if (!text || !text.trim()) return [];
   return text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
-}\n
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-border/60 bg-surface p-4">
