@@ -57,9 +57,39 @@ SAFEGUARD_RE = re.compile(
     re.I,
 )
 
+RECOVERY_ACTION_RE = re.compile(
+    r"\b(recovery|recover|repayment|repay|repayment notice|collections?|"
+    r"collect|debt|overpayment|recoup|recoupment|garnish|garnishment)\b",
+    re.I,
+)
+
+RECOVERY_PRECONDITION_RE = re.compile(
+    r"\b(before\s+recovery|before\s+.*recovery|before\s+.*collections?|"
+    r"must\s+verify|verify\s+the\s+source\s+record|confirm\s+notice\s+delivery|"
+    r"opportunity\s+to\s+correct|clerical\s+or\s+transmission\s+errors)\b",
+    re.I,
+)
+
+UNRESOLVED_SUPPORT_RE = re.compile(
+    r"\b(did\s+not\s+include|not\s+included|missing|missing\s+timestamp|"
+    r"source\s+document\s+used\s+to\s+determine|unverified|not\s+reviewed|"
+    r"may\s+have\s+been\s+submitted|confirmation\s+number\s+was\s+not\s+included|"
+    r"interpreted\s+the\s+missing\s+timestamp\s+as\s+absence|"
+    r"unless\s+there\s+is\s+clear\s+evidence\s+of\s+agency\s+error|"
+    r"failed\s+to\s+submit|determine\s+whether\s+recovery\s+can\s+proceed)\b",
+    re.I,
+)
+
 
 def _has_value(value: object) -> bool:
     return value is not None and str(value).strip() != ""
+
+
+def _combined_text(record: GovernanceRecord, full_context: str | None = None) -> str:
+    parts = [str(record.extractedValue or "")]
+    if full_context:
+        parts.append(full_context)
+    return "\n".join(parts)
 
 
 def _check_required_anchor_fields(record: GovernanceRecord) -> GovernanceCheckResult:
@@ -194,10 +224,61 @@ def _check_procedural_safeguards(record: GovernanceRecord) -> GovernanceCheckRes
     )
 
 
+def _check_recovery_preconditions(record: GovernanceRecord, full_context: str | None = None) -> GovernanceCheckResult:
+    text = _combined_text(record, full_context)
+
+    if not RECOVERY_ACTION_RE.search(text):
+        return GovernanceCheckResult(
+            checkName="recovery_precondition_review",
+            status="match",
+            issue=None,
+        )
+
+    has_required_preconditions = bool(RECOVERY_PRECONDITION_RE.search(text))
+    has_unresolved_support = bool(UNRESOLVED_SUPPORT_RE.search(text))
+
+    if has_required_preconditions and has_unresolved_support:
+        return GovernanceCheckResult(
+            checkName="recovery_precondition_review",
+            status="needs_review",
+            issue=(
+                "Recovery or collections action appears before required verification, notice confirmation, or correction "
+                "opportunity is complete. Review before relying on this result."
+            ),
+            missingFields=[
+                "governance_scope: recovery_or_collections_action",
+                "governance_scope: missing_or_unverified_source_record",
+                "governance_scope: notice_and_correction_preconditions",
+                "governance_scope: unreviewed_conflicting_evidence",
+            ],
+        )
+
+    if has_unresolved_support:
+        return GovernanceCheckResult(
+            checkName="recovery_precondition_review",
+            status="needs_review",
+            issue=(
+                "Recovery or collections action is connected to missing, unverified, or unresolved support signals. "
+                "Review before relying on this result."
+            ),
+            missingFields=[
+                "governance_scope: recovery_or_collections_action",
+                "governance_scope: missing_or_unverified_source_record",
+            ],
+        )
+
+    return GovernanceCheckResult(
+        checkName="recovery_precondition_review",
+        status="match",
+        issue=None,
+    )
+
+
 def evaluate_governance_record(
     record: GovernanceRecord,
     comparison_record: GovernanceRecord | None = None,
     requested_action: str | None = None,
+    full_context: str | None = None,
 ) -> GovernanceRecordResult:
     """Evaluate one normalized governance record."""
     checks = [
@@ -205,6 +286,7 @@ def evaluate_governance_record(
         _check_field_conflict(record, comparison_record),
         _check_downstream_action_support(record, requested_action),
         _check_procedural_safeguards(record),
+        _check_recovery_preconditions(record, full_context),
     ]
     active_issues = [check for check in checks if check.status != "match"]
 
@@ -241,8 +323,14 @@ def process_governance(
     Comparison records and requested actions are supported by the record checker,
     but pipeline-level comparison input is intentionally not wired here yet.
     """
+    full_context = "\n".join(
+        rule_unit.source_text_combined for rule_unit in rule_units.rule_units
+    )
     results = [
-        evaluate_governance_record(_record_from_rule_unit(rule_unit, input_result))
+        evaluate_governance_record(
+            _record_from_rule_unit(rule_unit, input_result),
+            full_context=full_context,
+        )
         for rule_unit in rule_units.rule_units
     ]
     active_issues = [
