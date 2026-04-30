@@ -5,13 +5,32 @@ type TranslateBody = {
 
 const LANGUAGE_NAMES: Record<string, string> = {
   es: "Spanish",
-  zh: "Chinese",
-  vi: "Vietnamese",
-  ru: "Russian",
+  ht: "Haitian Creole",
+  pt: "Portuguese",
+  fr: "French",
   ar: "Arabic",
+  fa: "Persian / Farsi",
+  prs: "Dari",
+  ps: "Pashto",
+  ur: "Urdu",
+  hi: "Hindi",
+  pa: "Punjabi",
+  bn: "Bengali",
+  zh: "Chinese (Simplified)",
+  yue: "Cantonese",
+  vi: "Vietnamese",
   ko: "Korean",
   tl: "Tagalog",
-  fr: "French",
+  my: "Burmese",
+  ne: "Nepali",
+  ru: "Russian",
+  uk: "Ukrainian",
+  tr: "Turkish",
+  so: "Somali",
+  am: "Amharic",
+  ti: "Tigrinya",
+  sw: "Swahili",
+  rw: "Kinyarwanda",
 };
 
 function sendJson(res: any, status: number, payload: Record<string, unknown>) {
@@ -111,7 +130,7 @@ export default async function handler(req: any, res: any) {
           {
             role: "system",
             content:
-              "Translate the provided plain-meaning legal explanation into the requested language. Preserve the meaning, avoid adding new analysis, and return only the translated text.",
+              "Translate the provided plain-meaning immigration or legal explanation into the requested language. Preserve the meaning, avoid adding new analysis, and return only the translated text.",
           },
           {
             role: "user",
