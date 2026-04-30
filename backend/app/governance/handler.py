@@ -53,7 +53,8 @@ MISSING_SAFEGUARD_RE = re.compile(
 SAFEGUARD_RE = re.compile(
     r"\b(written\s+notice|notice|explanation|opportunity\s+to\s+correct|"
     r"opportunity\s+to\s+respond|hearing|appeal|appeal rights|review|"
-    r"correction period|right to respond)\b",
+    r"correction period|right to respond|given\s+\d+\s+(?:calendar\s+)?days\s+to\s+correct|"
+    r"correct\s+the\s+missing\s+information\s+before)\b",
     re.I,
 )
 
@@ -65,8 +66,10 @@ RECOVERY_ACTION_RE = re.compile(
 
 RECOVERY_PRECONDITION_RE = re.compile(
     r"\b(before\s+recovery|before\s+.*recovery|before\s+.*collections?|"
+    r"before\s+any\s+denial\s+or\s+recovery\s+action\s+begins|"
     r"must\s+verify|verify\s+the\s+source\s+record|confirm\s+notice\s+delivery|"
-    r"opportunity\s+to\s+correct|clerical\s+or\s+transmission\s+errors)\b",
+    r"opportunity\s+to\s+correct|given\s+\d+\s+(?:calendar\s+)?days\s+to\s+correct|"
+    r"clerical\s+or\s+transmission\s+errors)\b",
     re.I,
 )
 
@@ -225,19 +228,34 @@ def _check_procedural_safeguards(record: GovernanceRecord) -> GovernanceCheckRes
 
 
 def _check_recovery_preconditions(record: GovernanceRecord, full_context: str | None = None) -> GovernanceCheckResult:
-    text = _combined_text(record, full_context)
+    record_text = str(record.extractedValue or "")
+    context_text = _combined_text(record, full_context)
 
-    if not RECOVERY_ACTION_RE.search(text):
+    record_has_recovery_action = bool(RECOVERY_ACTION_RE.search(record_text))
+    record_has_unresolved_support = bool(UNRESOLVED_SUPPORT_RE.search(record_text))
+    record_has_recovery_precondition = bool(RECOVERY_PRECONDITION_RE.search(record_text))
+
+    # Full document context can support a local recovery or unresolved-support signal,
+    # but it should not cause every clean rule unit in the same document to fail.
+    if not (record_has_recovery_action or record_has_unresolved_support or record_has_recovery_precondition):
         return GovernanceCheckResult(
             checkName="recovery_precondition_review",
             status="match",
             issue=None,
         )
 
-    has_required_preconditions = bool(RECOVERY_PRECONDITION_RE.search(text))
-    has_unresolved_support = bool(UNRESOLVED_SUPPORT_RE.search(text))
+    # Safeguard-only rule units are controls, not violations.
+    if record_has_recovery_precondition and not record_has_unresolved_support:
+        return GovernanceCheckResult(
+            checkName="recovery_precondition_review",
+            status="match",
+            issue=None,
+        )
 
-    if has_required_preconditions and has_unresolved_support:
+    has_required_preconditions = bool(RECOVERY_PRECONDITION_RE.search(context_text))
+    has_unresolved_support = bool(UNRESOLVED_SUPPORT_RE.search(context_text))
+
+    if record_has_recovery_action and has_required_preconditions and has_unresolved_support:
         return GovernanceCheckResult(
             checkName="recovery_precondition_review",
             status="needs_review",
@@ -253,7 +271,7 @@ def _check_recovery_preconditions(record: GovernanceRecord, full_context: str | 
             ],
         )
 
-    if has_unresolved_support:
+    if record_has_recovery_action and has_unresolved_support:
         return GovernanceCheckResult(
             checkName="recovery_precondition_review",
             status="needs_review",
