@@ -16,9 +16,7 @@ type GovernanceCheck = {
 type GovernanceRecord = {
   extractedValue?: string;
   sourceSystem?: string;
-  documentType?: string;
   overallStatus?: string;
-  checks?: GovernanceCheck[];
   activeIssues?: GovernanceCheck[];
 };
 
@@ -31,17 +29,20 @@ function formatStatus(value: string | null | undefined): string {
   return value.replaceAll("_", " ");
 }
 
+function hideAtomicReferences(value: string | null | undefined): string {
+  if (!value) return "";
+  return value
+    .replace(/\s*Supporting nodes?:\s*node-\d+(?:,\s*node-\d+)*\.?/gi, "")
+    .replace(/node-\d+/gi, "source-backed result")
+    .replace(/source_node_ids?/gi, "source backing")
+    .trim();
+}
+
 function toneForStatus(status: string | null | undefined): Tone {
   const value = status?.toLowerCase() ?? "";
-  if (["blocked", "error", "failed", "fatal", "contradiction"].some((token) => value.includes(token))) {
-    return "bad";
-  }
-  if (["review", "fallback", "repaired", "missing", "skipped", "warning"].some((token) => value.includes(token))) {
-    return "review";
-  }
-  if (["ok", "clean", "match", "ready", "complete", "executed", "assembled"].some((token) => value.includes(token))) {
-    return "good";
-  }
+  if (["blocked", "error", "failed", "fatal", "contradiction"].some((token) => value.includes(token))) return "bad";
+  if (["review", "fallback", "repaired", "missing", "skipped", "warning"].some((token) => value.includes(token))) return "review";
+  if (["ok", "clean", "match", "ready", "complete", "executed", "assembled", "available", "detected"].some((token) => value.includes(token))) return "good";
   return "neutral";
 }
 
@@ -54,18 +55,13 @@ function toneClass(tone: Tone): string {
 
 function splitParagraphs(text: string | null | undefined): string[] {
   if (!text || !text.trim()) return [];
-  return text
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+  return text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-border/60 bg-surface p-4">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-        {title}
-      </div>
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">{title}</div>
       {children}
     </section>
   );
@@ -93,11 +89,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function SourceQuote({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-sm leading-6 text-foreground">
-      {children}
-    </div>
-  );
+  return <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-sm leading-6 text-foreground">{children}</div>;
 }
 
 function TabButton({ tab, active, onClick }: { tab: ResultTab; active: boolean; onClick: () => void }) {
@@ -113,11 +105,7 @@ function TabButton({ tab, active, onClick }: { tab: ResultTab; active: boolean; 
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-        active
-          ? "border-gold/40 bg-gold/10 text-foreground"
-          : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"
-      }`}
+      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
     >
       {labels[tab]}
     </button>
@@ -142,13 +130,9 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
       <Section title="Plain Meaning">
         {paragraphs.length > 0 ? (
           <div className="space-y-3 text-base leading-7 text-foreground">
-            {paragraphs.map((paragraph, index) => (
-              <p key={`meaning-${index}`}>{paragraph}</p>
-            ))}
+            {paragraphs.map((paragraph, index) => <p key={`meaning-${index}`}>{paragraph}</p>)}
           </div>
-        ) : (
-          <EmptyState>No plain meaning was returned for this analysis.</EmptyState>
-        )}
+        ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
 
       <Section title="Backed By Source Text">
@@ -159,18 +143,14 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
               return (
                 <div key={`meaning-source-${index}`} className="space-y-2">
                   <StatusPill label="meaning" status={result.status} />
-                  {result.plain_meaning && <p className="text-sm leading-6 text-muted-foreground">{result.plain_meaning}</p>}
+                  {result.plain_meaning && <p className="text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning)}</p>}
                   {sourceText && <SourceQuote>{sourceText}</SourceQuote>}
-                  {(result.message || result.error) && (
-                    <div className="text-sm leading-6 text-gold-muted">{result.message || result.error}</div>
-                  )}
+                  {(result.message || result.error) && <div className="text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error)}</div>}
                 </div>
               );
             })}
           </div>
-        ) : (
-          <EmptyState>No source-backed meaning details were returned.</EmptyState>
-        )}
+        ) : <EmptyState>No source-backed meaning details were returned.</EmptyState>}
       </Section>
     </div>
   );
@@ -179,10 +159,11 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
 function OriginTab({ data }: { data: PipelineResponse }) {
   const origin = data.origin;
   const referencedSources = safeArray(origin?.referenced_sources);
-  const identitySignals = safeArray(origin?.origin_identity_signals);
-  const metadataSignals = safeArray(origin?.origin_metadata_signals);
-  const distributionSignals = safeArray(origin?.distribution_signals);
-  const hasSignals = identitySignals.length + metadataSignals.length + distributionSignals.length > 0;
+  const signals = [
+    ...safeArray(origin?.origin_identity_signals),
+    ...safeArray(origin?.origin_metadata_signals),
+    ...safeArray(origin?.distribution_signals),
+  ];
 
   return (
     <div className="space-y-4">
@@ -201,34 +182,22 @@ function OriginTab({ data }: { data: PipelineResponse }) {
             {referencedSources.map((source, index) => (
               <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                 <div className="text-sm font-semibold text-foreground">{source.name}</div>
-                <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">
-                  {source.reference_type} {source.source_system ? `from ${source.source_system}` : ""}
-                </div>
-                {source.matched_text && <SourceQuote>{source.matched_text}</SourceQuote>}
-                {source.why_it_matters && <p className="mt-2 text-sm leading-6 text-muted-foreground">{source.why_it_matters}</p>}
-                {source.official_source_url && (
-                  <a className="mt-2 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline" href={source.official_source_url} target="_blank" rel="noreferrer">
-                    Open official source
-                  </a>
-                )}
+                <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{formatStatus(source.reference_type)}</div>
+                {source.matched_text && <div className="mt-3"><SourceQuote>{source.matched_text}</SourceQuote></div>}
+                {source.why_it_matters && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(source.why_it_matters)}</p>}
+                {source.official_source_url && <a className="mt-2 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline" href={source.official_source_url} target="_blank" rel="noreferrer">Open official source</a>}
               </div>
             ))}
           </div>
-        ) : (
-          <EmptyState>No referenced source was detected in this input.</EmptyState>
-        )}
+        ) : <EmptyState>No referenced source was detected in this input.</EmptyState>}
       </Section>
 
       <Section title="Source Signals">
-        {hasSignals ? (
+        {signals.length > 0 ? (
           <div className="space-y-3">
-            {[...identitySignals, ...metadataSignals, ...distributionSignals].map((signal, index) => (
-              <DetailRow key={`${signal.signal}-${index}`} label={signal.signal} value={signal.value} />
-            ))}
+            {signals.map((signal, index) => <DetailRow key={`${signal.signal}-${index}`} label={signal.signal} value={hideAtomicReferences(signal.value)} />)}
           </div>
-        ) : (
-          <EmptyState>Pasted text has no source metadata. Use official HTML, XML, JSON, or source metadata when you need stronger origin signals.</EmptyState>
-        )}
+        ) : <EmptyState>Pasted text has no source metadata. Use official HTML, XML, JSON, or source metadata when you need stronger origin signals.</EmptyState>}
       </Section>
     </div>
   );
@@ -255,33 +224,26 @@ function VerificationTab({ data }: { data: PipelineResponse }) {
             {results.map((result, index) => {
               const systems = safeArray(result.expected_record_systems);
               const sourceText = sourceByRule.get(result.rule_unit_id || result.node_id);
+              const notes = hideAtomicReferences(result.verification_notes);
               return (
                 <div key={`verification-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                   <div className="flex flex-wrap gap-2">
                     <StatusPill label="assertion" status={result.assertion_detected ? "detected" : "not detected"} />
                     <StatusPill label="path" status={result.verification_path_available ? "available" : "unavailable"} />
                   </div>
-                  {result.assertion_type && (
-                    <div className="mt-3 text-sm leading-6 text-muted-foreground">Assertion type: {formatStatus(result.assertion_type)}</div>
-                  )}
+                  {result.assertion_type && <div className="mt-3 text-sm leading-6 text-muted-foreground">Assertion type: {formatStatus(result.assertion_type)}</div>}
                   {systems.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {systems.map((system) => (
-                        <span key={system} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                          {system}
-                        </span>
-                      ))}
+                      {systems.map((system) => <span key={system} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{system}</span>)}
                     </div>
                   )}
-                  {result.verification_notes && <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.verification_notes}</p>}
+                  {notes && <p className="mt-3 text-sm leading-6 text-muted-foreground">{notes}</p>}
                   {sourceText && <div className="mt-3"><SourceQuote>{sourceText}</SourceQuote></div>}
                 </div>
               );
             })}
           </div>
-        ) : (
-          <EmptyState>No verification details were returned.</EmptyState>
-        )}
+        ) : <EmptyState>No verification details were returned.</EmptyState>}
       </Section>
     </div>
   );
@@ -303,14 +265,10 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
       <Section title="Governance Summary">
         <div className="flex flex-wrap gap-2">
           <StatusPill label="governance" status={status} />
-          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>
-            {issueCount} issue(s)
-          </span>
-          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            {governance?.record_count ?? records.length} checked
-          </span>
+          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>{issueCount} issue(s)</span>
+          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{governance?.record_count ?? records.length} checked</span>
         </div>
-        {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{governance.principle}</p>}
+        {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(governance.principle)}</p>}
       </Section>
 
       <Section title="Review Items">
@@ -320,16 +278,12 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
               <div key={`${issue.checkName}-${index}`} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
                 <div className="text-sm font-semibold text-foreground">{issue.checkName || "Governance check"}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest text-gold-muted">{formatStatus(issue.status)}</div>
-                {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.issue}</p>}
-                {safeArray(issue.missingFields).length > 0 && (
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">Missing: {safeArray(issue.missingFields).join(", ")}</p>
-                )}
+                {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(issue.issue)}</p>}
+                {safeArray(issue.missingFields).length > 0 && <p className="mt-2 text-sm leading-6 text-muted-foreground">Missing: {safeArray(issue.missingFields).join(", ")}</p>}
               </div>
             ))}
           </div>
-        ) : (
-          <EmptyState>No governance review items were returned.</EmptyState>
-        )}
+        ) : <EmptyState>No governance review items were returned.</EmptyState>}
       </Section>
 
       <Section title="Backed Governance Results">
@@ -341,29 +295,19 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
                 <div key={`governance-record-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                   <div className="flex flex-wrap gap-2">
                     <StatusPill label="result" status={record.overallStatus} />
-                    {record.sourceSystem && (
-                      <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-medium text-muted-foreground">
-                        {formatStatus(record.sourceSystem)}
-                      </span>
-                    )}
+                    {record.sourceSystem && <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-medium text-muted-foreground">{formatStatus(record.sourceSystem)}</span>}
                   </div>
-                  {record.extractedValue && <div className="mt-3"><SourceQuote>{record.extractedValue}</SourceQuote></div>}
+                  {record.extractedValue && <div className="mt-3"><SourceQuote>{hideAtomicReferences(record.extractedValue)}</SourceQuote></div>}
                   {issues.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {issues.map((issue, issueIndex) => (
-                        <div key={`${issue.checkName}-${issueIndex}`} className="text-sm leading-6 text-gold-muted">
-                          {issue.checkName || "Check"}: {issue.issue || formatStatus(issue.status)}
-                        </div>
-                      ))}
+                      {issues.map((issue, issueIndex) => <div key={`${issue.checkName}-${issueIndex}`} className="text-sm leading-6 text-gold-muted">{issue.checkName || "Check"}: {hideAtomicReferences(issue.issue || formatStatus(issue.status))}</div>)}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-        ) : (
-          <EmptyState>No governance records were returned.</EmptyState>
-        )}
+        ) : <EmptyState>No governance records were returned.</EmptyState>}
       </Section>
     </div>
   );
@@ -379,13 +323,9 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
         <section className="rounded-xl border border-border/60 bg-surface p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-                Analysis result
-              </div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Analysis result</div>
               <h2 className="mt-2 text-2xl font-semibold text-foreground">Source-backed review</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Review the plain meaning first, then check the source origin, verification route, and governance status before relying on the result.
-              </p>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Review the plain meaning first, then check the source origin, verification route, and governance status before relying on the result.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusPill label="meaning" status={data.meaning?.status} />
@@ -394,16 +334,10 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
           </div>
         </section>
 
-        {safeArray(data.errors).length > 0 && (
-          <section className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm leading-6 text-destructive">
-            The analysis returned {data.errors.length} pipeline error(s). Review the visible tabs before relying on the result.
-          </section>
-        )}
+        {safeArray(data.errors).length > 0 && <section className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm leading-6 text-destructive">The analysis returned {data.errors.length} pipeline error(s). Review the visible tabs before relying on the result.</section>}
 
         <nav className="flex gap-2 overflow-x-auto rounded-xl border border-border/60 bg-surface/60 p-2">
-          {tabs.map((tab) => (
-            <TabButton key={tab} tab={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} />
-          ))}
+          {tabs.map((tab) => <TabButton key={tab} tab={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} />)}
         </nav>
 
         {activeTab === "meaning" && <PlainMeaningTab data={data} />}
