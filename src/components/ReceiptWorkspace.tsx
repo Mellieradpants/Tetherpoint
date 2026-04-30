@@ -136,7 +136,8 @@ function TabButton({ tab, active, onClick }: { tab: ResultTab; active: boolean; 
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
+      className={`shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium leading-none transition-colors ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
+      style={{ wordBreak: "normal", overflowWrap: "normal" }}
     >
       {labels[tab]}
     </button>
@@ -502,7 +503,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
 
         {safeArray(data.errors).length > 0 && <section className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm leading-6 text-destructive">The analysis returned {data.errors.length} pipeline error(s). Review the visible tabs before relying on the result.</section>}
 
-        <nav className="flex gap-2 overflow-x-auto rounded-xl border border-border/60 bg-surface/60 p-2">
+        <nav className="flex w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-border/60 bg-surface/60 p-2" style={{ WebkitOverflowScrolling: "touch" }}>
           {tabs.map((tab) => <TabButton key={tab} tab={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} />)}
         </nav>
 
