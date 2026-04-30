@@ -125,10 +125,10 @@ function SourceQuote({ children }: { children: ReactNode }) {
 
 function TabButton({ tab, active, onClick }: { tab: ResultTab; active: boolean; onClick: () => void }) {
   const labels: Record<ResultTab, string> = {
-    meaning: "Plain Meaning",
+    meaning: "Meaning",
     origin: "Origin",
-    verification: "Verification",
-    governance: "Governance",
+    verification: "Verify",
+    governance: "Gov",
   };
 
   return (
@@ -136,10 +136,9 @@ function TabButton({ tab, active, onClick }: { tab: ResultTab; active: boolean; 
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium leading-none transition-colors ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
-      style={{ wordBreak: "normal", overflowWrap: "normal" }}
+      className={`min-w-0 flex-1 rounded-full border px-2.5 py-2 text-center text-xs font-semibold leading-none transition-colors sm:flex-none sm:px-4 sm:text-sm ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
     >
-      {labels[tab]}
+      <span className="block truncate whitespace-nowrap">{labels[tab]}</span>
     </button>
   );
 }
@@ -503,7 +502,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
 
         {safeArray(data.errors).length > 0 && <section className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm leading-6 text-destructive">The analysis returned {data.errors.length} pipeline error(s). Review the visible tabs before relying on the result.</section>}
 
-        <nav className="flex w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-border/60 bg-surface/60 p-2" style={{ WebkitOverflowScrolling: "touch" }}>
+        <nav className="grid grid-cols-4 gap-2 rounded-xl border border-border/60 bg-surface/60 p-2">
           {tabs.map((tab) => <TabButton key={tab} tab={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} />)}
         </nav>
 
