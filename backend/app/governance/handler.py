@@ -7,6 +7,8 @@ or decide what is true.
 
 from __future__ import annotations
 
+import re
+
 from app.schemas.models import (
     GovernanceCheckResult,
     GovernanceRecord,
@@ -29,6 +31,30 @@ REQUIRED_ANCHOR_FIELDS = [
 PRINCIPLE = (
     "The governance layer does not decide what is true; it determines whether "
     "a record is sufficiently supported and safe to act on."
+)
+
+ADVERSE_ACTION_RE = re.compile(
+    r"\b(deny|denial|denied|reject|rejection|rejected|revoke|revocation|"
+    r"terminate|termination|terminated|suspend|suspension|suspended|"
+    r"disqualify|disqualification|penalty|penalize|fine|enforcement|"
+    r"loss of|remove|withhold|ineligible)\b",
+    re.I,
+)
+
+MISSING_SAFEGUARD_RE = re.compile(
+    r"\b(without\s+(?:written\s+)?(?:notice|explanation|reason|reasons|"
+    r"opportunity|hearing|review|appeal|appeal rights|correction|"
+    r"opportunity to correct|opportunity to respond|response)|"
+    r"no\s+(?:notice|explanation|opportunity|hearing|review|appeal|"
+    r"appeal rights|correction)|final\s+and\s+not\s+reviewable)\b",
+    re.I,
+)
+
+SAFEGUARD_RE = re.compile(
+    r"\b(written\s+notice|notice|explanation|opportunity\s+to\s+correct|"
+    r"opportunity\s+to\s+respond|hearing|appeal|appeal rights|review|"
+    r"correction period|right to respond)\b",
+    re.I,
 )
 
 
@@ -123,6 +149,51 @@ def _check_downstream_action_support(
     )
 
 
+def _check_procedural_safeguards(record: GovernanceRecord) -> GovernanceCheckResult:
+    text = str(record.extractedValue or "")
+
+    if not ADVERSE_ACTION_RE.search(text):
+        return GovernanceCheckResult(
+            checkName="procedural_safeguard_review",
+            status="match",
+            issue=None,
+        )
+
+    if MISSING_SAFEGUARD_RE.search(text):
+        return GovernanceCheckResult(
+            checkName="procedural_safeguard_review",
+            status="needs_review",
+            issue=(
+                "Adverse action is source-backed, but the source text states or implies that a procedural safeguard "
+                "is missing. Review before relying on this result."
+            ),
+            missingFields=[
+                "governance_scope: denial_or_loss_of_benefit",
+                "governance_scope: missing_procedural_safeguard",
+            ],
+        )
+
+    if not SAFEGUARD_RE.search(text):
+        return GovernanceCheckResult(
+            checkName="procedural_safeguard_review",
+            status="needs_review",
+            issue=(
+                "Adverse action is present, but the same rule unit does not state notice, correction, response, review, "
+                "or appeal safeguards. Review before relying on this result."
+            ),
+            missingFields=[
+                "governance_scope: denial_or_loss_of_benefit",
+                "governance_scope: procedural_safeguard_not_stated",
+            ],
+        )
+
+    return GovernanceCheckResult(
+        checkName="procedural_safeguard_review",
+        status="match",
+        issue=None,
+    )
+
+
 def evaluate_governance_record(
     record: GovernanceRecord,
     comparison_record: GovernanceRecord | None = None,
@@ -133,6 +204,7 @@ def evaluate_governance_record(
         _check_required_anchor_fields(record),
         _check_field_conflict(record, comparison_record),
         _check_downstream_action_support(record, requested_action),
+        _check_procedural_safeguards(record),
     ]
     active_issues = [check for check in checks if check.status != "match"]
 
