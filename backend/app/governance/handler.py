@@ -14,7 +14,6 @@ from app.schemas.models import (
     GovernanceRecord,
     GovernanceRecordResult,
     GovernanceResult,
-    GovernanceStatus,
     InputResult,
     RuleUnit,
     RuleUnitResult,
@@ -235,8 +234,6 @@ def _check_recovery_preconditions(record: GovernanceRecord, full_context: str | 
     record_has_unresolved_support = bool(UNRESOLVED_SUPPORT_RE.search(record_text))
     record_has_recovery_precondition = bool(RECOVERY_PRECONDITION_RE.search(record_text))
 
-    # Full document context can support a local recovery or unresolved-support signal,
-    # but it should not cause every clean rule unit in the same document to fail.
     if not (record_has_recovery_action or record_has_unresolved_support or record_has_recovery_precondition):
         return GovernanceCheckResult(
             checkName="recovery_precondition_review",
@@ -244,7 +241,6 @@ def _check_recovery_preconditions(record: GovernanceRecord, full_context: str | 
             issue=None,
         )
 
-    # Safeguard-only rule units are controls, not violations.
     if record_has_recovery_precondition and not record_has_unresolved_support:
         return GovernanceCheckResult(
             checkName="recovery_precondition_review",
@@ -341,6 +337,22 @@ def process_governance(
     Comparison records and requested actions are supported by the record checker,
     but pipeline-level comparison input is intentionally not wired here yet.
     """
+    if not rule_units.rule_units:
+        issue = GovernanceCheckResult(
+            checkName="governance_record_presence_check",
+            status="needs_review",
+            issue="No assembled rule-unit records were available for governance checks.",
+            missingFields=["rule_units"],
+        )
+        return GovernanceResult(
+            status="needs_review",
+            record_count=0,
+            issue_count=1,
+            results=[],
+            activeIssues=[issue],
+            principle=PRINCIPLE,
+        )
+
     full_context = "\n".join(
         rule_unit.source_text_combined for rule_unit in rule_units.rule_units
     )
