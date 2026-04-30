@@ -294,6 +294,7 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
   const paragraphs = splitParagraphs(plainMeaning);
   const sourceByRule = ruleTextById(data);
   const externalReferenceNeeded = Boolean(data.meaning?.summary_brief?.external_reference_needed);
+  const meaningDetails = safeArray(data.meaning?.node_results);
 
   return (
     <div className="space-y-4">
@@ -315,23 +316,28 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
 
       {plainMeaning && <PlainMeaningTranslation text={plainMeaning} />}
 
-      <Section title="Backed By Source Text">
-        {safeArray(data.meaning?.node_results).length > 0 ? (
-          <div className="space-y-3">
-            {safeArray(data.meaning.node_results).map((result, index) => {
-              const sourceText = sourceByRule.get(result.node_id) || result.source_text;
-              return (
-                <div key={`meaning-source-${index}`} className="space-y-2">
-                  <StatusPill label="meaning" status={result.status} />
-                  {result.plain_meaning && <p className="text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning)}</p>}
-                  {sourceText && <SourceQuote>{sourceText}</SourceQuote>}
-                  {(result.message || result.error) && <div className="text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error)}</div>}
-                </div>
-              );
-            })}
-          </div>
-        ) : <EmptyState>No source-backed meaning details were returned.</EmptyState>}
-      </Section>
+      {meaningDetails.length > 0 && (
+        <Section title="Source-Backed Details">
+          <details className="rounded-lg border border-border/50 bg-background/30 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">View source text used for the meaning result</summary>
+            <div className="mt-3 space-y-3">
+              {meaningDetails.map((result, index) => {
+                const sourceText = sourceByRule.get(result.node_id) || result.source_text;
+                return (
+                  <div key={`meaning-source-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                    <div className="flex flex-wrap gap-2">
+                      <StatusPill label="meaning detail" status={result.status} />
+                    </div>
+                    {result.plain_meaning && <p className="mt-3 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning)}</p>}
+                    {sourceText && <div className="mt-3"><SourceQuote>{sourceText}</SourceQuote></div>}
+                    {(result.message || result.error) && <div className="mt-3 text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        </Section>
+      )}
     </div>
   );
 }
