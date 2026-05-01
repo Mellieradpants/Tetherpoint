@@ -289,7 +289,7 @@ function PlainMeaningTranslation({ text }: { text: string }) {
   );
 }
 
-function ReferenceResolutionPanel({ data, plainMeaning }: { data: PipelineResponse; plainMeaning: string }) {
+function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; plainMeaning: string }) {
   const [referencedSourceText, setReferencedSourceText] = useState("");
   const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -314,17 +314,17 @@ function ReferenceResolutionPanel({ data, plainMeaning }: { data: PipelineRespon
       });
       setResult(response);
     } catch (resolverError) {
-      setError(resolverError instanceof Error ? resolverError.message : "Reference resolution failed.");
+      setError(resolverError instanceof Error ? resolverError.message : "Extended meaning failed.");
     } finally {
       setResolving(false);
     }
   };
 
   return (
-    <Section title="Reference Resolution">
+    <Section title="Extended Meaning">
       <div className="space-y-3">
         <p className="text-sm leading-6 text-muted-foreground">
-          Paste the referenced source text here to resolve how it contributes to the current rule. This first prototype does not fetch outside law automatically.
+          Uses referenced source text you provide to show how outside references connect to the current rule.
         </p>
         {referencedSources.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -343,12 +343,12 @@ function ReferenceResolutionPanel({ data, plainMeaning }: { data: PipelineRespon
           disabled={resolving || !referencedSourceText.trim() || referencedSources.length === 0}
           className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
-          {resolving ? "Resolving..." : "Resolve reference"}
+          {resolving ? "Generating..." : "Generate Extended Meaning"}
         </button>
         {error && <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
         {result && (
           <div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
-            <StatusPill label="reference" status={result.status} />
+            <StatusPill label="extended meaning" status={result.status} />
             {safeArray(result.referencedSources).map((source, index) => (
               <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                 <div className="text-sm font-semibold text-foreground">{source.name}</div>
@@ -359,7 +359,7 @@ function ReferenceResolutionPanel({ data, plainMeaning }: { data: PipelineRespon
             ))}
             {result.combinedPlainMeaning && (
               <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Combined plain meaning</div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Extended Meaning</div>
                 <SourceQuote>{result.combinedPlainMeaning}</SourceQuote>
               </div>
             )}
@@ -400,14 +400,14 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
         ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
 
-      {externalReferenceNeeded && plainMeaning && <ReferenceResolutionPanel data={data} plainMeaning={plainMeaning} />}
+      {externalReferenceNeeded && plainMeaning && <ExtendedMeaningPanel data={data} plainMeaning={plainMeaning} />}
 
       {plainMeaning && <PlainMeaningTranslation text={plainMeaning} />}
 
       {meaningDetails.length > 0 && (
-        <Section title="Source-Backed Details">
+        <Section title="Details">
           <details className="rounded-lg border border-border/50 bg-background/30 p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-foreground">View source text used for the meaning result</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">View source text used for this result</summary>
             <div className="mt-3 space-y-3">
               {meaningDetails.map((result, index) => {
                 const sourceText = sourceByRule.get(result.node_id) || result.source_text;
