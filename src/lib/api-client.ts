@@ -113,7 +113,7 @@ export async function resolveReference(request: ResolveReferenceRequest) {
   });
 
   if (!response.ok) {
-    const { message } = await readErrorMessage(response, `Reference resolution failed (${response.status})`);
+    const { message } = await readErrorMessage(response, `Extended meaning failed (${response.status})`);
     throw new Error(message);
   }
 
