@@ -3,6 +3,7 @@ type ResolveReferenceBody = {
   plain_meaning?: string;
   referenced_sources?: string[];
   referenced_source_text?: string;
+  source_anchors?: string[];
 };
 
 function sendJson(res: any, status: number, payload: Record<string, unknown>) {
@@ -43,6 +44,9 @@ function parseBody(rawBody: string): ResolveReferenceBody {
       ? record.referenced_sources.filter((value): value is string => typeof value === "string")
       : [],
     referenced_source_text: typeof record.referenced_source_text === "string" ? record.referenced_source_text : "",
+    source_anchors: Array.isArray(record.source_anchors)
+      ? record.source_anchors.filter((value): value is string => typeof value === "string")
+      : [],
   };
 }
 
@@ -82,6 +86,7 @@ export default async function handler(req: any, res: any) {
   const plainMeaning = (body.plain_meaning || "").trim();
   const referencedSources = body.referenced_sources || [];
   const referencedSourceText = (body.referenced_source_text || "").trim();
+  const sourceAnchors = body.source_anchors || [];
 
   if (!currentText) {
     sendJson(res, 400, { message: "Current source text is required for reference resolution." });
@@ -123,7 +128,7 @@ export default async function handler(req: any, res: any) {
           {
             role: "system",
             content:
-              "You are a bounded Extended Meaning reference-integration engine for Tetherpoint. Do not give legal advice. Do not decide whether a law is valid, enforceable, constitutional, good policy, or true. Use only the supplied current source text, plain meaning, referenced source names, and pasted referenced source text. Extended Meaning is not a summary: map current rule + referenced source text to specific source-to-effect mapping, combined practical requirement, user action, and limits. Do not summarize vaguely. For each referenced source, identify the specific supplied language that matters, what that language controls, how it connects to the current rule, and the plain-language effect. Include a practical whatAUserMustDo field. If the pasted referenced text is too vague, incomplete, or does not include enough specific language to say what each referenced source contributes and what a user must do, set status to needs_review and explain what is missing in limits. Return JSON only with exactly this shape: {\"status\":\"resolved\"|\"needs_review\",\"currentRuleRequirement\":string,\"referencedSourceMappings\":[{\"sourceName\":string,\"specificReferencedText\":string,\"whatThisTextControls\":string,\"howItConnectsToCurrentRule\":string,\"plainLanguageEffect\":string}],\"combinedRequirement\":string,\"whatAUserMustDo\":string,\"limits\":[string]}."
+              "You are a bounded Extended Meaning reference-integration engine for Tetherpoint. AI must not run by default; this resolver is only for current source text that already contains explicit outside references such as referenced acts, section citations, external definitions, as defined in, pursuant to, or cross-references to another law, rule, or code. Do not give legal advice. Do not make policy judgments. Do not decide whether a law is valid, enforceable, constitutional, good policy, or true. Do not predict outcomes unless the supplied text supports them. Do not infer from topic association, do not blend categories such as voting topics, and do not fetch or use outside law. Use only the supplied current source text, deterministic plain meaning, referenced source names, pasted referenced source text, and source anchors when provided. Extended Meaning is not a summary. It must integrate current text plus referenced source text into source-anchored operational meaning. Identify who is affected, what changes, when it applies, where in the process it applies, how the process or requirement changes, why the referenced source matters, affected actor effects, reference source mappings, what does not follow from the supplied text, and limits. For each referenced source, identify the role in the current rule, the specific supplied text used, one effectType, how it connects to the current rule, and the plain-language effect. effectType must be one of document_requirement, registration_framework, timing_deadline, agency_process, form_requirement, eligibility_condition, definition_imported, authority_modified, or not_supported_by_text. If source text is missing, vague, incomplete, or a claim does not follow from the supplied text, set status to needs_review, say so directly in whatDoesNotFollowFromSuppliedText or limits, and do not fill gaps with broad interpretation. Return JSON only with exactly this shape: {\"status\":\"resolved\"|\"needs_review\",\"whoIsAffected\":string,\"whatChanges\":string,\"whenItApplies\":string,\"whereInProcessItApplies\":string,\"howProcessOrRequirementChanges\":string,\"whyReferencedSourceMatters\":string,\"affectedActorEffects\":[string],\"referencedSourceMappings\":[{\"sourceName\":string,\"roleInCurrentRule\":string,\"specificTextUsed\":string,\"effectType\":\"document_requirement\"|\"registration_framework\"|\"timing_deadline\"|\"agency_process\"|\"form_requirement\"|\"eligibility_condition\"|\"definition_imported\"|\"authority_modified\"|\"not_supported_by_text\",\"howItConnectsToCurrentRule\":string,\"plainLanguageEffect\":string}],\"whatDoesNotFollowFromSuppliedText\":[string],\"limits\":[string]}."
           },
           {
             role: "user",
@@ -132,6 +137,7 @@ export default async function handler(req: any, res: any) {
               plainMeaning,
               referencedSources,
               referencedSourceText,
+              sourceAnchors,
             }),
           },
         ],
