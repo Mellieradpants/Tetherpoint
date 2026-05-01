@@ -26,17 +26,20 @@ export interface ResolveReferenceRequest {
   referenced_source_text: string;
 }
 
-export interface ResolvedReferenceSource {
-  name: string;
-  relevantLanguage: string;
-  contribution: string;
-  relationship: string;
+export interface ReferencedSourceMapping {
+  sourceName: string;
+  specificReferencedText: string;
+  whatThisTextControls: string;
+  howItConnectsToCurrentRule: string;
+  plainLanguageEffect: string;
 }
 
 export interface ResolveReferenceResponse {
   status: "resolved" | "needs_review";
-  referencedSources: ResolvedReferenceSource[];
-  combinedPlainMeaning: string;
+  currentRuleRequirement: string;
+  referencedSourceMappings: ReferencedSourceMapping[];
+  combinedRequirement: string;
+  whatAUserMustDo: string;
   limits: string[];
 }
 
