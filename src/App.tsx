@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnalyzeForm } from "./components/AnalyzeForm";
-import { ReceiptWorkspace, type PipelineResponse } from "./components/ReceiptWorkspace";
+import { ExtendedMeaningWorkspace, type PipelineResponse } from "./components/ExtendedMeaningWorkspace";
 import { analyzeDocument } from "./lib/api-client";
 
 function HowToUse({ onStart }: { onStart: () => void }) {
@@ -159,7 +159,7 @@ function App() {
 
           {result ? (
             <div className="flex-1 md:overflow-hidden">
-              <ReceiptWorkspace data={result} />
+              <ExtendedMeaningWorkspace data={result} />
             </div>
           ) : !loading && (
             <div className="flex-1 flex items-center justify-center px-4">
