@@ -294,11 +294,18 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
   const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const ruleUnits = safeArray(data.rule_units?.rule_units);
   const referencedSources = safeArray(data.meaning?.summary_brief?.referenced_acts);
-  const currentText = safeArray(data.rule_units?.rule_units)
+  const currentText = ruleUnits
     .map((unit) => unit.source_text_combined || unit.primary_text || "")
     .filter(Boolean)
     .join("\n\n") || data.input.raw_content;
+  const sourceAnchors = ruleUnits
+    .map((unit) => {
+      const text = unit.source_text_combined || unit.primary_text || "";
+      return text ? `${unit.rule_unit_id}: ${text}` : "";
+    })
+    .filter(Boolean);
 
   const runResolver = async () => {
     setResolving(true);
@@ -311,6 +318,7 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
         plain_meaning: plainMeaning,
         referenced_sources: referencedSources,
         referenced_source_text: referencedSourceText,
+        source_anchors: sourceAnchors,
       });
       setResult(response);
     } catch (resolverError) {
@@ -349,19 +357,40 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
         {result && (
           <div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
             <StatusPill label="extended meaning" status={result.status} />
-            {safeArray(result.referencedSources).map((source, index) => (
-              <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
-                <div className="text-sm font-semibold text-foreground">{source.name}</div>
-                {source.relationship && <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{displayStatus(source.relationship)}</div>}
-                {source.relevantLanguage && <div className="mt-3"><SourceQuote>{source.relevantLanguage}</SourceQuote></div>}
-                {source.contribution && <p className="mt-3 text-sm leading-6 text-muted-foreground">{source.contribution}</p>}
+            {result.whoIsAffected && <DetailRow label="who is affected" value={result.whoIsAffected} />}
+            {result.whatChanges && <DetailRow label="what changes" value={result.whatChanges} />}
+            {result.whenItApplies && <DetailRow label="when it applies" value={result.whenItApplies} />}
+            {result.whereInProcessItApplies && <DetailRow label="where in the process it applies" value={result.whereInProcessItApplies} />}
+            {result.howProcessOrRequirementChanges && <DetailRow label="how the process or requirement changes" value={result.howProcessOrRequirementChanges} />}
+            {result.whyReferencedSourceMatters && <DetailRow label="why the referenced source matters" value={result.whyReferencedSourceMatters} />}
+            {safeArray(result.affectedActorEffects).length > 0 && (
+              <DetailRow
+                label="affected actor effects"
+                value={safeArray(result.affectedActorEffects).map((effect, index) => <div key={`actor-effect-${index}`}>{effect}</div>)}
+              />
+            )}
+            {safeArray(result.referencedSourceMappings).map((mapping, index) => (
+              <div key={`${mapping.sourceName}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-semibold text-foreground">{mapping.sourceName}</div>
+                  <StatusPill label="effect" status={mapping.effectType} />
+                </div>
+                {mapping.roleInCurrentRule && <DetailRow label="role in current rule" value={mapping.roleInCurrentRule} />}
+                {mapping.specificTextUsed && (
+                  <div className="mt-3">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Specific text used</div>
+                    <SourceQuote>{mapping.specificTextUsed}</SourceQuote>
+                  </div>
+                )}
+                {mapping.howItConnectsToCurrentRule && <DetailRow label="how it connects to the current rule" value={mapping.howItConnectsToCurrentRule} />}
+                {mapping.plainLanguageEffect && <DetailRow label="plain-language effect" value={mapping.plainLanguageEffect} />}
               </div>
             ))}
-            {result.combinedPlainMeaning && (
-              <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Extended Meaning</div>
-                <SourceQuote>{result.combinedPlainMeaning}</SourceQuote>
-              </div>
+            {safeArray(result.whatDoesNotFollowFromSuppliedText).length > 0 && (
+              <DetailRow
+                label="what does not follow from the supplied text"
+                value={safeArray(result.whatDoesNotFollowFromSuppliedText).map((item, index) => <div key={`unsupported-${index}`}>{item}</div>)}
+              />
             )}
             {safeArray(result.limits).length > 0 && (
               <div className="space-y-1 text-xs leading-5 text-muted-foreground">

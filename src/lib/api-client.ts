@@ -24,19 +24,40 @@ export interface ResolveReferenceRequest {
   plain_meaning: string;
   referenced_sources: string[];
   referenced_source_text: string;
+  source_anchors?: string[];
 }
 
-export interface ResolvedReferenceSource {
-  name: string;
-  relevantLanguage: string;
-  contribution: string;
-  relationship: string;
+export type ReferenceEffectType =
+  | "document_requirement"
+  | "registration_framework"
+  | "timing_deadline"
+  | "agency_process"
+  | "form_requirement"
+  | "eligibility_condition"
+  | "definition_imported"
+  | "authority_modified"
+  | "not_supported_by_text";
+
+export interface ReferencedSourceMapping {
+  sourceName: string;
+  roleInCurrentRule: string;
+  specificTextUsed: string;
+  effectType: ReferenceEffectType;
+  howItConnectsToCurrentRule: string;
+  plainLanguageEffect: string;
 }
 
 export interface ResolveReferenceResponse {
   status: "resolved" | "needs_review";
-  referencedSources: ResolvedReferenceSource[];
-  combinedPlainMeaning: string;
+  whoIsAffected: string;
+  whatChanges: string;
+  whenItApplies: string;
+  whereInProcessItApplies: string;
+  howProcessOrRequirementChanges: string;
+  whyReferencedSourceMatters: string;
+  affectedActorEffects: string[];
+  referencedSourceMappings: ReferencedSourceMapping[];
+  whatDoesNotFollowFromSuppliedText: string[];
   limits: string[];
 }
 
