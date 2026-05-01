@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { translatePlainMeaning } from "../lib/api-client";
+import { resolveReference, translatePlainMeaning, type ResolveReferenceResponse } from "../lib/api-client";
 import type { PipelineResponse } from "./Workspace";
 
 export type { PipelineResponse } from "./Workspace";
@@ -82,7 +82,7 @@ function toneForStatus(status: string | null | undefined): Tone {
   const value = rawStatus(status);
   if (["blocked", "error", "failed", "fatal", "contradiction", "unsupported"].some((token) => value.includes(token))) return "bad";
   if (["needs_review", "review", "repaired", "missing", "skipped", "warning"].some((token) => value.includes(token))) return "review";
-  if (["fallback", "ok", "clean", "match", "ready", "complete", "executed", "assembled", "available", "detected"].some((token) => value.includes(token))) return "good";
+  if (["fallback", "ok", "clean", "match", "ready", "complete", "executed", "assembled", "available", "detected", "resolved"].some((token) => value.includes(token))) return "good";
   return "neutral";
 }
 
@@ -289,6 +289,92 @@ function PlainMeaningTranslation({ text }: { text: string }) {
   );
 }
 
+function ReferenceResolutionPanel({ data, plainMeaning }: { data: PipelineResponse; plainMeaning: string }) {
+  const [referencedSourceText, setReferencedSourceText] = useState("");
+  const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const referencedSources = safeArray(data.meaning?.summary_brief?.referenced_acts);
+  const currentText = safeArray(data.rule_units?.rule_units)
+    .map((unit) => unit.source_text_combined || unit.primary_text || "")
+    .filter(Boolean)
+    .join("\n\n") || data.input.raw_content;
+
+  const runResolver = async () => {
+    setResolving(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await resolveReference({
+        current_text: currentText,
+        plain_meaning: plainMeaning,
+        referenced_sources: referencedSources,
+        referenced_source_text: referencedSourceText,
+      });
+      setResult(response);
+    } catch (resolverError) {
+      setError(resolverError instanceof Error ? resolverError.message : "Reference resolution failed.");
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  return (
+    <Section title="Reference Resolution">
+      <div className="space-y-3">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Paste the referenced source text here to resolve how it contributes to the current rule. This first prototype does not fetch outside law automatically.
+        </p>
+        {referencedSources.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {referencedSources.map((source) => <span key={source} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{source}</span>)}
+          </div>
+        )}
+        <textarea
+          value={referencedSourceText}
+          onChange={(event) => setReferencedSourceText(event.target.value)}
+          placeholder="Paste referenced act, section, definition, or official source text here."
+          className="min-h-40 w-full rounded-lg border border-border bg-background/40 p-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <button
+          type="button"
+          onClick={runResolver}
+          disabled={resolving || !referencedSourceText.trim() || referencedSources.length === 0}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+        >
+          {resolving ? "Resolving..." : "Resolve reference"}
+        </button>
+        {error && <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+        {result && (
+          <div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+            <StatusPill label="reference" status={result.status} />
+            {safeArray(result.referencedSources).map((source, index) => (
+              <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                <div className="text-sm font-semibold text-foreground">{source.name}</div>
+                {source.relationship && <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{displayStatus(source.relationship)}</div>}
+                {source.relevantLanguage && <div className="mt-3"><SourceQuote>{source.relevantLanguage}</SourceQuote></div>}
+                {source.contribution && <p className="mt-3 text-sm leading-6 text-muted-foreground">{source.contribution}</p>}
+              </div>
+            ))}
+            {result.combinedPlainMeaning && (
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Combined plain meaning</div>
+                <SourceQuote>{result.combinedPlainMeaning}</SourceQuote>
+              </div>
+            )}
+            {safeArray(result.limits).length > 0 && (
+              <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+                {result.limits.map((limit, index) => <div key={`limit-${index}`}>Limit: {limit}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function PlainMeaningTab({ data }: { data: PipelineResponse }) {
   const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
   const paragraphs = splitParagraphs(plainMeaning);
@@ -313,6 +399,8 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
           </div>
         ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
+
+      {externalReferenceNeeded && plainMeaning && <ReferenceResolutionPanel data={data} plainMeaning={plainMeaning} />}
 
       {plainMeaning && <PlainMeaningTranslation text={plainMeaning} />}
 
