@@ -349,18 +349,36 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
         {result && (
           <div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
             <StatusPill label="extended meaning" status={result.status} />
-            {safeArray(result.referencedSources).map((source, index) => (
-              <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
-                <div className="text-sm font-semibold text-foreground">{source.name}</div>
-                {source.relationship && <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{displayStatus(source.relationship)}</div>}
-                {source.relevantLanguage && <div className="mt-3"><SourceQuote>{source.relevantLanguage}</SourceQuote></div>}
-                {source.contribution && <p className="mt-3 text-sm leading-6 text-muted-foreground">{source.contribution}</p>}
+            {result.currentRuleRequirement && (
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Current rule requirement</div>
+                <SourceQuote>{result.currentRuleRequirement}</SourceQuote>
+              </div>
+            )}
+            {safeArray(result.referencedSourceMappings).map((mapping, index) => (
+              <div key={`${mapping.sourceName}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                <div className="text-sm font-semibold text-foreground">{mapping.sourceName}</div>
+                {mapping.specificReferencedText && (
+                  <div className="mt-3">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Specific referenced text</div>
+                    <SourceQuote>{mapping.specificReferencedText}</SourceQuote>
+                  </div>
+                )}
+                {mapping.whatThisTextControls && <DetailRow label="what this text controls" value={mapping.whatThisTextControls} />}
+                {mapping.howItConnectsToCurrentRule && <DetailRow label="how it connects to the current rule" value={mapping.howItConnectsToCurrentRule} />}
+                {mapping.plainLanguageEffect && <DetailRow label="plain-language effect" value={mapping.plainLanguageEffect} />}
               </div>
             ))}
-            {result.combinedPlainMeaning && (
+            {result.combinedRequirement && (
               <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Extended Meaning</div>
-                <SourceQuote>{result.combinedPlainMeaning}</SourceQuote>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Combined requirement</div>
+                <SourceQuote>{result.combinedRequirement}</SourceQuote>
+              </div>
+            )}
+            {result.whatAUserMustDo && (
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">What a user must do</div>
+                <SourceQuote>{result.whatAUserMustDo}</SourceQuote>
               </div>
             )}
             {safeArray(result.limits).length > 0 && (
