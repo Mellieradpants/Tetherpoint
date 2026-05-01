@@ -19,6 +19,27 @@ interface TranslatePlainMeaningRequest {
   language: string;
 }
 
+export interface ResolveReferenceRequest {
+  current_text: string;
+  plain_meaning: string;
+  referenced_sources: string[];
+  referenced_source_text: string;
+}
+
+export interface ResolvedReferenceSource {
+  name: string;
+  relevantLanguage: string;
+  contribution: string;
+  relationship: string;
+}
+
+export interface ResolveReferenceResponse {
+  status: "resolved" | "needs_review";
+  referencedSources: ResolvedReferenceSource[];
+  combinedPlainMeaning: string;
+  limits: string[];
+}
+
 async function readErrorMessage(response: Response, fallback: string) {
   const text = await response.text();
   let message = fallback;
@@ -80,4 +101,21 @@ export async function translatePlainMeaning(request: TranslatePlainMeaningReques
     language: string;
     source_stage?: "meaning";
   };
+}
+
+export async function resolveReference(request: ResolveReferenceRequest) {
+  const response = await fetch("/api/resolve-reference", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const { message } = await readErrorMessage(response, `Reference resolution failed (${response.status})`);
+    throw new Error(message);
+  }
+
+  return JSON.parse(await response.text()) as ResolveReferenceResponse;
 }
