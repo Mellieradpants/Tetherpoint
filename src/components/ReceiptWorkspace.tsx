@@ -115,7 +115,7 @@ function splitParagraphs(text: string | null | undefined): string[] {
 }
 
 function uniqueReferencePackets(units: RuleUnitWithReferenceMetadata[]): RuleUnitReferencePacket[] {
-  const seen: set<string> = new Set();
+  const seen: Set<string> = new Set();
   const packets: RuleUnitReferencePacket[] = [];
 
   for (const unit of units) {
