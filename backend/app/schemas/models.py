@@ -112,6 +112,17 @@ class RuleUnitNodeRef(BaseModel):
     role: str
 
 
+class RuleUnitReferencedSource(BaseModel):
+    name: str
+    referenceType: str
+    matchedText: str
+    officialSourceUrl: Optional[str] = None
+    retrievalStatus: Literal["not_attempted", "manual_required", "retrieved", "failed"] = "not_attempted"
+    sourceText: Optional[str] = None
+    anchors: list[str] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
 class RuleUnit(BaseModel):
     rule_unit_id: str
     section_id: str
@@ -126,6 +137,8 @@ class RuleUnit(BaseModel):
     jurisdiction: list[RuleUnitNodeRef] = Field(default_factory=list)
     mechanisms: list[RuleUnitNodeRef] = Field(default_factory=list)
     external_references: list[str] = Field(default_factory=list)
+    requires_reference_resolution: bool = False
+    referenced_sources: list[RuleUnitReferencedSource] = Field(default_factory=list)
     source_node_ids: list[str] = Field(default_factory=list)
     fragment_node_ids: list[str] = Field(default_factory=list)
     source_text_combined: str
