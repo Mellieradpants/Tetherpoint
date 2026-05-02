@@ -64,7 +64,11 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     selection_result = process_selection(structure_result)
 
     # 5. Rule Unit Builder
-    rule_unit_result = process_rule_units(structure_result, selection_result)
+    rule_unit_result = process_rule_units(
+        structure_result,
+        selection_result,
+        origin_result=origin_result,
+    )
     if rule_unit_result.unit_count == 0 and selection_result.selected_nodes:
         errors.append(PipelineError(
             layer="rule_units",
