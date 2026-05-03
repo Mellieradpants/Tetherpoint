@@ -244,6 +244,24 @@ class VerificationResult(BaseModel):
     node_results: list[VerificationNodeResult] = Field(default_factory=list)
 
 
+class GovernanceReferenceRole(BaseModel):
+    source: str
+    role: str
+    reason: Optional[str] = None
+
+
+class GovernanceGateResult(BaseModel):
+    status: Literal["match", "needs_review"]
+    scope_lanes: list[str] = Field(default_factory=list)
+    actor_scopes: list[str] = Field(default_factory=list)
+    process_scopes: list[str] = Field(default_factory=list)
+    evidence_categories: list[str] = Field(default_factory=list)
+    reference_roles: list[GovernanceReferenceRole] = Field(default_factory=list)
+    non_blending_rules: list[str] = Field(default_factory=list)
+    practical_questions: list[str] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
 GovernanceStatus = Literal[
     "match",
     "mismatch_detected",
@@ -316,6 +334,7 @@ PipelineLayerName = Literal[
     "origin",
     "selection",
     "rule_units",
+    "governance_gate",
     "verification",
     "meaning",
     "governance",
@@ -334,6 +353,7 @@ class PipelineResponse(BaseModel):
     structure: StructureResult
     selection: SelectionResult
     rule_units: RuleUnitResult
+    governance_gate: GovernanceGateResult
     meaning: MeaningResult
     origin: OriginResult
     verification: VerificationResult
