@@ -9,7 +9,18 @@ from __future__ import annotations
 from collections import defaultdict
 import re
 
-from app.schemas.models import RuleUnit, RuleUnitNodeRef, RuleUnitResult, SelectionResult, StructureNode, StructureResult
+from app.schemas.models import (
+    OriginResult,
+    OriginSignal,
+    ReferencedSource,
+    RuleUnit,
+    RuleUnitNodeRef,
+    RuleUnitReferencedSource,
+    RuleUnitResult,
+    SelectionResult,
+    StructureNode,
+    StructureResult,
+)
 
 _ROLE_BUCKETS = {
     "CONDITION": "conditions",
@@ -30,6 +41,7 @@ _RULE_SIGNAL_RE = re.compile(
 )
 
 _REFERENCE_ACT_RE = re.compile(r"\b([A-Z][A-Za-z0-9\s,-]+ Act of \d{4}|REAL ID Act of 2005)\b", re.I)
+_REFERENCE_SIGNAL_NAMES = {"referenced_act", "usc_citation"}
 
 
 def _node_ref(node: StructureNode) -> RuleUnitNodeRef:
@@ -97,15 +109,105 @@ def _promote_standalone_exception(nodes: list[StructureNode]) -> StructureNode |
     return candidates[0]
 
 
+def _contains_reference(text: str, reference: str) -> bool:
+    if not reference:
+        return False
+    return reference.lower() in text.lower()
+
+
+def _anchors_for_reference(nodes: list[StructureNode], reference: str) -> list[str]:
+    anchors: list[str] = []
+    for node in nodes:
+        node_text = node.source_text or node.normalized_text or ""
+        if _contains_reference(node_text, reference):
+            anchors.append(node.source_anchor)
+    return _unique_preserve_order(anchors)
+
+
+def _packet_from_referenced_source(
+    source: ReferencedSource,
+    source_text: str,
+    source_nodes: list[StructureNode],
+) -> RuleUnitReferencedSource | None:
+    if not (_contains_reference(source_text, source.matched_text) or _contains_reference(source_text, source.name)):
+        return None
+
+    anchors = _anchors_for_reference(source_nodes, source.matched_text) or _anchors_for_reference(source_nodes, source.name)
+    return RuleUnitReferencedSource(
+        name=source.name,
+        referenceType=source.reference_type,
+        matchedText=source.matched_text,
+        officialSourceUrl=source.official_source_url,
+        retrievalStatus="not_attempted",
+        anchors=anchors,
+        limits=["Referenced source text has not been retrieved; manual source text is required for Extended Meaning."],
+    )
+
+
+def _packet_from_signal(
+    signal: OriginSignal,
+    source_text: str,
+    source_nodes: list[StructureNode],
+) -> RuleUnitReferencedSource | None:
+    if signal.signal not in _REFERENCE_SIGNAL_NAMES or not _contains_reference(source_text, signal.value):
+        return None
+
+    return RuleUnitReferencedSource(
+        name=signal.value,
+        referenceType=signal.signal.upper(),
+        matchedText=signal.value,
+        officialSourceUrl=None,
+        retrievalStatus="not_attempted",
+        anchors=_anchors_for_reference(source_nodes, signal.value),
+        limits=["Referenced source text has not been retrieved; manual source text is required for Extended Meaning."],
+    )
+
+
+def _reference_packets(
+    source_text: str,
+    source_nodes: list[StructureNode],
+    origin_result: OriginResult | None,
+) -> list[RuleUnitReferencedSource]:
+    if origin_result is None or origin_result.status == "skipped":
+        return []
+
+    packets: list[RuleUnitReferencedSource] = []
+    seen: set[tuple[str, str]] = set()
+
+    for source in origin_result.referenced_sources:
+        packet = _packet_from_referenced_source(source, source_text, source_nodes)
+        if packet is None:
+            continue
+        key = (packet.name.lower(), packet.matchedText.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        packets.append(packet)
+
+    for signal in origin_result.origin_identity_signals:
+        packet = _packet_from_signal(signal, source_text, source_nodes)
+        if packet is None:
+            continue
+        key = (packet.name.lower(), packet.matchedText.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        packets.append(packet)
+
+    return packets
+
+
 def _build_rule_unit(
     unit_index: int,
     section_id: str,
     primary: StructureNode,
     children: list[StructureNode],
     fragments: list[StructureNode],
+    origin_result: OriginResult | None,
 ) -> RuleUnit:
     source_nodes = [primary] + children
     source_text_combined = _combined_text(source_nodes)
+    referenced_sources = _reference_packets(source_text_combined, source_nodes, origin_result)
     assembly_issues: list[str] = []
 
     if _has_unsafe_node(source_nodes):
@@ -157,6 +259,8 @@ def _build_rule_unit(
         jurisdiction=jurisdiction,
         mechanisms=mechanisms,
         external_references=_extract_external_references(source_text_combined),
+        requires_reference_resolution=bool(referenced_sources),
+        referenced_sources=referenced_sources,
         source_node_ids=[node.node_id for node in source_nodes],
         fragment_node_ids=[node.node_id for node in fragments],
         source_text_combined=source_text_combined,
@@ -168,9 +272,16 @@ def _build_rule_unit(
     )
 
 
-def _build_review_unit(unit_index: int, section_id: str, nodes: list[StructureNode], issue: str) -> RuleUnit:
+def _build_review_unit(
+    unit_index: int,
+    section_id: str,
+    nodes: list[StructureNode],
+    issue: str,
+    origin_result: OriginResult | None,
+) -> RuleUnit:
     fragments = [node for node in nodes if "fragment:incomplete" in node.tags]
     source_text_combined = _combined_text(nodes)
+    referenced_sources = _reference_packets(source_text_combined, nodes, origin_result)
     return RuleUnit(
         rule_unit_id=f"review-{unit_index:04d}",
         section_id=section_id,
@@ -185,6 +296,8 @@ def _build_review_unit(unit_index: int, section_id: str, nodes: list[StructureNo
         jurisdiction=[],
         mechanisms=[],
         external_references=_extract_external_references(source_text_combined),
+        requires_reference_resolution=bool(referenced_sources),
+        referenced_sources=referenced_sources,
         source_node_ids=[node.node_id for node in nodes],
         fragment_node_ids=[node.node_id for node in fragments],
         source_text_combined=source_text_combined,
@@ -196,7 +309,11 @@ def _build_review_unit(unit_index: int, section_id: str, nodes: list[StructureNo
     )
 
 
-def process_rule_units(structure: StructureResult, selection: SelectionResult) -> RuleUnitResult:
+def process_rule_units(
+    structure: StructureResult,
+    selection: SelectionResult,
+    origin_result: OriginResult | None = None,
+) -> RuleUnitResult:
     """Group selected atomic nodes into rule units.
 
     Selection means a node can participate in assembly. It does not mean the
@@ -225,7 +342,7 @@ def process_rule_units(structure: StructureResult, selection: SelectionResult) -
             promoted = _promote_standalone_exception(selected_section_nodes)
             if promoted is not None:
                 children = [node for node in selected_section_nodes if node.node_id != promoted.node_id]
-                unit = _build_rule_unit(unit_index, section_id, promoted, children, fragments)
+                unit = _build_rule_unit(unit_index, section_id, promoted, children, fragments, origin_result)
                 rule_units.append(unit)
                 assembly_log.append(
                     f"{section_id}: {unit.rule_unit_id} assembled from standalone exception {promoted.node_id} "
@@ -234,7 +351,13 @@ def process_rule_units(structure: StructureResult, selection: SelectionResult) -
                 unit_index += 1
                 continue
 
-            rule_units.append(_build_review_unit(unit_index, section_id, selected_section_nodes + fragments, "missing_primary_rule"))
+            rule_units.append(_build_review_unit(
+                unit_index,
+                section_id,
+                selected_section_nodes + fragments,
+                "missing_primary_rule",
+                origin_result,
+            ))
             assembly_log.append(f"{section_id}: NEEDS_REVIEW - missing PRIMARY_RULE")
             unit_index += 1
             continue
@@ -260,7 +383,7 @@ def process_rule_units(structure: StructureResult, selection: SelectionResult) -
                     and node.role in _ROLE_BUCKETS
                 )
 
-            unit = _build_rule_unit(unit_index, section_id, primary, children, fragments)
+            unit = _build_rule_unit(unit_index, section_id, primary, children, fragments, origin_result)
             rule_units.append(unit)
             assembly_log.append(
                 f"{section_id}: {unit.rule_unit_id} assembled from primary {primary.node_id} "

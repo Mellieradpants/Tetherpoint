@@ -112,6 +112,17 @@ class RuleUnitNodeRef(BaseModel):
     role: str
 
 
+class RuleUnitReferencedSource(BaseModel):
+    name: str
+    referenceType: str
+    matchedText: str
+    officialSourceUrl: Optional[str] = None
+    retrievalStatus: Literal["not_attempted", "manual_required", "retrieved", "failed"] = "not_attempted"
+    sourceText: Optional[str] = None
+    anchors: list[str] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
 class RuleUnit(BaseModel):
     rule_unit_id: str
     section_id: str
@@ -126,6 +137,8 @@ class RuleUnit(BaseModel):
     jurisdiction: list[RuleUnitNodeRef] = Field(default_factory=list)
     mechanisms: list[RuleUnitNodeRef] = Field(default_factory=list)
     external_references: list[str] = Field(default_factory=list)
+    requires_reference_resolution: bool = False
+    referenced_sources: list[RuleUnitReferencedSource] = Field(default_factory=list)
     source_node_ids: list[str] = Field(default_factory=list)
     fragment_node_ids: list[str] = Field(default_factory=list)
     source_text_combined: str
@@ -231,6 +244,24 @@ class VerificationResult(BaseModel):
     node_results: list[VerificationNodeResult] = Field(default_factory=list)
 
 
+class GovernanceReferenceRole(BaseModel):
+    source: str
+    role: str
+    reason: Optional[str] = None
+
+
+class GovernanceGateResult(BaseModel):
+    status: Literal["match", "needs_review"]
+    scope_lanes: list[str] = Field(default_factory=list)
+    actor_scopes: list[str] = Field(default_factory=list)
+    process_scopes: list[str] = Field(default_factory=list)
+    evidence_categories: list[str] = Field(default_factory=list)
+    reference_roles: list[GovernanceReferenceRole] = Field(default_factory=list)
+    non_blending_rules: list[str] = Field(default_factory=list)
+    practical_questions: list[str] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
 GovernanceStatus = Literal[
     "match",
     "mismatch_detected",
@@ -303,6 +334,7 @@ PipelineLayerName = Literal[
     "origin",
     "selection",
     "rule_units",
+    "governance_gate",
     "verification",
     "meaning",
     "governance",
@@ -321,6 +353,7 @@ class PipelineResponse(BaseModel):
     structure: StructureResult
     selection: SelectionResult
     rule_units: RuleUnitResult
+    governance_gate: GovernanceGateResult
     meaning: MeaningResult
     origin: OriginResult
     verification: VerificationResult

@@ -24,6 +24,22 @@ type GovernanceRecord = {
   activeIssues?: GovernanceCheck[];
 };
 
+type RuleUnitReferencePacket = {
+  name: string;
+  referenceType: string;
+  matchedText: string;
+  officialSourceUrl?: string | null;
+  retrievalStatus: "not_attempted" | "manual_required" | "retrieved" | "failed";
+  sourceText?: string;
+  anchors?: string[];
+  limits?: string[];
+};
+
+type RuleUnitWithReferenceMetadata = PipelineResponse["rule_units"]["rule_units"][number] & {
+  requires_reference_resolution?: boolean;
+  referenced_sources?: RuleUnitReferencePacket[];
+};
+
 const TRANSLATION_LANGUAGES = [
   { code: "es", label: "Spanish" },
   { code: "ht", label: "Haitian Creole" },
@@ -96,6 +112,28 @@ function toneClass(tone: Tone): string {
 function splitParagraphs(text: string | null | undefined): string[] {
   if (!text || !text.trim()) return [];
   return text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+}
+
+function uniqueReferencePackets(units: RuleUnitWithReferenceMetadata[]): RuleUnitReferencePacket[] {
+  const seen: Set<string> = new Set();
+  const packets: RuleUnitReferencePacket[] = [];
+
+  for (const unit of units) {
+    for (const packet of safeArray(unit.referenced_sources)) {
+      const key = `${packet.name}|${packet.matchedText}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      packets.push(packet);
+    }
+  }
+
+  return packets;
+}
+
+function referenceUnits(data: PipelineResponse): RuleUnitWithReferenceMetadata[] {
+  return (safeArray(data.rule_units?.rule_units) as RuleUnitWithReferenceMetadata[]).filter(
+    (unit) => Boolean(unit.requires_reference_resolution) && safeArray(unit.referenced_sources).length > 0
+  );
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -294,18 +332,20 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
   const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
-  const ruleUnits = safeArray(data.rule_units?.rule_units);
-  const referencedSources = safeArray(data.meaning?.summary_brief?.referenced_acts);
-  const currentText = ruleUnits
+  const units = referenceUnits(data);
+  const referencePackets = uniqueReferencePackets(units);
+  const referencedSources = referencePackets.map((packet) => packet.name);
+  const currentText = units
     .map((unit) => unit.source_text_combined || unit.primary_text || "")
     .filter(Boolean)
     .join("\n\n") || data.input.raw_content;
-  const sourceAnchors = ruleUnits
-    .map((unit) => {
+  const sourceAnchors = [
+    ...units.map((unit) => {
       const text = unit.source_text_combined || unit.primary_text || "";
       return text ? `${unit.rule_unit_id}: ${text}` : "";
-    })
-    .filter(Boolean);
+    }),
+    ...referencePackets.flatMap((packet) => safeArray(packet.anchors).map((anchor) => `${packet.name}: ${anchor}`)),
+  ].filter(Boolean);
 
   const runResolver = async () => {
     setResolving(true);
@@ -334,9 +374,13 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
         <p className="text-sm leading-6 text-muted-foreground">
           Uses referenced source text you provide to show how outside references connect to the current rule.
         </p>
-        {referencedSources.length > 0 && (
+        {referencePackets.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {referencedSources.map((source) => <span key={source} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{source}</span>)}
+            {referencePackets.map((packet) => (
+              <span key={`${packet.name}-${packet.matchedText}`} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {packet.name}
+              </span>
+            ))}
           </div>
         )}
         <textarea
@@ -408,7 +452,7 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
   const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
   const paragraphs = splitParagraphs(plainMeaning);
   const sourceByRule = ruleTextById(data);
-  const externalReferenceNeeded = Boolean(data.meaning?.summary_brief?.external_reference_needed);
+  const externalReferenceNeeded = referenceUnits(data).length > 0;
   const meaningDetails = safeArray(data.meaning?.node_results);
 
   return (
