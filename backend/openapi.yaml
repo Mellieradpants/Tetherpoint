@@ -264,6 +264,19 @@ components:
         text: { type: string }
         role: { type: string }
 
+    RuleUnitReferencedSource:
+      type: object
+      required: [name, referenceType, matchedText]
+      properties:
+        name: { type: string }
+        referenceType: { type: string }
+        matchedText: { type: string }
+        officialSourceUrl: { type: ["string", "null"] }
+        retrievalStatus: { type: string, enum: [not_attempted, manual_required, retrieved, failed], default: not_attempted }
+        sourceText: { type: ["string", "null"] }
+        anchors: { type: array, items: { type: string }, default: [] }
+        limits: { type: array, items: { type: string }, default: [] }
+
     RuleUnit:
       type: object
       required: [rule_unit_id, section_id, source_text_combined, assembly_status, meaning_eligible, verification_eligible, review_status]
@@ -281,6 +294,8 @@ components:
         jurisdiction: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
         mechanisms: { type: array, items: { $ref: "#/components/schemas/RuleUnitNodeRef" }, default: [] }
         external_references: { type: array, items: { type: string }, default: [] }
+        requires_reference_resolution: { type: boolean, default: false }
+        referenced_sources: { type: array, items: { $ref: "#/components/schemas/RuleUnitReferencedSource" }, default: [] }
         source_node_ids: { type: array, items: { type: string }, default: [] }
         fragment_node_ids: { type: array, items: { type: string }, default: [] }
         source_text_combined: { type: string }
@@ -487,6 +502,28 @@ components:
           default: []
         principle: { type: string }
 
+    GovernanceReferenceRole:
+      type: object
+      required: [source, role]
+      properties:
+        source: { type: string }
+        role: { type: string }
+        reason: { type: ["string", "null"] }
+
+    GovernanceGateResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [match, needs_review] }
+        scope_lanes: { type: array, items: { type: string }, default: [] }
+        actor_scopes: { type: array, items: { type: string }, default: [] }
+        process_scopes: { type: array, items: { type: string }, default: [] }
+        evidence_categories: { type: array, items: { type: string }, default: [] }
+        reference_roles: { type: array, items: { $ref: "#/components/schemas/GovernanceReferenceRole" }, default: [] }
+        non_blending_rules: { type: array, items: { type: string }, default: [] }
+        practical_questions: { type: array, items: { type: string }, default: [] }
+        limits: { type: array, items: { type: string }, default: [] }
+
     OutputResult:
       type: object
       required: [summary, total_nodes, selected_count, excluded_count, meaning_status, origin_status, verification_status]
@@ -516,12 +553,13 @@ components:
 
     PipelineResponse:
       type: object
-      required: [input, structure, selection, rule_units, meaning, origin, verification, governance, output]
+      required: [input, structure, selection, rule_units, governance_gate, meaning, origin, verification, governance, output]
       properties:
         input: { $ref: "#/components/schemas/InputResult" }
         structure: { $ref: "#/components/schemas/StructureResult" }
         selection: { $ref: "#/components/schemas/SelectionResult" }
         rule_units: { $ref: "#/components/schemas/RuleUnitResult" }
+        governance_gate: { $ref: "#/components/schemas/GovernanceGateResult" }
         meaning: { $ref: "#/components/schemas/MeaningResult" }
         origin: { $ref: "#/components/schemas/OriginResult" }
         verification: { $ref: "#/components/schemas/VerificationResult" }
