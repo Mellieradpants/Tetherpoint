@@ -392,7 +392,95 @@ const gateLimits = data.governance_gate?.limits || [];
             ))}
           </div>
         )}
-        <textarea
+      {referencePackets.length > 0 && (
+  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+    <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+      Reference Packets
+    </div>
+
+    <div className="space-y-3">
+      {referencePackets.map((packet) => {
+        const role = referenceRoleBySource.get(packet.name.toLowerCase());
+
+        return (
+          <div
+            key={`${packet.name}-${packet.matchedText || packet.referenceType}`}
+            className="rounded-lg border border-border/50 bg-surface p-3"
+          >
+            <div className="text-sm font-semibold text-foreground">
+              {packet.name}
+            </div>
+
+            {role?.role && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                Role: {role.role}
+              </div>
+            )}
+
+            {packet.matchedText && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Matched text: {packet.matchedText}
+              </div>
+            )}
+
+            {packet.retrievalStatus && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Retrieval status: {packet.retrievalStatus}
+              </div>
+            )}
+
+            {packet.officialSourceUrl && (
+              <a
+                href={packet.officialSourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block text-xs text-primary underline underline-offset-2"
+              >
+                Open official source
+              </a>
+            )}
+
+            {packet.limits && packet.limits.length > 0 && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Limits: {packet.limits.join("; ")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+    {practicalQuestions.length > 0 && (
+      <div className="mt-4">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+          Needed to resolve
+        </div>
+        <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+          {practicalQuestions.slice(0, 5).map((question) => (
+            <li key={question}>{question}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+ {gateLimits.length > 0 && (
+      <div className="mt-4">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+          Limits
+        </div>
+        <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+          {gateLimits.map((limit) => (
+            <li key={limit}>{limit}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </div>
+)}
+
+
+
+      <textarea
           value={referencedSourceText}
           onChange={(event) => setReferencedSourceText(event.target.value)}
           placeholder="Paste referenced act, section, definition, or official source text here."
