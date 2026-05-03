@@ -91,7 +91,7 @@ class TestRuleUnitsLayer:
         units = _rule_units_for_text(
             "The reporting requirement in Section 2 does not apply to a regional transmission operator "
             "that serves fewer than 100,000 retail customers, unless the Commission determines that "
-            "the operatorâ€™s service area includes critical defense, hospital, or water infrastructure."
+            "the operator’s service area includes critical defense, hospital, or water infrastructure."
         )
         assert units.unit_count == 1
         assert units.ready_count == 1
