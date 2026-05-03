@@ -334,15 +334,28 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
   const [resolving, setResolving] = useState(false);
   const units = referenceUnits(data);
   const referencePackets = uniqueReferencePackets(units);
-  const referenceRoleBySource = new Map(
-  (data.governance_gate?.reference_roles || []).map((role) => [
+ type GovernanceGateReferenceRole = {
+  source: string;
+  role: string;
+  reason?: string | null;
+};
+
+type GovernanceGateData = {
+  reference_roles?: GovernanceGateReferenceRole[];
+  practical_questions?: string[];
+  limits?: string[];
+};
+
+const governanceGate = (data as PipelineResponse & { governance_gate?: GovernanceGateData }).governance_gate;
+
+const referenceRoleBySource = new Map(
+  safeArray(governanceGate?.reference_roles).map((role) => [
     role.source.toLowerCase(),
     role,
   ])
 );
-const practicalQuestions = data.governance_gate?.practical_questions || [];
-const gateLimits = data.governance_gate?.limits || [];
-
+const practicalQuestions = safeArray(governanceGate?.practical_questions);
+const gateLimits = safeArray(governanceGate?.limits);
   const referencedSources = referencePackets.map((packet) => packet.name);
   const currentText = units
     .map((unit) => unit.source_text_combined || unit.primary_text || "")
