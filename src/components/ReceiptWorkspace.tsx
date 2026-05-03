@@ -334,6 +334,15 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
   const [resolving, setResolving] = useState(false);
   const units = referenceUnits(data);
   const referencePackets = uniqueReferencePackets(units);
+  const referenceRoleBySource = new Map(
+  (data.governance_gate?.reference_roles || []).map((role) => [
+    role.source.toLowerCase(),
+    role,
+  ])
+);
+const practicalQuestions = data.governance_gate?.practical_questions || [];
+const gateLimits = data.governance_gate?.limits || [];
+
   const referencedSources = referencePackets.map((packet) => packet.name);
   const currentText = units
     .map((unit) => unit.source_text_combined || unit.primary_text || "")
