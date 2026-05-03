@@ -1,3 +1,4 @@
+```tsx
 import { useMemo, useState, type ReactNode } from "react";
 import { resolveReference, translatePlainMeaning, type ResolveReferenceResponse } from "../lib/api-client";
 import type { PipelineResponse } from "./Workspace";
@@ -136,7 +137,7 @@ function uniqueReferencePackets(units: RuleUnitWithReferenceMetadata[]): RuleUni
 
   for (const unit of units) {
     for (const packet of safeArray(unit.referenced_sources)) {
-      const key = ${packet.name}|${packet.matchedText}.toLowerCase();
+      const key = `${packet.name}|${packet.matchedText}`.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
       packets.push(packet);
@@ -167,7 +168,7 @@ function EmptyState({ children }: { children: ReactNode }) {
 
 function StatusPill({ label, status }: { label: string; status: string | null | undefined }) {
   return (
-    <span className={rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(toneForStatus(status))}}>
+    <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(toneForStatus(status))}`}>
       {label}: {displayStatus(status)}
     </span>
   );
@@ -185,7 +186,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 function SourceQuote({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-sm leading-6 text-foreground">{children}</div>;
 }
-
+```
 function TabButton({ tab, active, onClick, issueCount = 0 }: { tab: ResultTab; active: boolean; onClick: () => void; issueCount?: number }) {
   const labels: Record<ResultTab, string> = {
     meaning: "Meaning",
@@ -200,9 +201,9 @@ function TabButton({ tab, active, onClick, issueCount = 0 }: { tab: ResultTab; a
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={min-w-0 flex-1 rounded-full border px-2.5 py-2 text-center text-xs font-semibold leading-none transition-colors sm:flex-none sm:px-4 sm:text-sm ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}}
+      className={`min-w-0 flex-1 rounded-full border px-2.5 py-2 text-center text-xs font-semibold leading-none transition-colors sm:flex-none sm:px-4 sm:text-sm ${active ? "border-gold/40 bg-gold/10 text-foreground" : "border-border/60 bg-background/20 text-muted-foreground hover:border-border hover:text-foreground"}`}
     >
-      <span className="block truncate whitespace-nowrap">{labels[tab]}{tab === "issues" && issueCount > 0 ?  ${issueCount} : ""}</span>
+      <span className="block truncate whitespace-nowrap">{labels[tab]}{tab === "issues" && issueCount > 0 ? ` ${issueCount}` : ""}</span>
     </button>
   );
 }
@@ -233,14 +234,14 @@ function buildResultText(data: PipelineResponse) {
     plainMeaning,
     "",
     "Origin",
-    Status: ${displayStatus(data.origin?.status)},
+    `Status: ${displayStatus(data.origin?.status)}`,
     "",
     "Verification",
-    systems.size > 0 ? Record systems: ${Array.from(systems).join(", ")} : "No verification record systems returned.",
+    systems.size > 0 ? `Record systems: ${Array.from(systems).join(", ")}` : "No verification record systems returned.",
     "",
     "Governance",
-    Status: ${displayStatus(governanceStatus)},
-    Issue count: ${governanceIssues},
+    `Status: ${displayStatus(governanceStatus)}`,
+    `Issue count: ${governanceIssues}`,
   ].join("\n");
 }
 
@@ -342,7 +343,7 @@ function PlainMeaningTranslation({ text }: { text: string }) {
     </Section>
   );
 }
-
+```tsx
 function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; plainMeaning: string }) {
   const [referencedSourceText, setReferencedSourceText] = useState("");
   const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
@@ -367,9 +368,9 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
   const sourceAnchors = [
     ...units.map((unit) => {
       const text = unit.source_text_combined || unit.primary_text || "";
-      return text ? ${unit.rule_unit_id}: ${text} : "";
+      return text ? `${unit.rule_unit_id}: ${text}` : "";
     }),
-    ...referencePackets.flatMap((packet) => safeArray(packet.anchors).map((anchor) => ${packet.name}: ${anchor})),
+    ...referencePackets.flatMap((packet) => safeArray(packet.anchors).map((anchor) => `${packet.name}: ${anchor}`)),
   ].filter(Boolean);
 
   const runResolver = async () => {
@@ -403,7 +404,7 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
         {referencePackets.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {referencePackets.map((packet) => (
-              <span key={${packet.name}-${packet.matchedText}} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              <span key={`${packet.name}-${packet.matchedText}`} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 {packet.name}
               </span>
             ))}
@@ -422,7 +423,7 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
 
                 return (
                   <div
-                    key={${packet.name}-${packet.matchedText || packet.referenceType}}
+                    key={`${packet.name}-${packet.matchedText || packet.referenceType}`}
                     className="rounded-lg border border-border/50 bg-surface p-3"
                   >
                     <div className="text-sm font-semibold text-foreground">
@@ -523,11 +524,11 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
             {safeArray(result.affectedActorEffects).length > 0 && (
               <DetailRow
                 label="affected actor effects"
-                value={safeArray(result.affectedActorEffects).map((effect, index) => <div key={actor-effect-${index}}>{effect}</div>)}
+                value={safeArray(result.affectedActorEffects).map((effect, index) => <div key={`actor-effect-${index}`}>{effect}</div>)}
               />
             )}
             {safeArray(result.referencedSourceMappings).map((mapping, index) => (
-              <div key={${mapping.sourceName}-${index}} className="rounded-lg border border-border/50 bg-background/40 p-3">
+              <div key={`${mapping.sourceName}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-sm font-semibold text-foreground">{mapping.sourceName}</div>
                   <StatusPill label="effect" status={mapping.effectType} />
@@ -546,12 +547,12 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
             {safeArray(result.whatDoesNotFollowFromSuppliedText).length > 0 && (
               <DetailRow
                 label="what does not follow from the supplied text"
-                value={safeArray(result.whatDoesNotFollowFromSuppliedText).map((item, index) => <div key={unsupported-${index}}>{item}</div>)}
+                value={safeArray(result.whatDoesNotFollowFromSuppliedText).map((item, index) => <div key={`unsupported-${index}`}>{item}</div>)}
               />
             )}
             {safeArray(result.limits).length > 0 && (
               <div className="space-y-1 text-xs leading-5 text-muted-foreground">
-                {result.limits.map((limit, index) => <div key={limit-${index}}>Limit: {limit}</div>)}
+                {result.limits.map((limit, index) => <div key={`limit-${index}`}>Limit: {limit}</div>)}
               </div>
             )}
           </div>
@@ -560,7 +561,8 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
     </Section>
   );
 }
-
+```
+```tsx
 function PlainMeaningTab({ data }: { data: PipelineResponse }) {
   const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
   const paragraphs = splitParagraphs(plainMeaning);
@@ -581,7 +583,7 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
       <Section title="Plain Meaning">
         {paragraphs.length > 0 ? (
           <div className="space-y-3 text-base leading-7 text-foreground">
-            {paragraphs.map((paragraph, index) => <p key={meaning-${index}}>{paragraph}</p>)}
+            {paragraphs.map((paragraph, index) => <p key={`meaning-${index}`}>{paragraph}</p>)}
           </div>
         ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
@@ -598,7 +600,7 @@ function PlainMeaningTab({ data }: { data: PipelineResponse }) {
               {meaningDetails.map((result, index) => {
                 const sourceText = sourceByRule.get(result.node_id) || result.source_text;
                 return (
-                  <div key={meaning-source-${index}} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                  <div key={`meaning-source-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label="meaning detail" status={result.status} />
                     </div>
@@ -640,7 +642,7 @@ function OriginTab({ data }: { data: PipelineResponse }) {
         {referencedSources.length > 0 ? (
           <div className="space-y-3">
             {referencedSources.map((source, index) => (
-              <div key={${source.name}-${index}} className="rounded-lg border border-border/50 bg-background/40 p-3">
+              <div key={`${source.name}-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                 <div className="text-sm font-semibold text-foreground">{source.name}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{displayStatus(source.reference_type)}</div>
                 {source.matched_text && <div className="mt-3"><SourceQuote>{source.matched_text}</SourceQuote></div>}
@@ -655,7 +657,7 @@ function OriginTab({ data }: { data: PipelineResponse }) {
       <Section title="Source Signals">
         {signals.length > 0 ? (
           <div className="space-y-3">
-            {signals.map((signal, index) => <DetailRow key={${signal.signal}-${index}} label={signal.signal} value={hideAtomicReferences(signal.value)} />)}
+            {signals.map((signal, index) => <DetailRow key={`${signal.signal}-${index}`} label={signal.signal} value={hideAtomicReferences(signal.value)} />)}
           </div>
         ) : <EmptyState>Pasted text has no source metadata. Use official HTML, XML, JSON, or source metadata when you need stronger origin signals.</EmptyState>}
       </Section>
@@ -678,8 +680,8 @@ function VerificationTab({ data }: { data: PipelineResponse }) {
       <Section title="Verification Summary">
         <div className="grid gap-3 sm:grid-cols-3">
           <DetailRow label="status" value={displayStatus(data.verification?.status)} />
-          <DetailRow label="checked" value={${results.length} backed result(s)} />
-          <DetailRow label="routed" value={${routed.length} backed result(s)} />
+          <DetailRow label="checked" value={`${results.length} backed result(s)`} />
+          <DetailRow label="routed" value={`${routed.length} backed result(s)`} />
         </div>
       </Section>
 
@@ -691,7 +693,7 @@ function VerificationTab({ data }: { data: PipelineResponse }) {
               const sourceText = sourceByRule.get(result.rule_unit_id || result.node_id);
               const notes = hideAtomicReferences(result.verification_notes);
               return (
-                <div key={verification-${index}} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                <div key={`verification-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                   <div className="flex flex-wrap gap-2">
                     {result.assertion_detected && <StatusPill label="assertion" status="detected" />}
                     {result.verification_path_available && <StatusPill label="path" status="available" />}
@@ -730,7 +732,7 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
       <Section title="Governance Summary">
         <div className="flex flex-wrap gap-2">
           <StatusPill label="governance" status={status} />
-          <span className={rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}}>{issueCount} issue(s)</span>
+          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>{issueCount} issue(s)</span>
           <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{governance?.record_count ?? records.length} checked</span>
         </div>
         {issueCount === 0 && records.length > 0 && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance checked {records.length} source-backed record(s) and found no review issues.</p>}
@@ -741,7 +743,7 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
         <Section title="Review Items">
           <div className="space-y-3">
             {activeIssues.map((issue, index) => (
-              <div key={${issue.checkName}-${index}} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
+              <div key={`${issue.checkName}-${index}`} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
                 <div className="text-sm font-semibold text-foreground">{issue.checkName || "Governance check"}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest text-gold-muted">{displayStatus(issue.status)}</div>
                 {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(issue.issue)}</p>}
@@ -760,7 +762,7 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
               {records.map((record, index) => {
                 const issues = safeArray(record.activeIssues);
                 return (
-                  <div key={governance-record-${index}} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                  <div key={`governance-record-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label="checked record" status={record.overallStatus} />
                       {record.inputField && <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-medium text-muted-foreground">{record.inputField}</span>}
@@ -769,7 +771,7 @@ function GovernanceTab({ data }: { data: PipelineResponse }) {
                     {record.sourceAnchor && <div className="mt-2 text-xs leading-5 text-muted-foreground">Source backing: {hideAtomicReferences(record.sourceAnchor)}</div>}
                     {issues.length > 0 && (
                       <div className="mt-3 space-y-2">
-                        {issues.map((issue, issueIndex) => <div key={${issue.checkName}-${issueIndex}} className="text-sm leading-6 text-gold-muted">{issue.checkName || "Check"}: {hideAtomicReferences(issue.issue || displayStatus(issue.status))}</div>)}
+                        {issues.map((issue, issueIndex) => <div key={`${issue.checkName}-${issueIndex}`} className="text-sm leading-6 text-gold-muted">{issue.checkName || "Check"}: {hideAtomicReferences(issue.issue || displayStatus(issue.status))}</div>)}
                       </div>
                     )}
                   </div>
@@ -793,7 +795,7 @@ function IssuesTab({ data }: { data: PipelineResponse }) {
         {errors.length > 0 ? (
           <div className="space-y-3">
             {errors.map((error, index) => (
-              <div key={${error.layer}-${index}} className={rounded-lg border p-3 ${toneClass(error.fatal ? "bad" : "review")}}>
+              <div key={`${error.layer}-${index}`} className={`rounded-lg border p-3 ${toneClass(error.fatal ? "bad" : "review")}`}>
                 <div className="text-sm font-semibold text-foreground">{error.layer}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest">{error.fatal ? "Fatal" : "Needs review"}</div>
                 <p className="mt-2 text-sm leading-6">{error.error}</p>
@@ -807,7 +809,7 @@ function IssuesTab({ data }: { data: PipelineResponse }) {
         {governanceIssues.length > 0 ? (
           <div className="space-y-3">
             {governanceIssues.map((issue, index) => (
-              <div key={${issue.checkName}-${index}} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
+              <div key={`${issue.checkName}-${index}`} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
                 <div className="text-sm font-semibold text-foreground">{issue.checkName || "Governance check"}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest text-gold-muted">{displayStatus(issue.status)}</div>
                 {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(issue.issue)}</p>}
@@ -847,12 +849,12 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
         </section>
 
         {safeArray(data.errors).length > 0 && (
-          <section className={rounded-xl border p-4 text-sm leading-6 ${toneClass(hasFatalError ? "bad" : "review")}}>
+          <section className={`rounded-xl border p-4 text-sm leading-6 ${toneClass(hasFatalError ? "bad" : "review")}`}>
             The analysis returned {data.errors.length} pipeline issue(s). Open the Issues tab for details.
           </section>
         )}
 
-        <nav className={grid gap-2 rounded-xl border border-border/60 bg-surface/60 p-2 ${tabs.length === 5 ? "grid-cols-5" : "grid-cols-4"}}>
+        <nav className={`grid gap-2 rounded-xl border border-border/60 bg-surface/60 p-2 ${tabs.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
           {tabs.map((tab) => <TabButton key={tab} tab={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} issueCount={issueCount} />)}
         </nav>
 
@@ -865,4 +867,6 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
     </div>
   );
 }
-       
+```
+
+      
