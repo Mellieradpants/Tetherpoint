@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 
 from app.schemas.models import (
+    GovernanceGateResult,
     MeaningBrief,
     MeaningNodeResult,
     MeaningResult,
@@ -34,6 +35,13 @@ _KEY_TERM_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("documentary proof of United States citizenship", re.compile(r"\b(citizenship|United States citizen|U\.S\. citizen|documentary proof)\b", re.I)),
     ("identity or citizenship documents", re.compile(r"\b(passport|birth certificate|identification|REAL ID|naturalization|military identification)\b", re.I)),
 ]
+_NON_BLENDING_SUMMARIES = {
+    "Do not claim mail voting is eliminated unless the supplied text says so.": "It does not say that mail voting is eliminated.",
+    "Do not treat identity proof as citizenship proof unless the supplied text says so.": "It does not make general identity proof the same thing as citizenship proof.",
+    "Do not treat REAL ID travel enforcement as voter registration eligibility unless the supplied text says so.": "It does not make REAL ID travel-enforcement rules a voter-registration eligibility rule by themselves.",
+    "Do not answer name-discrepancy or marriage-certificate acceptance unless the supplied text says so.": "It does not answer name-discrepancy or marriage-certificate acceptance questions unless those details appear in the source text.",
+    "Do not treat voter registration as ballot casting unless the supplied text says so.": "It addresses voter-registration processing, not ballot casting, unless the supplied text says otherwise.",
+}
 
 
 def _clean_text(value: str | None) -> str:
@@ -130,6 +138,84 @@ def _build_meaning_brief(rule_units: list[RuleUnit], origin_result: OriginResult
     )
 
 
+def _reference_role_sentence(governance_gate_result: GovernanceGateResult) -> str | None:
+    if not governance_gate_result.reference_roles:
+        return None
+
+    role_phrases: list[str] = []
+    for reference in governance_gate_result.reference_roles:
+        if reference.role == "registration_framework":
+            role_phrases.append(f"{reference.source} as the registration framework")
+        elif reference.role == "document_standard":
+            role_phrases.append(f"{reference.source} as a document-standard reference")
+        else:
+            role_phrases.append(f"{reference.source} as {reference.role.replace('_', ' ')}")
+
+    return "The text references outside law, including " + _join_names(role_phrases) + "."
+
+
+def _summary_from_gate(
+    brief: MeaningBrief,
+    governance_gate_result: GovernanceGateResult,
+) -> tuple[str | None, list[str]]:
+    if not brief.rule_unit_ids:
+        return None, ["meaning_eligible_rule_units"]
+
+    sentences: list[str] = []
+    missing: list[str] = []
+    process_scopes = set(governance_gate_result.process_scopes)
+    evidence_categories = set(governance_gate_result.evidence_categories)
+
+    if "voter_registration" in process_scopes:
+        sentences.append("This text concerns federal voter-registration application processing.")
+    elif governance_gate_result.process_scopes:
+        sentences.append(
+            "This text concerns "
+            + _join_names([scope.replace("_", " ") for scope in governance_gate_result.process_scopes])
+            + "."
+        )
+
+    if "citizenship_proof" in evidence_categories and "identity_or_citizenship_document" in evidence_categories:
+        sentences.append(
+            "It appears to create or modify a citizenship-proof requirement, not a general identity requirement."
+        )
+    elif "citizenship_proof" in evidence_categories:
+        sentences.append("It appears to create or modify a citizenship-proof requirement.")
+    elif "identity_or_citizenship_document" in evidence_categories:
+        sentences.append("It concerns identity or citizenship documents.")
+
+    reference_sentence = _reference_role_sentence(governance_gate_result)
+    if reference_sentence:
+        sentences.append(reference_sentence)
+    elif brief.external_reference_needed and brief.referenced_acts:
+        sentences.append("The text references outside law: " + _join_names(brief.referenced_acts) + ".")
+
+    if governance_gate_result.limits:
+        sentences.append(
+            "Plain Meaning cannot fully resolve the effect until the referenced source sections are retrieved or supplied."
+        )
+        missing.extend(governance_gate_result.limits)
+
+    if governance_gate_result.practical_questions:
+        sentences.append(
+            "Open questions include: "
+            + _join_names(governance_gate_result.practical_questions[:3])
+            + "."
+        )
+        if len(governance_gate_result.practical_questions) > 3:
+            missing.extend(governance_gate_result.practical_questions[3:])
+
+    for rule in governance_gate_result.non_blending_rules:
+        summary = _NON_BLENDING_SUMMARIES.get(rule)
+        if summary:
+            sentences.append(summary)
+
+    if sentences:
+        return " ".join(sentences).strip(), _unique_preserve_order(missing)
+
+    return _summary_from_brief(brief)
+
+
 def _summary_from_brief(brief: MeaningBrief) -> tuple[str | None, list[str]]:
     if not brief.rule_unit_ids:
         return None, ["meaning_eligible_rule_units"]
@@ -187,6 +273,7 @@ def process_meaning(
     run: bool = True,
     origin_result: OriginResult | None = None,
     verification_result: VerificationResult | None = None,
+    governance_gate_result: GovernanceGateResult | None = None,
 ) -> MeaningResult:
     """Process document-level Meaning without external calls."""
     _ = verification_result
@@ -199,7 +286,13 @@ def process_meaning(
 
     node_results = [_build_trace_result(unit) for unit in rule_units]
     brief = _build_meaning_brief(rule_units, origin_result=origin_result)
-    overall_plain_meaning, summary_missing_information = _summary_from_brief(brief)
+    if governance_gate_result is not None:
+        overall_plain_meaning, summary_missing_information = _summary_from_gate(
+            brief,
+            governance_gate_result,
+        )
+    else:
+        overall_plain_meaning, summary_missing_information = _summary_from_brief(brief)
 
     return MeaningResult(
         status="fallback",
