@@ -1,4 +1,4 @@
-```tsx
+
 import { useMemo, useState, type ReactNode } from "react";
 import { resolveReference, translatePlainMeaning, type ResolveReferenceResponse } from "../lib/api-client";
 import type { PipelineResponse } from "./Workspace";
@@ -186,7 +186,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 function SourceQuote({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-sm leading-6 text-foreground">{children}</div>;
 }
-```
+
 function TabButton({ tab, active, onClick, issueCount = 0 }: { tab: ResultTab; active: boolean; onClick: () => void; issueCount?: number }) {
   const labels: Record<ResultTab, string> = {
     meaning: "Meaning",
@@ -343,7 +343,7 @@ function PlainMeaningTranslation({ text }: { text: string }) {
     </Section>
   );
 }
-```tsx
+
 function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; plainMeaning: string }) {
   const [referencedSourceText, setReferencedSourceText] = useState("");
   const [result, setResult] = useState<ResolveReferenceResponse | null>(null);
@@ -561,8 +561,7 @@ function ExtendedMeaningPanel({ data, plainMeaning }: { data: PipelineResponse; 
     </Section>
   );
 }
-```
-```tsx
+
 function PlainMeaningTab({ data }: { data: PipelineResponse }) {
   const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
   const paragraphs = splitParagraphs(plainMeaning);
@@ -867,6 +866,5 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
     </div>
   );
 }
-```
 
       
