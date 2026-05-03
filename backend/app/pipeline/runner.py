@@ -95,6 +95,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         run=request.options.run_meaning,
         origin_result=origin_result,
         verification_result=verification_result,
+        governance_gate_result=governance_gate_result,
     )
     if meaning_result.status == "skipped" and request.options.run_meaning:
         errors.append(PipelineError(
