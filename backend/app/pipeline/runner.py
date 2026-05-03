@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.governance.gate import process_governance_gate
 from app.governance.handler import process_governance
 from app.input.handler import process_input
 from app.meaning.handler import process_meaning
@@ -16,7 +17,7 @@ from app.verification.handler import process_verification
 
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the pipeline:
-    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Governance -> Output
+    Input -> Structure -> Origin -> Selection -> Rule Units -> Governance Gate -> Verification -> Meaning -> Governance -> Output
 
     Atomic Structure nodes remain traceability units. Rule Units are the
     interpretation units passed into Meaning. Governance evaluates anchored
@@ -76,13 +77,19 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 6. Verification routing
+    # 6. Governance Gate
+    governance_gate_result = process_governance_gate(
+        rule_unit_result.rule_units,
+        origin_result,
+    )
+
+    # 7. Verification routing
     verification_result = process_verification(
         rule_unit_result.rule_units,
         run=request.options.run_verification,
     )
 
-    # 7. Meaning
+    # 8. Meaning
     meaning_result = process_meaning(
         rule_unit_result.rule_units,
         run=request.options.run_meaning,
@@ -96,13 +103,13 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             fatal=False,
         ))
 
-    # 8. Governance
+    # 9. Governance
     governance_result = process_governance(
         input_result,
         rule_unit_result,
     )
 
-    # 9. Output
+    # 10. Output
     output_result = assemble_output(
         input_result,
         structure_result,
@@ -119,6 +126,7 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         structure=structure_result,
         selection=selection_result,
         rule_units=rule_unit_result,
+        governance_gate=governance_gate_result,
         meaning=meaning_result,
         origin=origin_result,
         verification=verification_result,
