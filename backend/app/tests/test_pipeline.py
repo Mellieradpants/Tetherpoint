@@ -91,7 +91,7 @@ class TestRuleUnitsLayer:
         units = _rule_units_for_text(
             "The reporting requirement in Section 2 does not apply to a regional transmission operator "
             "that serves fewer than 100,000 retail customers, unless the Commission determines that "
-            "the operator’s service area includes critical defense, hospital, or water infrastructure."
+            "the operatorâ€™s service area includes critical defense, hospital, or water infrastructure."
         )
         assert units.unit_count == 1
         assert units.ready_count == 1
@@ -214,5 +214,5 @@ class TestFullPipeline:
         )
         assert response.status_code == 200
         body = response.json()
-        required_keys = {"input", "structure", "selection", "rule_units", "meaning", "origin", "verification", "governance", "output", "errors"}
+        required_keys = {"input", "structure", "selection", "rule_units", "governance_gate", "meaning", "origin", "verification", "governance", "output", "errors"}
         assert required_keys == set(body.keys())
