@@ -1,4 +1,4 @@
-"""Tetherpoint API — source-anchored parsing stack."""
+"""Tetherpoint API — source-dependent traceability stack."""
 
 import logging
 import os
@@ -20,7 +20,7 @@ logger = logging.getLogger("tetherpoint.cors")
 
 app = FastAPI(
     title="Tetherpoint",
-    description="Source-anchored parsing stack",
+    description="Interface-level traceability layer for source-dependent AI meaning",
     version="0.1.0",
 )
 
@@ -50,7 +50,7 @@ def analyze(
     request: Request,
     x_analyze_secret: str = Header(..., alias="x-analyze-secret"),
 ) -> PipelineResponse:
-    """Run the locked 9-layer pipeline on the provided document."""
+    """Run the locked 10-layer traceability pipeline on the provided document."""
     _ = x_analyze_secret
     body = enforce_security(body, request)
     return run_pipeline(body)
