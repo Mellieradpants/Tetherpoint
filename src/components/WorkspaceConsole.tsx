@@ -9,6 +9,7 @@ type RuleUnit = PipelineResponse["rule_units"]["rule_units"][number];
 type StructureNode = PipelineResponse["structure"]["nodes"][number];
 type MeaningNodeResult = PipelineResponse["meaning"]["node_results"][number];
 type VerificationNode = PipelineResponse["verification"]["node_results"][number];
+type PipelineResponseWithGovernanceGate = PipelineResponse & { governance_gate?: { status?: string } };
 
 const PIPELINE_LAYERS = [
   "Input",
@@ -16,6 +17,7 @@ const PIPELINE_LAYERS = [
   "Origin",
   "Selection",
   "Rule Units",
+  "Governance Gate",
   "Verification",
   "Meaning",
   "Governance",
@@ -95,12 +97,14 @@ function TextBlock({ children }: { children: ReactNode }) {
 
 function CompactEngineRail({ data, routeCount }: { data: PipelineResponse; routeCount: number }) {
   const governanceStatus = data.governance?.status ?? data.output.governance_status ?? "not returned";
+  const governanceGateStatus = (data as PipelineResponseWithGovernanceGate).governance_gate?.status ?? "not returned";
   const layerStatuses: Record<string, string> = {
     Input: data.input.parse_status,
     Structure: data.structure.validation_report.status,
     Origin: data.origin.status,
     Selection: `${data.selection.selected_nodes.length} selected`,
     "Rule Units": `${data.rule_units.ready_count} ready`,
+    "Governance Gate": governanceGateStatus,
     Verification: data.verification.status,
     Meaning: data.meaning.status,
     Governance: governanceStatus,
@@ -112,9 +116,10 @@ function CompactEngineRail({ data, routeCount }: { data: PipelineResponse; route
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gold-muted">Engine Trace Console</div>
-          <div className="mt-1 text-xs text-muted-foreground">Tetherpoint inspection surface · 9-layer source-anchored pipeline</div>
+          <div className="mt-1 text-xs text-muted-foreground">Tetherpoint inspection surface · 10-layer source-dependent traceability pipeline</div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <StatusPill label="governance gate" status={governanceGateStatus} />
           <StatusPill label="governance" status={governanceStatus} />
           {data.errors.length > 0 && <StatusPill label="errors" status={`${data.errors.length} review`} />}
         </div>
