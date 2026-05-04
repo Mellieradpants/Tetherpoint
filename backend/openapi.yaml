@@ -2,9 +2,10 @@ openapi: "3.1.0"
 info:
   title: Tetherpoint
   description: >
-    Source-anchored parsing stack. Executable pipeline:
-    Input -> Structure -> Origin -> Selection -> Rule Units -> Verification -> Meaning -> Governance -> Output.
+    Interface-level traceability layer for source-dependent AI meaning.
+    Executable pipeline: Input -> Structure -> Origin -> Selection -> Rule Units -> Governance Gate -> Verification -> Meaning -> Governance -> Output.
     Atomic Structure nodes are trace units; Rule Units are interpretation units.
+    The Governance Gate exposes source-dependency limits before Meaning runs.
     Governance is a deterministic support and action-safety gate before final output assembly.
   version: "0.1.0"
   license:
@@ -20,7 +21,7 @@ paths:
   /analyze:
     post:
       operationId: analyze
-      summary: Run the source-anchored pipeline on a source document
+      summary: Run the 10-layer source-dependent traceability pipeline on a source document
       requestBody:
         required: true
         content:
@@ -266,6 +267,7 @@ components:
 
     RuleUnitReferencedSource:
       type: object
+      description: Source dependency packet for text that points outside the local source material.
       required: [name, referenceType, matchedText]
       properties:
         name: { type: string }
@@ -512,6 +514,7 @@ components:
 
     GovernanceGateResult:
       type: object
+      description: Pre-Meaning constraint result that exposes source-dependency limits before fluent meaning runs.
       required: [status]
       properties:
         status: { type: string, enum: [match, needs_review] }
@@ -547,7 +550,7 @@ components:
       properties:
         layer:
           type: string
-          enum: [input, structure, origin, selection, rule_units, verification, meaning, governance, output]
+          enum: [input, structure, origin, selection, rule_units, governance_gate, verification, meaning, governance, output]
         error: { type: string }
         fatal: { type: boolean, default: false }
 
