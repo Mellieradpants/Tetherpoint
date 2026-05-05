@@ -112,6 +112,20 @@ Target mapping:
 GovernanceGateResult → Meaning Boundary / Resolution State / pre-Meaning limits
 ```
 
+### First interface pass is live
+
+Commit `7e7070c6a6fa41239cffd1a8c5285501b6427236` added the first frontend card rhythm in `src/components/Workspace.tsx`.
+
+The deployed Vercel app confirms the first pass is live and the app still loads through the existing Vercel/Render path.
+
+This pass added the user-facing rhythm:
+
+```text
+Source → Dependency → Meaning Boundary → Review
+```
+
+The pass stayed frontend-only and did not change backend, OpenAPI, schema, package, or lock files.
+
 ## What needs dialing in
 
 ### 1. Governance Gate is still too domain-shaped
@@ -172,6 +186,71 @@ Future direction:
 - prioritize Source → Dependency → Meaning Boundary → Review
 - reduce pipeline clutter by default
 
+### 6. Needs Human Review needs stronger visual treatment
+
+The Cornell LII / 52 U.S.C. 20503 test showed the system can separate detected legal references from source-supported meaning, but review warnings still blend into the interface too much.
+
+Future UI pass:
+
+- make `Needs Human Review` visually distinct
+- use a stronger warning color treatment
+- consider a subtle border, left stripe, badge, or card header emphasis
+- keep warning language conservative and non-alarming
+- do not imply final truth, proof, or completed verification
+
+This should be a frontend-focused pass unless backend status fields are missing.
+
+### 7. Reference status needs explicit modeling
+
+The Cornell LII / 52 U.S.C. 20503 test produced the key rule:
+
+```text
+Detected reference does not equal imported meaning.
+```
+
+A detected reference may be useful for citation matching, source discovery, or role classification. It should not automatically become meaning-bearing.
+
+Future reference statuses to model and expose:
+
+- detected_only
+- source_retrieved
+- source_anchored
+- meaning_bearing
+- not_supported_by_source
+- needs_human_review
+
+Rule to preserve:
+
+```text
+Only retrieved, anchored, meaning-bearing source text may feed Extended Meaning without a review warning.
+```
+
+### 8. Source/data cards need source-role classification
+
+The Hugging Face data/model card pattern is useful as a general interface pattern, not as a product to copy.
+
+Tetherpoint source/data cards should make source role and authority class visible before meaning is relied on.
+
+Future source card fields may include:
+
+- source name
+- source URL
+- source role
+- source authority class
+- retrieval status
+- anchor status
+- meaning permission
+- primary authority route
+- review warning
+
+Example distinction:
+
+- Cornell LII = legal reference/access source useful for reading and citation matching
+- official U.S. Code / govinfo / Congress source = stronger primary authority route
+- news/commentary/unknown site = discovery or claim context only, not legal meaning authority
+
+This is a reference-accuracy step before Meaning, not a new Meaning layer.
+
 ## What to let go
 
 - Rule Unit as the long-term public product term
@@ -192,6 +271,7 @@ Future direction:
 - Verification as route-only logic
 - final Governance as support/action-safety check
 - docs/contracts-first discipline before schema surgery
+- the first frontend card rhythm as the base interface layer
 
 ## First safe implementation target
 
@@ -217,15 +297,19 @@ Use existing fields first:
 
 This gives the product the new direction without breaking the working backend.
 
+Status: first frontend pass complete and deployed.
+
 ## Recommended implementation order
 
 1. Preserve current backend behavior.
-2. Add user-facing card rendering from existing response data.
-3. Validate that the interface can show source, dependency, boundary, and review without new retrieval.
-4. Only after the UI shape is stable, generalize Governance Gate away from domain-specific logic.
-5. Then generalize Meaning to consume the boundary model.
-6. Then define retrieval/domain-adapter contracts.
-7. Only then consider schema renaming or Trace Unit migration.
+2. Add user-facing card rendering from existing response data. Completed in first pass.
+3. Validate that the interface can show source, dependency, boundary, and review without new retrieval. Initial validation completed with Cornell LII / 52 U.S.C. 20503 test.
+4. Strengthen Needs Human Review visual treatment.
+5. Document and expose explicit reference statuses.
+6. Only after the UI shape is stable, generalize Governance Gate away from domain-specific logic.
+7. Then generalize Meaning to consume the boundary model.
+8. Then define retrieval/domain-adapter contracts.
+9. Only then consider schema renaming or Trace Unit migration.
 
 ## Codex guardrails
 
@@ -238,11 +322,14 @@ Before Codex-assisted implementation:
 - do not rename `RuleUnit` yet
 - do not build retrieval adapters yet
 - do not change schema without updating backend, frontend, OpenAPI, tests, and docs in the same pass
+- remember GitHub is the source of truth; Vercel and Render are the deployment path
+- do not treat the workspace as local-first
+- do not install dependencies or change package files unless explicitly required
 
 ## Current decision
 
-The codebase is aligned enough to begin a small interface pass.
+The codebase has completed the first small interface pass.
 
-It is not ready for deep backend surgery yet.
+It is still not ready for deep backend surgery.
 
-The next build should be interface-first and use existing response fields to render the new source/dependency/meaning-boundary/review pattern.
+The next build should stay interface-first and focus on making unresolved review states more visible, especially `Needs Human Review`, while preserving the source/dependency/meaning-boundary/review pattern.
