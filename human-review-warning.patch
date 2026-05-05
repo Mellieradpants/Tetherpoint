@@ -1,4 +1,4 @@
-```diff
+
 diff --git a/src/components/Workspace.tsx b/src/components/Workspace.tsx
 --- a/src/components/Workspace.tsx
 +++ b/src/components/Workspace.tsx
@@ -164,4 +164,3 @@ diff --git a/src/components/Workspace.tsx b/src/components/Workspace.tsx
      </RhythmCard>
    );
  }
-```
