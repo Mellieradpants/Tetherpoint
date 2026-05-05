@@ -1,0 +1,168 @@
+
+git status
+ --git a/src/components/Workspace.tsx b/src/components/Workspace.tsx
+--- a/src/components/Workspace.tsx
++++ b/src/components/Workspace.tsx
+@@ -269,10 +269,18 @@ function getStatusTone(status: string | null | undefined): string {
+   if (["error", "blocked", "failed", "fatal"].some((token) => normalized.includes(token))) {
+     return "border-destructive/50 bg-destructive/10 text-destructive";
+   }
+-  if (["needs_review", "fallback", "repaired", "skipped"].some((token) => normalized.includes(token))) {
+-    return "border-gold/30 bg-gold/10 text-gold-muted";
++  if (["needs_review", "manual_required", "not_attempted", "fallback", "repaired", "skipped", "missing", "unresolved"].some((token) => normalized.includes(token))) {
++    return "border-gold/60 bg-gold/[0.15] text-gold";
+   }
+@@ -282,6 +290,14 @@ function getStatusTone(status: string | null | undefined): string {
+   return "border-border/60 bg-background/30 text-muted-foreground";
+ }
+ 
++function ReviewBadge({ children }: { children: ReactNode }) {
++  return (
++    <span className="rounded-full border border-gold/70 bg-gold/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-gold">
++      {children}
++    </span>
++  );
++}
++
+ function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
+@@ -315,14 +331,17 @@ function StatusPill({ label, status }: { label: string; status: string | null |
+   );
+ }
+ 
+-function RhythmCard({ step, title, children }: { step: string; title: string; children: ReactNode }) {
++function RhythmCard({ step, title, reviewLabel, children }: { step: string; title: string; reviewLabel?: string; children: ReactNode }) {
++  const reviewClass = reviewLabel ? "border-gold/60 border-l-4 border-l-gold bg-gold/[0.07] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]" : "border-border/60 bg-background/35";
++
+   return (
+-    <section className="rounded-xl border border-border/60 bg-background/35 p-4">
+-      <div className="mb-3 flex items-center gap-3">
+-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-xs font-semibold text-gold">
++    <section className={`rounded-xl border p-4 ${reviewClass}`}>
++      <div className="mb-3 flex flex-wrap items-center gap-3">
++        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${reviewLabel ? "border-gold/70 bg-gold/20 text-gold" : "border-gold/30 bg-gold/10 text-gold"}`}>
+           {step}
+         </span>
+         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
++        {reviewLabel && <ReviewBadge>{reviewLabel}</ReviewBadge>}
+       </div>
+       {children}
+     </section>
+@@ -353,14 +372,23 @@ function CardChipList({ items, empty }: { items: string[]; empty: string }) {
+   );
+ }
+ 
+-function CardList({ items, empty }: { items: string[]; empty: string }) {
++function CardList({ items, empty, tone = "neutral" }: { items: string[]; empty: string; tone?: "neutral" | "review" }) {
+   if (items.length === 0) return <EmptyState message={empty} />;
+ 
+   return (
+     <ul className="space-y-2 text-sm leading-relaxed text-foreground">
+       {items.map((item, index) => (
+-        <li key={`${item}-${index}`} className="border-b border-border/40 pb-2 last:border-0 last:pb-0">
++        <li
++          key={`${item}-${index}`}
++          className={
++            tone === "review"
++              ? "rounded-lg border border-gold/40 border-l-4 border-l-gold bg-gold/[0.08] px-3 py-2 text-foreground"
++              : "border-b border-border/40 pb-2 last:border-0 last:pb-0"
++          }
++        >
+           {item}
+         </li>
+@@ -644,6 +672,10 @@ function getUnresolvedReferencedSources(unit: RuleUnit | null) {
+   );
+ }
+ 
++function needsRuleUnitReview(unit: RuleUnit | null) {
++  return unit?.review_status === "needs_review" || unit?.assembly_status === "needs_review";
++}
++
+ function hasRetrievedReferencedSource(unit: RuleUnit | null) {
+@@ -669,7 +701,7 @@ function getRuleUnitVerification(data: PipelineResponse, unit: RuleUnit | null)
+ 
+ function SourceCard({ unit }: { unit: RuleUnit | null }) {
+   return (
+-    <RhythmCard step="1" title="Source">
++    <RhythmCard step="1" title="Source" reviewLabel={needsRuleUnitReview(unit) ? "Review required" : undefined}>
+       {!unit ? (
+@@ -688,11 +720,12 @@ function SourceCard({ unit }: { unit: RuleUnit | null }) {
+ 
+ function ReferenceDependencyCard({ unit }: { unit: RuleUnit | null }) {
+   const referencedSources = unit?.referenced_sources ?? [];
+-  const dependencyUnresolved = Boolean(unit?.requires_reference_resolution) && !hasRetrievedReferencedSource(unit);
++  const unresolvedSources = getUnresolvedReferencedSources(unit);
++  const dependencyUnresolved = unresolvedSources.length > 0 || (Boolean(unit?.requires_reference_resolution) && !hasRetrievedReferencedSource(unit));
+ 
+   return (
+-    <RhythmCard step="2" title="Reference Dependency">
++    <RhythmCard step="2" title="Reference Dependency" reviewLabel={dependencyUnresolved ? "Dependency unresolved" : undefined}>
+       {!unit ? (
+@@ -696,8 +729,8 @@ function ReferenceDependencyCard({ unit }: { unit: RuleUnit | null }) {
+         <div className="space-y-3">
+           {dependencyUnresolved && (
+-            <div className="rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-medium text-gold-muted">
+-              Dependency unresolved
++            <div className="rounded-xl border border-gold/60 border-l-4 border-l-gold bg-gold/[0.09] px-3 py-2 text-sm font-medium text-gold">
++              Blocked until source is anchored
+             </div>
+           )}
+@@ -705,11 +738,17 @@ function ReferenceDependencyCard({ unit }: { unit: RuleUnit | null }) {
+           ) : (
+-            referencedSources.map((source, index) => (
+-              <div key={`${source.name}-${source.matchedText}-${index}`} className="rounded-xl border border-border/50 bg-background/40 p-3">
++            referencedSources.map((source, index) => {
++              const unresolved = source.retrievalStatus !== "retrieved" || !source.sourceText?.trim();
++              return (
++              <div
++                key={`${source.name}-${source.matchedText}-${index}`}
++                className={`rounded-xl border p-3 ${unresolved ? "border-gold/50 border-l-4 border-l-gold bg-gold/[0.08]" : "border-border/50 bg-background/40"}`}
++              >
+                 <div className="mb-2 flex flex-wrap items-center gap-2">
+                   <div className="text-sm font-semibold text-foreground">{source.name || "Unnamed source"}</div>
+                   <StatusPill label="retrieval" status={source.retrievalStatus || "not_attempted"} />
++                  {unresolved && <ReviewBadge>Review required</ReviewBadge>}
+                 </div>
+@@ -719,7 +758,8 @@ function ReferenceDependencyCard({ unit }: { unit: RuleUnit | null }) {
+                 <FieldRow label="limits" value={source.limits && source.limits.length > 0 ? source.limits.join("; ") : null} />
+               </div>
+-            ))
++              );
++            })
+           )}
+@@ -729,14 +769,15 @@ function MeaningBoundaryCard({ data, unit }: { data: PipelineResponse; unit: Rul
+   const blockedItems = [
+     ...(data.governance_gate?.limits ?? []),
+     ...(data.meaning.summary_missing_information ?? []),
+-    ...unresolvedSources.map((source) => `${source.name}: reference source unresolved`),
++    ...unresolvedSources.map((source) => `Not supported by source: ${source.name}`),
+   ];
++  const hasBoundaryReview = blockedItems.length > 0;
+ 
+   return (
+-    <RhythmCard step="3" title="Meaning Boundary">
++    <RhythmCard step="3" title="Meaning Boundary" reviewLabel={hasBoundaryReview ? "Blocked until source is anchored" : undefined}>
+@@ -740,7 +781,7 @@ function MeaningBoundaryCard({ data, unit }: { data: PipelineResponse; unit: Rul
+         <div>
+           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Blocked or unresolved</div>
+-          <CardList items={blockedItems} empty="No governance limits, unresolved references, or missing information returned." />
++          <CardList items={blockedItems} empty="No governance limits, unresolved references, or missing information returned." tone={hasBoundaryReview ? "review" : "neutral"} />
+         </div>
+@@ -759,14 +800,15 @@ function ReviewHandoffCard({ data, unit }: { data: PipelineResponse; unit: RuleU
+   const reviewSteps = [
+     ...(data.governance_gate?.practical_questions ?? []),
+-    ...unresolvedSources.map((source) => `Resolve referenced source: ${source.name}`),
++    ...unresolvedSources.map((source) => `Review required: ${source.name}`),
+     ...(data.meaning.summary_missing_information ?? []).map((item) => `Review missing information: ${item}`),
+     ...verificationSteps,
+   ];
++  const hasReviewSteps = reviewSteps.length > 0;
+ 
+   return (
+-    <RhythmCard step="4" title="Review Handoff">
+-      <CardList items={reviewSteps} empty="No practical questions, unresolved references, verification routes, or missing information returned." />
++    <RhythmCard step="4" title="Review Handoff" reviewLabel={hasReviewSteps ? "Needs human review" : undefined}>
++      <CardList items={reviewSteps} empty="No practical questions, unresolved references, verification routes, or missing information returned." tone={hasReviewSteps ? "review" : "neutral"} />
+     </RhythmCard>
+   );
+ }
+```
