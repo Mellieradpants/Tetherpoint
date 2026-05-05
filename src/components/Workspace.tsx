@@ -36,6 +36,17 @@ interface RuleUnitNodeRef {
   role: string;
 }
 
+interface RuleUnitReferencedSource {
+  name: string;
+  referenceType: string;
+  matchedText: string;
+  officialSourceUrl?: string | null;
+  retrievalStatus?: "not_attempted" | "manual_required" | "retrieved" | "failed" | string;
+  sourceText?: string | null;
+  anchors?: string[];
+  limits?: string[];
+}
+
 interface RuleUnit {
   rule_unit_id: string;
   section_id: string;
@@ -52,6 +63,8 @@ interface RuleUnit {
   source_node_ids: string[];
   fragment_node_ids: string[];
   source_text_combined: string;
+  requires_reference_resolution?: boolean;
+  referenced_sources?: RuleUnitReferencedSource[];
   assembly_status: "complete" | "needs_review" | "blocked";
   assembly_issues: string[];
   meaning_eligible: boolean;
@@ -152,6 +165,12 @@ interface GovernanceData {
   principle: string;
 }
 
+interface GovernanceGateData {
+  status?: "match" | "needs_review" | string;
+  practical_questions?: string[];
+  limits?: string[];
+}
+
 interface StructureValidationIssue {
   section_id: string;
   issue_type: string;
@@ -190,6 +209,7 @@ export interface PipelineResponse {
     selection_log: string[];
   };
   rule_units: RuleUnitData;
+  governance_gate?: GovernanceGateData;
   meaning: MeaningData;
   origin: OriginData;
   verification: { status: string; node_results: VerificationNode[] };
@@ -289,6 +309,58 @@ function StatusPill({ label, status }: { label: string; status: string | null | 
       <span className="mx-1 text-border">/</span>
       <span>{formatStatus(status)}</span>
     </div>
+  );
+}
+
+function RhythmCard({ step, title, children }: { step: string; title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border/60 bg-background/35 p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-xs font-semibold text-gold">
+          {step}
+        </span>
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function CardTextBlock({ text, empty }: { text: string | null | undefined; empty: string }) {
+  if (!text?.trim()) return <EmptyState message={empty} />;
+
+  return (
+    <div className="whitespace-pre-wrap rounded-xl border border-border/50 bg-background/45 p-3 text-sm leading-relaxed text-foreground">
+      {text}
+    </div>
+  );
+}
+
+function CardChipList({ items, empty }: { items: string[]; empty: string }) {
+  if (items.length === 0) return <EmptyState message={empty} />;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item, index) => (
+        <span key={`${item}-${index}`} className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 font-mono text-[10px] text-muted-foreground">
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CardList({ items, empty }: { items: string[]; empty: string }) {
+  if (items.length === 0) return <EmptyState message={empty} />;
+
+  return (
+    <ul className="space-y-2 text-sm leading-relaxed text-foreground">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`} className="border-b border-border/40 pb-2 last:border-0 last:pb-0">
+          {item}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -549,6 +621,202 @@ function RuleUnitsDetails({ ruleUnits, meaningMap }: { ruleUnits: RuleUnit[]; me
   );
 }
 
+function getSelectedRuleUnit(ruleUnits: RuleUnit[], selectedNodeId: string | null, selectedRuleUnitId: string | null) {
+  if (selectedNodeId) {
+    const linkedUnit = ruleUnits.find(
+      (unit) =>
+        unit.rule_unit_id === selectedNodeId ||
+        unit.primary_node_id === selectedNodeId ||
+        unit.source_node_ids.includes(selectedNodeId) ||
+        unit.fragment_node_ids.includes(selectedNodeId)
+    );
+    if (linkedUnit) return linkedUnit;
+  }
+
+  if (selectedRuleUnitId) {
+    const selectedUnit = ruleUnits.find((unit) => unit.rule_unit_id === selectedRuleUnitId);
+    if (selectedUnit) return selectedUnit;
+  }
+
+  return ruleUnits[0] ?? null;
+}
+
+function getUnresolvedReferencedSources(unit: RuleUnit | null) {
+  return (unit?.referenced_sources ?? []).filter(
+    (source) => source.retrievalStatus !== "retrieved" || !source.sourceText?.trim()
+  );
+}
+
+function hasRetrievedReferencedSource(unit: RuleUnit | null) {
+  return (unit?.referenced_sources ?? []).some(
+    (source) => source.retrievalStatus === "retrieved" && source.sourceText?.trim()
+  );
+}
+
+function getRuleUnitVerification(data: PipelineResponse, unit: RuleUnit | null) {
+  if (!unit) return null;
+
+  return (
+    data.verification.node_results.find(
+      (result) =>
+        result.rule_unit_id === unit.rule_unit_id ||
+        result.node_id === unit.rule_unit_id ||
+        unit.source_node_ids.includes(result.node_id)
+    ) ?? null
+  );
+}
+
+function SourceCard({ unit }: { unit: RuleUnit | null }) {
+  return (
+    <RhythmCard step="1" title="Source">
+      {!unit ? (
+        <EmptyState message="No rule unit is available for the current selection." />
+      ) : (
+        <div className="space-y-4">
+          <CardTextBlock text={unit.source_text_combined} empty="No source_text_combined returned for this rule unit." />
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Source node IDs</div>
+            <CardChipList items={unit.source_node_ids} empty="No source node IDs returned." />
+          </div>
+        </div>
+      )}
+    </RhythmCard>
+  );
+}
+
+function ReferenceDependencyCard({ unit }: { unit: RuleUnit | null }) {
+  const referencedSources = unit?.referenced_sources ?? [];
+  const dependencyUnresolved = Boolean(unit?.requires_reference_resolution) && !hasRetrievedReferencedSource(unit);
+
+  return (
+    <RhythmCard step="2" title="Reference Dependency">
+      {!unit ? (
+        <EmptyState message="No rule unit is available for the current selection." />
+      ) : (
+        <div className="space-y-3">
+          {dependencyUnresolved && (
+            <div className="rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-medium text-gold-muted">
+              Dependency unresolved
+            </div>
+          )}
+          {referencedSources.length === 0 ? (
+            <EmptyState message="No referenced_sources returned for this rule unit." />
+          ) : (
+            referencedSources.map((source, index) => (
+              <div key={`${source.name}-${source.matchedText}-${index}`} className="rounded-xl border border-border/50 bg-background/40 p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-semibold text-foreground">{source.name || "Unnamed source"}</div>
+                  <StatusPill label="retrieval" status={source.retrievalStatus || "not_attempted"} />
+                </div>
+                <FieldRow label="type" value={source.referenceType} />
+                <FieldRow label="matched" value={source.matchedText} />
+                <FieldRow label="anchors" value={source.anchors && source.anchors.length > 0 ? source.anchors.join(", ") : null} />
+                <FieldRow label="limits" value={source.limits && source.limits.length > 0 ? source.limits.join("; ") : null} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </RhythmCard>
+  );
+}
+
+function MeaningBoundaryCard({ data, unit }: { data: PipelineResponse; unit: RuleUnit | null }) {
+  const unresolvedSources = getUnresolvedReferencedSources(unit);
+  const blockedItems = [
+    ...(data.governance_gate?.limits ?? []),
+    ...(data.meaning.summary_missing_information ?? []),
+    ...unresolvedSources.map((source) => `${source.name}: reference source unresolved`),
+  ];
+
+  return (
+    <RhythmCard step="3" title="Meaning Boundary">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Allowed from local source text only</div>
+          <CardTextBlock text={unit?.source_text_combined} empty="No local source text returned for this rule unit." />
+        </div>
+        <div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Blocked or unresolved</div>
+          <CardList items={blockedItems} empty="No governance limits, unresolved references, or missing information returned." />
+        </div>
+      </div>
+    </RhythmCard>
+  );
+}
+
+function ReviewHandoffCard({ data, unit }: { data: PipelineResponse; unit: RuleUnit | null }) {
+  const unresolvedSources = getUnresolvedReferencedSources(unit);
+  const verification = getRuleUnitVerification(data, unit);
+  const verificationSteps = verification
+    ? [
+        verification.verification_path_available
+          ? `Review verification route: ${verification.expected_record_systems.length > 0 ? verification.expected_record_systems.join(", ") : "no expected record systems returned"}`
+          : "Review verification route: unavailable",
+        verification.verification_notes ? `Review verification notes: ${verification.verification_notes}` : "",
+      ].filter(Boolean)
+    : [];
+  const reviewSteps = [
+    ...(data.governance_gate?.practical_questions ?? []),
+    ...unresolvedSources.map((source) => `Resolve referenced source: ${source.name}`),
+    ...(data.meaning.summary_missing_information ?? []).map((item) => `Review missing information: ${item}`),
+    ...verificationSteps,
+  ];
+
+  return (
+    <RhythmCard step="4" title="Review Handoff">
+      <CardList items={reviewSteps} empty="No practical questions, unresolved references, verification routes, or missing information returned." />
+    </RhythmCard>
+  );
+}
+
+function SelectedUnitRhythm({ data, ruleUnits }: { data: PipelineResponse; ruleUnits: RuleUnit[] }) {
+  const [selectedRuleUnitId, setSelectedRuleUnitId] = useState<string | null>(ruleUnits[0]?.rule_unit_id ?? null);
+  const selectedUnit = getSelectedRuleUnit(ruleUnits, null, selectedRuleUnitId);
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-surface px-4 py-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Selected Unit View</div>
+          <div className="mt-1 text-sm text-muted-foreground">Source &rarr; Dependency &rarr; Meaning Boundary &rarr; Review</div>
+        </div>
+        {selectedUnit && (
+          <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 font-mono text-[10px] text-muted-foreground">
+            {selectedUnit.rule_unit_id}
+          </span>
+        )}
+      </div>
+
+      {ruleUnits.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {ruleUnits.map((unit) => {
+            const isActive = selectedUnit?.rule_unit_id === unit.rule_unit_id;
+            return (
+              <button
+                key={unit.rule_unit_id}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => setSelectedRuleUnitId(unit.rule_unit_id)}
+                className={`rounded-full border px-3 py-2 text-xs font-medium transition-colors ${isActive ? "border-gold/30 bg-gold/10 text-foreground" : "border-border/60 bg-background/30 text-muted-foreground hover:border-border hover:text-foreground"}`}
+              >
+                {unit.rule_unit_id}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        <SourceCard unit={selectedUnit} />
+        <ReferenceDependencyCard unit={selectedUnit} />
+        <MeaningBoundaryCard data={data} unit={selectedUnit} />
+        <ReviewHandoffCard data={data} unit={selectedUnit} />
+      </div>
+    </div>
+  );
+}
+
 function ErrorsDetails({ errors }: { errors: PipelineResponse["errors"] }) {
   if (errors.length === 0) {
     return <div className="p-5"><EmptyState message="No pipeline errors were returned." /></div>;
@@ -663,6 +931,8 @@ export function Workspace({ data }: { data: PipelineResponse }) {
       <div className="flex-1 overflow-y-auto">
         {activeTab === "meaning" && (
           <div className="space-y-4 p-4">
+            <SelectedUnitRhythm data={data} ruleUnits={ruleUnits} />
+
             <div className="rounded-xl border border-border/60 bg-surface px-4 py-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Overall Plain Meaning</div>
