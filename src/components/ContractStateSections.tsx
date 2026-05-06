@@ -5,10 +5,53 @@ function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+function uniqueItems(items: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(
+      items
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+    )
+  );
+}
+
+function countBy(items: string[]): Record<string, number> {
+  return items.reduce<Record<string, number>>((counts, item) => {
+    counts[item] = (counts[item] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 function displayStatus(value: string | boolean | null | undefined): string {
   if (typeof value === "boolean") return value ? "yes" : "no";
   if (!value) return "Not returned";
   return value.replaceAll("_", " ");
+}
+
+function joinLimited(items: string[], limit = 3): string {
+  if (items.length === 0) return "None returned";
+  const visible = items.slice(0, limit).join(", ");
+  const remaining = items.length - limit;
+  return remaining > 0 ? `${visible} +${remaining} more` : visible;
+}
+
+function formatCountMap(counts: Record<string, number>): string {
+  const entries = Object.entries(counts);
+  if (entries.length === 0) return "None returned";
+  return entries.map(([label, count]) => `${displayStatus(label)}: ${count}`).join(" · ");
+}
+
+function getHighestSeverity(handoffs: HumanReviewHandoff[]): string {
+  const rank: Record<string, number> = {
+    blocked: 4,
+    review_required: 3,
+    alert: 2,
+    degraded: 1,
+  };
+
+  return handoffs.reduce((highest, handoff) => {
+    return (rank[handoff.severity] ?? 0) > (rank[highest] ?? 0) ? handoff.severity : highest;
+  }, handoffs[0]?.severity ?? "alert");
 }
 
 function TextList({ label, items }: { label: string; items: string[] }) {
@@ -39,13 +82,33 @@ function ContractRow({ label, value }: { label: string; value: string | boolean 
   );
 }
 
+function SummaryMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/35 p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-medium leading-6 text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function DetailsBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <details className="mt-3 rounded-lg border border-border/50 bg-background/25 p-3">
+      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </summary>
+      <div className="mt-3 space-y-3">{children}</div>
+    </details>
+  );
+}
+
 function HumanReviewCard({ handoff }: { handoff: HumanReviewHandoff }) {
   const anchorsMissing = safeArray(handoff.anchors_missing);
   const sourceObjects = safeArray(handoff.source_objects);
   const dependencies = safeArray(handoff.dependencies);
 
   return (
-    <div className="rounded-lg border border-gold/50 bg-gold/10 p-3">
+    <div className="rounded-lg border border-gold/40 bg-gold/10 p-3">
       <div className="flex flex-wrap gap-2">
         <span className="rounded-full border border-gold/50 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gold-muted">
           severity: {displayStatus(handoff.severity)}
@@ -110,6 +173,106 @@ function SourceMetadataCard({ source }: { source: SourceMetadataContract }) {
   );
 }
 
+function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
+  const highestSeverity = getHighestSeverity(handoffs);
+  const canProceed = handoffs.every((handoff) => handoff.can_proceed);
+  const handoffTypes = uniqueItems(handoffs.map((handoff) => handoff.handoff_type));
+  const questions = uniqueItems(handoffs.map((handoff) => handoff.human_question));
+  const reasons = uniqueItems(handoffs.map((handoff) => handoff.reason));
+  const anchorsMissing = uniqueItems(handoffs.flatMap((handoff) => safeArray(handoff.anchors_missing)));
+  const sourceObjects = uniqueItems(handoffs.flatMap((handoff) => safeArray(handoff.source_objects)));
+  const dependencies = uniqueItems(handoffs.flatMap((handoff) => safeArray(handoff.dependencies)));
+  const unresolvedItems = uniqueItems([...anchorsMissing, ...dependencies, ...sourceObjects]);
+
+  return (
+    <section className="rounded-xl border border-gold/50 bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Human Review Handoff</div>
+          <div className="mt-1 text-sm leading-6 text-muted-foreground">
+            {handoffs.length} active review signal{handoffs.length === 1 ? "" : "s"} grouped into one summary.
+          </div>
+        </div>
+        <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gold-muted">
+          {displayStatus(highestSeverity)}
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryMetric label="can proceed" value={canProceed ? "yes" : "no"} />
+        <SummaryMetric label="handoff types" value={joinLimited(handoffTypes)} />
+        <SummaryMetric label="unresolved items" value={unresolvedItems.length} />
+      </div>
+
+      {questions.length > 0 && (
+        <div className="mt-3 rounded-lg border border-gold/30 bg-gold/10 p-3">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold-muted">Human question</div>
+          <ul className="space-y-2 text-sm leading-6 text-foreground">
+            {questions.slice(0, 3).map((question) => (
+              <li key={question}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <SummaryMetric label="reason" value={joinLimited(reasons, 2)} />
+        <SummaryMetric label="needed to resolve" value={joinLimited(unresolvedItems, 4)} />
+      </div>
+
+      <DetailsBlock label={`View ${handoffs.length} handoff record${handoffs.length === 1 ? "" : "s"}`}>
+        {handoffs.map((handoff) => (
+          <HumanReviewCard key={handoff.handoff_id} handoff={handoff} />
+        ))}
+      </DetailsBlock>
+    </section>
+  );
+}
+
+function SourceMetadataSummary({ sources }: { sources: SourceMetadataContract[] }) {
+  const sourceNames = uniqueItems(sources.map((source) => source.source_name));
+  const sourceSystems = uniqueItems(sources.map((source) => source.source_system));
+  const resolutionCounts = countBy(sources.map((source) => source.resolution_state ?? "unknown"));
+  const unresolvedCount = sources.filter((source) => {
+    const state = source.resolution_state;
+    return state !== "found" && state !== "partial";
+  }).length;
+  const reviewCount = sources.filter((source) => source.review_state === "needs_review" || source.review_state === "blocked").length;
+
+  return (
+    <section className="rounded-xl border border-border/60 bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Source Metadata Contract</div>
+          <div className="mt-1 text-sm leading-6 text-muted-foreground">
+            {sources.length} source record{sources.length === 1 ? "" : "s"} grouped for inspection.
+          </div>
+        </div>
+        <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          {unresolvedCount} unresolved
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryMetric label="source records" value={sources.length} />
+        <SummaryMetric label="review state" value={reviewCount > 0 ? `${reviewCount} need review` : "ready"} />
+        <SummaryMetric label="resolution states" value={formatCountMap(resolutionCounts)} />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <SummaryMetric label="sources" value={joinLimited(sourceNames, 4)} />
+        <SummaryMetric label="source systems" value={joinLimited(sourceSystems, 3)} />
+      </div>
+
+      <DetailsBlock label={`View ${sources.length} source metadata record${sources.length === 1 ? "" : "s"}`}>
+        {sources.map((source) => (
+          <SourceMetadataCard key={source.source_id} source={source} />
+        ))}
+      </DetailsBlock>
+    </section>
+  );
+}
+
 export function ContractStateSections({ data }: { data: PipelineResponse }) {
   const humanReviewHandoffs = data.human_review_handoffs ?? [];
   const sourceMetadata = data.source_metadata ?? [];
@@ -120,27 +283,8 @@ export function ContractStateSections({ data }: { data: PipelineResponse }) {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4">
-      {hasHumanReviewHandoffs && (
-        <section className="rounded-xl border border-gold/50 bg-surface p-4">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Human Review Handoff</div>
-          <div className="space-y-3">
-            {humanReviewHandoffs.map((handoff) => (
-              <HumanReviewCard key={handoff.handoff_id} handoff={handoff} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {hasSourceMetadata && (
-        <section className="rounded-xl border border-border/60 bg-surface p-4">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Source Metadata Contract</div>
-          <div className="space-y-3">
-            {sourceMetadata.map((source) => (
-              <SourceMetadataCard key={source.source_id} source={source} />
-            ))}
-          </div>
-        </section>
-      )}
+      {hasHumanReviewHandoffs && <HumanReviewSummary handoffs={humanReviewHandoffs} />}
+      {hasSourceMetadata && <SourceMetadataSummary sources={sourceMetadata} />}
     </div>
   );
 }
