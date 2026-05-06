@@ -19,6 +19,74 @@ interface TranslatePlainMeaningRequest {
   language: string;
 }
 
+export type SourceMetadataRole =
+  | "authoritative_record"
+  | "derivative_record"
+  | "reference_record"
+  | "temporal_record"
+  | "contextual_record"
+  | "unknown";
+
+export type ResolutionState =
+  | "not_attempted"
+  | "found"
+  | "partial"
+  | "multiple_candidates"
+  | "not_found"
+  | "manual_required"
+  | "failed"
+  | "passage_not_found"
+  | "version_unresolved"
+  | "reference_chain_open"
+  | "contextual_fact_missing"
+  | "conflict_unresolved"
+  | "threshold_not_met"
+  | "scope_exceeded";
+
+export interface SourceMetadataContract {
+  source_id: string;
+  source_name: string;
+  source_role: SourceMetadataRole;
+  source_system?: string | null;
+  source_url?: string | null;
+  adapter?: string | null;
+  matched_text?: string | null;
+  source_text?: string | null;
+  resolution_state: ResolutionState;
+  version_or_time_window?: string | null;
+  dependencies_open: string[];
+  anchors_available: string[];
+  anchors_missing: string[];
+  anchors_conflict: string[];
+  review_state: "ready" | "needs_review" | "blocked";
+  related_rule_unit_ids: string[];
+  related_node_ids: string[];
+  limits: string[];
+}
+
+export type HumanReviewHandoffType =
+  | "threshold_not_met"
+  | "conflict_requiring_judgment"
+  | "inference_chain_too_long"
+  | "version_or_temporal_ambiguity"
+  | "contextual_fact_required"
+  | "scope_exceeded";
+
+export interface HumanReviewHandoff {
+  handoff_id: string;
+  handoff_type: HumanReviewHandoffType;
+  severity: "alert" | "blocked" | "degraded" | "review_required";
+  status: "active";
+  affected_output_ids: string[];
+  source_objects: string[];
+  dependencies: string[];
+  anchors_present: string[];
+  anchors_missing: string[];
+  reason: string;
+  human_question: string;
+  can_proceed: boolean;
+}
+
 export interface ResolveReferenceRequest {
   current_text: string;
   plain_meaning: string;
