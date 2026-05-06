@@ -1,24 +1,30 @@
 # Tetherpoint
 
-Tetherpoint is an interface-level traceability layer for source-dependent AI meaning.
+Tetherpoint is a domain-neutral interpretation-state and traceability system for sensitive-domain information workflows.
 
-Its core design rule is simple:
+Tetherpoint is not a legislation app. Legislation is one possible domain adapter and historical implementation path, not the product identity.
+
+Its core design rule is:
 
 ```text
-Traceability before fluency.
+Report the state of the graph, not the illusion of certainty.
 ```
 
-In low-risk contexts, the valuable AI behavior may be speed, creativity, or exploration. In civic, legal, medical, insurance, policy, benefits, contract, and other high-consequence contexts, the valuable output is not just an answer. The valuable output is an answer a person can inspect before relying on it.
+In high-consequence contexts such as civic records, legal records, medical records, insurance, policy, benefits, contracts, finance, scientific records, and internal organizational records, the valuable output is not just an answer. The valuable output is an inspectable interpretation state that shows what the system used, found, could not verify, and must hand off.
 
 Tetherpoint is designed to show:
 
-- what source text the system used
-- what the answer depends on
-- what references point outside the local text
-- whether referred sources were found, missing, partial, or not attempted
-- what meaning is allowed from anchored source text
-- what meaning is blocked until missing sources are anchored
-- what still needs human or domain review
+- what source objects were used
+- what source text or structure was anchored
+- what the interpretation depends on
+- what dependency remains unresolved
+- what evidence is present
+- what evidence is missing
+- what is directly sourced
+- what would require inference
+- what is conflicted or temporally ambiguous
+- what is blocked until another source is checked
+- what needs active human or domain review
 
 Tetherpoint is not a truth engine and does not decide whether claims are true or false.
 
@@ -30,7 +36,7 @@ This repository contains a working full-stack prototype:
 - Vercel serverless proxy at `/api/analyze`
 - FastAPI backend under `backend/`
 - Deterministic input, structure, origin, selection, rule-unit, governance-gate, verification-routing, meaning, governance, and output layers
-- Rule Units as the smallest source-backed interpretation units
+- Rule Units as the current implementation name for Trace Units
 - Reference dependency packets for source material that points outside itself
 - Document-level plain Meaning from a bounded Rule Unit brief
 - OpenAPI contract under `backend/openapi.yaml`
@@ -38,26 +44,45 @@ This repository contains a working full-stack prototype:
 
 ## What this project is
 
-Tetherpoint is best described as a source-anchored interface and pipeline for inspecting AI-assisted meaning.
+Tetherpoint is best described as a source-anchored interface and pipeline for reporting Interpretation Graph State.
 
-It separates source structure, origin signals, rule-unit assembly, reference dependency, verification routing, plain-language meaning, and governance checks so a user can see what the output is standing on.
+It separates source structure, origin signals, rule-unit assembly, reference dependency, verification routing, bounded meaning, governance checks, and output assembly so a user can inspect what the interpretation is standing on.
 
-The project is intended to sit above different source systems and domain libraries. Legislation, policy, medicine, insurance, contracts, benefits, scientific records, and internal documents are possible domains. They are not the identity of the tool.
+The project is intended to sit above different source systems and domain libraries. Legislation, policy, medicine, insurance, contracts, benefits, scientific records, civic records, finance, and internal documents are possible domains. They are adapters and examples, not the identity of the tool.
 
 ## What this project is not
 
 Tetherpoint is not:
 
+- a legislation-only tool
+- a Washington State civic dashboard
 - a fact checker
 - a legal advice tool
 - a medical advice tool
 - a credibility score
+- a confidence-scoring interface
 - a general summarizer
 - a political recommendation system
 - a general chatbot
 - a full retrieval backend
 - a complete domain library
 - a truth-resolution system
+- a RAG research project
+- a generic AI transparency page
+
+## Interpretation Graph State
+
+Tetherpoint models source-dependent interpretation as a dependency graph:
+
+```text
+Source objects are nodes.
+Dependency links are edges.
+Anchors connect outputs to sources.
+Resolution states describe what is complete, missing, partial, conflicted, degraded, or blocked.
+Human Review Handoffs preserve the human/domain boundary.
+```
+
+The system reports the state of this graph. It does not resolve meaning beyond what the graph directly supports.
 
 ## Executable pipeline order
 
@@ -84,28 +109,43 @@ Tetherpoint is built around this sequence:
 
 ```text
 input text
-→ source structure
-→ selected traceable nodes
-→ rule units
-→ referred-source detection
-→ governance gate
-→ verification routes
-→ bounded meaning
-→ governance result
-→ inspectable output
+-> source structure
+-> selected traceable nodes
+-> rule units
+-> referred-source detection
+-> governance gate
+-> verification routes
+-> bounded meaning
+-> governance result
+-> inspectable output
 ```
 
 The important interface behavior is:
 
 ```text
-source first
-anchor visible
-meaning second
-missing dependencies shown
-human review preserved
+Source Metadata -> Dependency -> Meaning Boundary -> Human Review Handoff
 ```
 
-When text points outside itself, Tetherpoint should not treat meaning as complete. It should show the referred source, retrieval state, local meaning boundary, blocked meaning, and next review path.
+When text points outside itself, Tetherpoint should not treat meaning as complete. It should show the referred source, retrieval state, local meaning boundary, blocked meaning, and active review or handoff path.
+
+## Source Metadata Contract
+
+The RAG edge should resolve source material into a standardized Source Metadata Contract.
+
+This is not merely a visual source card. The UI may display the contract as a source card, but the architecture object is the contract.
+
+The Source Metadata Contract should expose:
+
+- what source was used
+- what was found
+- what could not be verified
+- what version or time window applies
+- what dependencies remain open
+- what anchors are available
+- what anchors are missing
+- what anchors conflict
+- what adapter retrieved or classified the source
+- what review or handoff state applies
 
 ## Reference dependency
 
@@ -113,7 +153,7 @@ Reference dependency is core to the project.
 
 A document, rule, claim, policy, contract, record, or medical note may depend on another source: a definition, statute, exhibit, guideline, dataset, agency record, court opinion, policy manual, plan document, standard, or other authority.
 
-Tetherpoint’s job is not to own every domain retrieval system. Its job is to define the interface contract around those dependencies.
+Tetherpoint's job is not to own every domain retrieval system. Its job is to define the interface contract around those dependencies.
 
 When a domain library or retrieval system is connected, it can supply the referred source and anchors. When the library is missing, incomplete, or not connected, Tetherpoint should still protect the user by making the stop point visible:
 
@@ -123,11 +163,28 @@ When a domain library or retrieval system is connected, it can supply the referr
 - unresolved meaning blocked
 - human review path shown
 
-This lets a user see how far the trace got and what specific footwork remains.
+This lets a user see how far the trace got and what specific source work remains.
+
+## Human Review Handoff
+
+Human review is an active escalation state, not a passive annotation.
+
+It must be carried through the response contract and displayed as an explicit alert or escalation state. It must not be reduced to helper text, vague warnings, confidence disclaimers, hidden logs, or soft suggestions buried inside narrative output.
+
+Human-review handoff states include:
+
+- threshold not met
+- conflict requiring judgment
+- inference chain too long
+- version or temporal ambiguity
+- contextual fact requiring human input
+- scope exceeded
+
+See `docs/HUMAN_REVIEW_HANDOFF.md` for the structured handoff object and UI behavior.
 
 ## Rule Units
 
-Rule Units are the smallest source-backed units eligible for interpretation.
+Rule Units are the current implementation name for Trace Units, the smallest source-backed units eligible for interpretation.
 
 Atomic Structure nodes remain the trace layer. Rule Units assemble selected nodes into coherent interpretation units while preserving source-node IDs, source text, conditions, exceptions, evidence requirements, consequences, definitions, timing, jurisdiction, mechanisms, and reference dependencies.
 
@@ -168,6 +225,34 @@ output.governance_issue_count
 ```
 
 Governance is not UI, upload, export, translation, retrieval, or truth adjudication.
+
+## Domain adapter boundary
+
+Domain adapters own:
+
+- source naming conventions
+- retrieval endpoints and authentication
+- source-library coverage
+- version resolution logic
+- threshold definitions
+- contextual fact schemas
+- reviewer roles
+- conflict authority rules
+- domain-specific output formats
+
+Tetherpoint core owns:
+
+- source visibility
+- dependency links
+- anchor typing
+- resolution states
+- meaning boundaries
+- review handoff structure
+- source metadata contract shape
+- interface consistency
+- inspection visibility
+
+Adapters must not rewrite governance behavior.
 
 ## Deterministic control boundary
 
@@ -233,6 +318,24 @@ Domain libraries and retrieval adapters can plug into the interface contract. Ex
 
 When retrieval is available, Tetherpoint can display retrieved source text and anchors. When retrieval is unavailable or incomplete, Tetherpoint should show the dependency and limit meaning instead of smoothing over the gap.
 
+## API and contract alignment
+
+`backend/openapi.yaml` is a hard contract checkpoint.
+
+Any backend schema, response shape, handoff object, source metadata object, or pipeline output change must be checked against `backend/openapi.yaml` in the same pass.
+
+No backend/API change is complete unless these remain aligned:
+
+- backend models
+- backend handlers
+- `backend/openapi.yaml`
+- frontend API client/types
+- frontend rendering assumptions
+- tests
+- relevant docs
+
+If OpenAPI cannot be updated or verified in the same pass, the change is incomplete and must be treated as pending.
+
 ## Frontend/backend shape
 
 The browser calls the local Vercel function:
@@ -259,4 +362,4 @@ See `backend/openapi.yaml` for the current API contract.
 
 The main technical claim of this repository is constraint separation at the interface level: each layer has a narrow responsibility, and downstream outputs remain traceable to explicit upstream source nodes and Rule Units.
 
-Tetherpoint’s product claim is not that it knows the truth. The claim is that high-consequence AI meaning should be inspectable before a person relies on it.
+Tetherpoint's product claim is not that it knows the truth. The claim is that high-consequence source-dependent interpretation should remain inspectable, bounded, and handoff-aware before a person relies on it.
