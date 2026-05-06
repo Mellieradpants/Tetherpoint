@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { HumanReviewHandoff, SourceMetadataContract } from "../lib/api-client";
 import type { PipelineResponse } from "./ReceiptWorkspace";
 
@@ -91,13 +92,32 @@ function SummaryMetric({ label, value }: { label: string; value: string | number
   );
 }
 
-function DetailsBlock({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailsBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
     <details className="mt-3 rounded-lg border border-border/50 bg-background/25 p-3">
       <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
         {label}
       </summary>
       <div className="mt-3 space-y-3">{children}</div>
+    </details>
+  );
+}
+
+function CompactDisclosure({ tone, title, badge, subtitle, children }: { tone: "review" | "source"; title: string; badge: string; subtitle: string; children: ReactNode }) {
+  const toneClass = tone === "review" ? "border-gold/50 bg-gold/10 text-gold-muted" : "border-border/60 bg-background/30 text-muted-foreground";
+
+  return (
+    <details className={`rounded-xl border bg-surface ${tone === "review" ? "border-gold/45" : "border-border/60"}`}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 marker:hidden">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">{title}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{subtitle}</div>
+        </div>
+        <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass}`}>
+          {badge}
+        </span>
+      </summary>
+      <div className="border-t border-border/50 px-4 py-4">{children}</div>
     </details>
   );
 }
@@ -185,19 +205,12 @@ function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
   const unresolvedItems = uniqueItems([...anchorsMissing, ...dependencies, ...sourceObjects]);
 
   return (
-    <section className="rounded-xl border border-gold/50 bg-surface p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Human Review Handoff</div>
-          <div className="mt-1 text-sm leading-6 text-muted-foreground">
-            {handoffs.length} active review signal{handoffs.length === 1 ? "" : "s"} grouped into one summary.
-          </div>
-        </div>
-        <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gold-muted">
-          {displayStatus(highestSeverity)}
-        </span>
-      </div>
-
+    <CompactDisclosure
+      tone="review"
+      title="Human Review Handoff"
+      badge={`${displayStatus(highestSeverity)} · ${handoffs.length}`}
+      subtitle={`${handoffs.length} active review signal${handoffs.length === 1 ? "" : "s"}. Can proceed: ${canProceed ? "yes" : "no"}.`}
+    >
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryMetric label="can proceed" value={canProceed ? "yes" : "no"} />
         <SummaryMetric label="handoff types" value={joinLimited(handoffTypes)} />
@@ -225,7 +238,7 @@ function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
           <HumanReviewCard key={handoff.handoff_id} handoff={handoff} />
         ))}
       </DetailsBlock>
-    </section>
+    </CompactDisclosure>
   );
 }
 
@@ -240,19 +253,12 @@ function SourceMetadataSummary({ sources }: { sources: SourceMetadataContract[] 
   const reviewCount = sources.filter((source) => source.review_state === "needs_review" || source.review_state === "blocked").length;
 
   return (
-    <section className="rounded-xl border border-border/60 bg-surface p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Source Metadata Contract</div>
-          <div className="mt-1 text-sm leading-6 text-muted-foreground">
-            {sources.length} source record{sources.length === 1 ? "" : "s"} grouped for inspection.
-          </div>
-        </div>
-        <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          {unresolvedCount} unresolved
-        </span>
-      </div>
-
+    <CompactDisclosure
+      tone="source"
+      title="Source Metadata Contract"
+      badge={`${unresolvedCount} unresolved`}
+      subtitle={`${sources.length} source record${sources.length === 1 ? "" : "s"}. ${joinLimited(sourceNames, 2)}.`}
+    >
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryMetric label="source records" value={sources.length} />
         <SummaryMetric label="review state" value={reviewCount > 0 ? `${reviewCount} need review` : "ready"} />
@@ -269,7 +275,7 @@ function SourceMetadataSummary({ sources }: { sources: SourceMetadataContract[] 
           <SourceMetadataCard key={source.source_id} source={source} />
         ))}
       </DetailsBlock>
-    </section>
+    </CompactDisclosure>
   );
 }
 
@@ -282,7 +288,7 @@ export function ContractStateSections({ data }: { data: PipelineResponse }) {
   if (!hasHumanReviewHandoffs && !hasSourceMetadata) return null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4">
+    <div className="mx-auto w-full max-w-5xl shrink-0 space-y-2 px-4 py-2">
       {hasHumanReviewHandoffs && <HumanReviewSummary handoffs={humanReviewHandoffs} />}
       {hasSourceMetadata && <SourceMetadataSummary sources={sourceMetadata} />}
     </div>
