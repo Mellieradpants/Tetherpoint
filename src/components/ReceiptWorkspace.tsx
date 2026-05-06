@@ -275,7 +275,6 @@ function ResultActions({ data }: { data: PipelineResponse }) {
     </div>
   );
 }
-
 function PlainMeaningTranslation({ text }: { text: string }) {
   const [language, setLanguage] = useState(TRANSLATION_LANGUAGES[0].code);
   const [translatedText, setTranslatedText] = useState("");
