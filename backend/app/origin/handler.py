@@ -112,6 +112,8 @@ def _append_unique_signal(
 
 def _build_referenced_source(matched_text: str) -> ReferencedSource:
     cleaned = " ".join(matched_text.split()).strip(" .;,")
+    if cleaned.lower() == "the national voter registration act of 1993":
+        cleaned = "National Voter Registration Act of 1993"
     known = _KNOWN_REFERENCED_SOURCES.get(cleaned.lower())
     if known:
         return ReferencedSource(matched_text=cleaned, **known)
