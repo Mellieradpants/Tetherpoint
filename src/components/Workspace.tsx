@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import type { HumanReviewHandoff, SourceMetadataContract } from "../lib/api-client";
 
 interface StructureNode {
   node_id: string;
@@ -228,6 +229,8 @@ export interface PipelineResponse {
     governance_issue_count?: number;
   };
   errors: Array<{ layer: string; error: string; fatal?: boolean }>;
+  source_metadata?: SourceMetadataContract[];
+  human_review_handoffs?: HumanReviewHandoff[];
 }
 
 type DetailTab = "meaning" | "rule_units" | "verification" | "origin" | "governance" | "errors";
