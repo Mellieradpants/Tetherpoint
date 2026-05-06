@@ -2,7 +2,12 @@ import type { PipelineResponse } from "../Workspace";
 import {
   safeArray,
   displayStatus,
-  rawStatus,
+  Section,
+  StatusPill,
+  EmptyState,
+  DetailRow,
+  SourceQuote,
+  hideAtomicReferences,
 } from "./shared";
 export function OriginTab({ data }: { data: PipelineResponse }) {
   const origin = data.origin;
