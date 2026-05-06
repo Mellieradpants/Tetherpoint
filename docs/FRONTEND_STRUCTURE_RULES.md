@@ -77,6 +77,54 @@ Cleanup should happen in small, verifiable phases:
 
 Avoid broad refactors that change behavior and structure at the same time.
 
+## Commit discipline
+
+Commit history is part of the navigation system for the project.
+
+Each commit must be readable by a person scanning by pattern, not only by someone reading diffs line by line.
+
+Hard rule:
+
+```text
+One commit = one scoped change = one plain-language message.
+```
+
+Commit messages must say what changed in plain language.
+
+Good examples:
+
+- `Add frontend structure rules`
+- `Add frontend structure inventory`
+- `Extract Origin tab component`
+- `Move SAVE Act sample into samples file`
+- `Export contract summary components`
+- `Wire source metadata into Origin tab`
+- `Restore tabbed workspace hierarchy`
+
+Avoid vague messages:
+
+- `fix`
+- `updates`
+- `cleanup`
+- `changes`
+- `frontend work`
+- `misc`
+
+Avoid bundling unrelated changes into one commit.
+
+If a task needs multiple kinds of work, split the commits:
+
+1. structure extraction
+2. behavior wiring
+3. cleanup/removal
+4. docs update
+
+A commit should help answer:
+
+```text
+Where did this behavior or structure change enter the repo?
+```
+
 ## Agent workflow rules
 
 For AI-assisted frontend work:
@@ -88,6 +136,8 @@ For AI-assisted frontend work:
 - Avoid whole-file replacement for large files unless the complete current file has been verified and the replacement is intentional.
 - Prefer exact insertions, exact imports, and exact render guards.
 - Preserve working behavior before adding new behavior.
+- Use one plain-language commit per scoped change.
+- Do not use vague commit messages such as `fix`, `updates`, `cleanup`, or `changes`.
 
 ## Required prompt shape for frontend changes
 
@@ -101,6 +151,7 @@ Every frontend task should specify:
 - expected render behavior
 - verification step
 - cleanup check
+- plain-language commit message
 
 ## Cleanup check
 
@@ -113,6 +164,7 @@ Before a frontend task is complete, verify:
 - Did contract rendering stay attached to the correct meaning layer?
 - Did any temporary bridge logic need a follow-up note or removal?
 - Would a new engineer understand the file structure without private context?
+- Is the commit message specific enough to navigate by later?
 
 ## Current cleanup priority
 
