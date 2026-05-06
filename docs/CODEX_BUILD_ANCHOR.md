@@ -4,6 +4,20 @@ This file is the alignment checkpoint for future Codex and agent-assisted build 
 
 Codex must read this file before proposing features, code structures, workflows, abstractions, UI changes, or architectural direction.
 
+## Operating context
+
+Agents are operating against the live GitHub repository through GitHub plugin/tools unless the user explicitly provides another verified source.
+
+The live GitHub repository is the source of truth.
+
+Do not assume local filesystem access.
+Do not assume a local clone.
+Do not invent files, directories, build outputs, test results, runtime states, or dependency states that have not been verified from the live repository or an explicit tool result.
+
+If a file cannot be verified from the repository, treat it as unknown or missing.
+
+Do not infer implementation details from absent, empty, malformed, or corrupted files.
+
 ## Current product frame
 
 Tetherpoint is a domain-neutral interpretation-state and traceability system for sensitive-domain information workflows.
@@ -289,6 +303,24 @@ Tetherpoint core owns:
 - inspection visibility
 
 Adapters must not rewrite governance behavior.
+
+## API and contract alignment
+
+`backend/openapi.yaml` is a hard contract checkpoint.
+
+Any backend schema, response shape, handoff object, source metadata object, or pipeline output change must be checked against `backend/openapi.yaml` in the same pass.
+
+No backend/API change is complete unless these remain aligned:
+
+- backend models
+- backend handlers
+- `backend/openapi.yaml`
+- frontend API client/types
+- frontend rendering assumptions
+- tests
+- relevant docs
+
+If OpenAPI cannot be updated or verified in the same pass, the change is incomplete and must be treated as pending.
 
 ## Build discipline
 
