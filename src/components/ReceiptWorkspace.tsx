@@ -1,3 +1,4 @@
+import { safeArray, displayStatus, rawStatus } from "./receipt-workspace/shared";
 
 import { useMemo, useState, type ReactNode } from "react";
 import { resolveReference, translatePlainMeaning, type ResolveReferenceResponse } from "../lib/api-client";
@@ -86,21 +87,6 @@ const TRANSLATION_LANGUAGES = [
   { code: "sw", label: "Swahili" },
   { code: "rw", label: "Kinyarwanda" },
 ];
-
-function safeArray<T>(value: T[] | null | undefined): T[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function displayStatus(value: string | null | undefined): string {
-  if (!value) return "Not returned";
-  if (value === "fallback") return "Deterministic";
-  if (value === "needs_review") return "Needs review";
-  return value.replaceAll("_", " ");
-}
-
-function rawStatus(value: string | null | undefined): string {
-  return value?.toLowerCase() ?? "";
-}
 
 function hideAtomicReferences(value: string | null | undefined): string {
   if (!value) return "";
