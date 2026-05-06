@@ -168,6 +168,9 @@ def _build_governance_issue_handoff(
     issue: GovernanceCheckResult,
     index: int,
 ) -> HumanReviewHandoff | None:
+    if issue.checkName == "governance_record_presence_check":
+        return None
+
     handoff_type = _handoff_type_for_governance_issue(issue)
     if handoff_type is None:
         return None
