@@ -200,6 +200,8 @@ class TestFullPipeline:
         assert result.governance is not None
         assert result.output is not None
         assert result.errors is not None
+        assert result.source_metadata == []
+        assert result.human_review_handoffs == []
 
     def test_response_serializes_all_keys_via_api(self):
         client = TestClient(app)
@@ -214,5 +216,21 @@ class TestFullPipeline:
         )
         assert response.status_code == 200
         body = response.json()
-        required_keys = {"input", "structure", "selection", "rule_units", "governance_gate", "meaning", "origin", "verification", "governance", "output", "errors"}
+        required_keys = {
+            "input",
+            "structure",
+            "selection",
+            "rule_units",
+            "governance_gate",
+            "meaning",
+            "origin",
+            "verification",
+            "governance",
+            "output",
+            "errors",
+            "source_metadata",
+            "human_review_handoffs",
+        }
         assert required_keys == set(body.keys())
+        assert body["source_metadata"] == []
+        assert body["human_review_handoffs"] == []
