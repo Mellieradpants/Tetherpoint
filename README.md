@@ -28,6 +28,31 @@ Tetherpoint is designed to show:
 
 Tetherpoint is not a truth engine and does not decide whether claims are true or false.
 
+## Contributor orientation
+
+Before changing code, read the project orientation docs in this order:
+
+1. `docs/TETHERPOINT_OVERVIEW.md`
+2. `docs/ASSISTANT_BUILD_ANCHOR.md`
+3. `docs/REPO_STRUCTURE_MAP.md`
+4. `docs/FRONTEND_STRUCTURE_RULES.md`
+5. `docs/FRONTEND_STRUCTURE_INVENTORY.md`
+6. `docs/HUMAN_REVIEW_HANDOFF.md`
+
+These documents explain the architecture, active file ownership, frontend cleanup direction, agent workflow rules, and current source/meaning/governance boundaries.
+
+Current frontend cleanup rule:
+
+```text
+No new feature work inside large mixed files until ownership boundaries are extracted.
+```
+
+Current commit rule:
+
+```text
+One commit = one scoped change = one plain-language message.
+```
+
 ## Current status
 
 This repository contains a working full-stack prototype:
