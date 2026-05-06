@@ -8,7 +8,14 @@ These rules apply before new UI features, tab changes, contract rendering change
 
 Readable structure is part of the product.
 
-Tetherpoint is an inspectable interpretation-state system. The frontend code must demonstrate the same principle: clear boundaries, clear ownership, and no hidden junk drawers.
+Tetherpoint is an inspectable interpretation-state system. In plain language: the app shows what an interpretation is standing on, what is missing, and where human review is needed.
+
+The frontend code must follow the same rule:
+
+- clear boundaries
+- clear ownership
+- plain names
+- no hidden junk drawers
 
 ## No junk-drawer files
 
@@ -34,12 +41,12 @@ Examples:
 
 ## Tab ownership
 
-Tabs are not cosmetic categories. They are views over specific parts of the interpretation graph.
+Tabs are not cosmetic categories. Each tab owns one kind of result state.
 
-- Origin = source state and provenance.
-- Verification = evidence route and source-path state.
-- Governance = review, escalation, and boundary state.
-- Meaning = bounded interpretation state.
+- Origin = where the source came from and what source dependencies exist.
+- Verification = where claims or assertions should be checked.
+- Governance = what needs review, what is blocked, and what boundary was reached.
+- Meaning = bounded plain-language interpretation.
 - Issues = active problems and user-facing blockers.
 
 Contract data must render where it belongs:
@@ -76,6 +83,62 @@ Cleanup should happen in small, verifiable phases:
 5. Remove temporary bridge logic once no longer needed.
 
 Avoid broad refactors that change behavior and structure at the same time.
+
+## Plain-language agent prompting rule
+
+Agents do better when the task is concrete.
+
+Do not ask an agent to “clean up,” “improve,” “refactor,” or “fix” a large area without exact boundaries.
+
+Every agent prompt should reduce ambiguity.
+
+Use this shape:
+
+```text
+Phase [name]: [plain task title]
+
+Use GitHub main as source of truth.
+
+Goal:
+[one sentence]
+
+Allowed files:
+- [file]
+
+Forbidden files:
+- [file or area]
+
+Task:
+[exact action]
+
+Hard stops:
+- Do not [specific drift risk].
+- Do not [specific unrelated area].
+- Do not change behavior unless explicitly stated.
+
+Verify:
+[build/test/deploy/source check]
+
+Commit message:
+[plain-language message]
+
+Return:
+- files changed
+- verification result
+- remaining risk
+```
+
+Bad prompt:
+
+```text
+Refactor the frontend and clean things up.
+```
+
+Good prompt:
+
+```text
+Move shared helpers out of ReceiptWorkspace into shared.tsx. Preserve behavior. Do not extract tabs.
+```
 
 ## Commit discipline
 
