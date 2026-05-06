@@ -91,7 +91,7 @@ class TestRuleUnitsLayer:
         units = _rule_units_for_text(
             "The reporting requirement in Section 2 does not apply to a regional transmission operator "
             "that serves fewer than 100,000 retail customers, unless the Commission determines that "
-            "the operator’s service area includes critical defense, hospital, or water infrastructure."
+            "the operator's service area includes critical defense, hospital, or water infrastructure."
         )
         assert units.unit_count == 1
         assert units.ready_count == 1
@@ -200,6 +200,65 @@ class TestFullPipeline:
         assert result.governance is not None
         assert result.output is not None
         assert result.errors is not None
+        assert result.source_metadata == []
+        assert result.human_review_handoffs == []
+
+    def test_source_metadata_populates_from_origin_referenced_sources(self):
+        req = AnalyzeRequest(
+            content=(
+                "The National Voter Registration Act of 1993 requires a mail voter registration form. "
+                "The State shall require documentary proof of United States citizenship to register to vote."
+            ),
+            content_type=ContentType.text,
+            options=AnalyzeOptions(run_meaning=False, run_origin=True, run_verification=False),
+        )
+        result = run_pipeline(req)
+
+        assert result.source_metadata
+        source = next(
+            item
+            for item in result.source_metadata
+            if item.source_name == "National Voter Registration Act of 1993"
+        )
+        assert source.source_id == "national-voter-registration-act-1993"
+        assert source.source_role == "reference_record"
+        assert source.source_system == "Congress.gov"
+        assert source.source_url
+        assert source.matched_text == "National Voter Registration Act of 1993"
+        assert source.resolution_state == "not_attempted"
+        assert source.review_state == "needs_review"
+        assert source.related_rule_unit_ids
+        assert "reference_resolution_dependency" in source.dependencies_open
+        assert "referenced_source_text" in source.anchors_missing
+        assert source.limits
+
+    def test_human_review_handoff_populates_for_unresolved_reference_dependency(self):
+        req = AnalyzeRequest(
+            content=(
+                "The National Voter Registration Act of 1993 applies. "
+                "A State shall require documentary proof of citizenship to register to vote."
+            ),
+            content_type=ContentType.text,
+            options=AnalyzeOptions(run_meaning=False, run_origin=True, run_verification=False),
+        )
+        result = run_pipeline(req)
+
+        assert any(
+            handoff.handoff_type == "threshold_not_met"
+            and "reference_resolution_dependency" in handoff.dependencies
+            for handoff in result.human_review_handoffs
+        )
+
+    def test_no_human_review_handoff_without_review_or_block_signal(self):
+        req = AnalyzeRequest(
+            content="The agency shall send notice within 30 days.",
+            content_type=ContentType.text,
+            options=AnalyzeOptions(run_meaning=False, run_origin=False, run_verification=False),
+        )
+        result = run_pipeline(req)
+
+        assert result.governance.status == "match"
+        assert result.governance_gate.status == "match"
         assert result.source_metadata == []
         assert result.human_review_handoffs == []
 
