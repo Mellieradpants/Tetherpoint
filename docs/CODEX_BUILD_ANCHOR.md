@@ -1,8 +1,8 @@
-# Codex Build Anchor
+# Assistant Build Anchor
 
-This file is the alignment checkpoint for future Codex and agent-assisted build work.
+This file is the alignment checkpoint for future AI-assisted build work.
 
-Codex must read this file before proposing features, code structures, workflows, abstractions, UI changes, or architectural direction.
+Any assistant or coding agent working in this repository must read this file before proposing features, code structures, workflows, abstractions, UI changes, or architectural direction.
 
 ## Operating context
 
@@ -66,6 +66,30 @@ Do not turn this project into:
 - a generic AI transparency page
 
 Legislation, medicine, insurance, contracts, policy, finance, scientific records, civic records, and internal organizational records are possible domain adapters. They are not the product identity.
+
+## Assistant-assisted development workflow
+
+This repository may use AI-assisted development tools during planning, implementation, and review.
+
+Assistant output is advisory. The live repository, verified tool results, tests, and the human maintainer's approved phase scope are authoritative.
+
+Roles are separated by function, not by vendor or tool name:
+
+- Planning/review assistant: helps identify phase boundaries, dependency order, risks, and drift.
+- Implementation assistant: proposes or applies code changes only inside approved scope.
+- Review assistant: checks diffs for contract mismatch, scope expansion, missing tests, and unintended side effects.
+- Human maintainer: approves scope, reviews diffs, controls commits/deployments, and makes final decisions.
+
+Agents must not:
+
+- expand scope without approval
+- rename load-bearing objects casually
+- edit backend/schema/OpenAPI/frontend contracts unless the current phase allows it
+- treat domain adapters as product identity
+- introduce unreviewed architecture changes
+- commit or deploy without human approval
+
+The repo is the source of truth. Assistant context is not authoritative unless reflected in committed files.
 
 ## Architecture spine
 
