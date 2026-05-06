@@ -134,4 +134,6 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         governance=governance_result,
         output=output_result,
         errors=errors,
+        source_metadata=[],
+        human_review_handoffs=[],
     )
