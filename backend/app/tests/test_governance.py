@@ -125,3 +125,20 @@ def test_pipeline_response_includes_governance_layer():
     assert result.governance.status == "match"
     assert result.output.governance_status == result.governance.status
     assert result.output.governance_issue_count == result.governance.issue_count
+
+
+def test_pipeline_reports_handoff_for_governance_review_signal():
+    req = AnalyzeRequest(
+        content="The agency shall deny benefits without notice.",
+        content_type=ContentType.text,
+        options=AnalyzeOptions(run_meaning=False, run_origin=False, run_verification=False),
+    )
+
+    result = run_pipeline(req)
+
+    assert result.governance.status == "needs_review"
+    assert any(
+        handoff.handoff_type == "contextual_fact_required"
+        and handoff.severity == "review_required"
+        for handoff in result.human_review_handoffs
+    )
