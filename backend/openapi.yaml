@@ -97,8 +97,7 @@ components:
       type: object
       required: [detail]
       properties:
-        detail:
-          type: string
+        detail: { type: string }
 
     ContentType:
       type: string
@@ -107,47 +106,27 @@ components:
     AnalyzeOptions:
       type: object
       properties:
-        run_meaning:
-          type: boolean
-          default: false
-        run_origin:
-          type: boolean
-          default: true
-        run_verification:
-          type: boolean
-          default: true
+        run_meaning: { type: boolean, default: false }
+        run_origin: { type: boolean, default: true }
+        run_verification: { type: boolean, default: true }
 
     AnalyzeRequest:
       type: object
       required: [content, content_type]
       properties:
-        content:
-          type: string
-          minLength: 1
-          maxLength: 500000
-        content_type:
-          $ref: "#/components/schemas/ContentType"
-        options:
-          $ref: "#/components/schemas/AnalyzeOptions"
+        content: { type: string, minLength: 1, maxLength: 500000 }
+        content_type: { $ref: "#/components/schemas/ContentType" }
+        options: { $ref: "#/components/schemas/AnalyzeOptions" }
 
     InputResult:
       type: object
       required: [raw_content, content_type, size, parse_status]
       properties:
-        raw_content:
-          type: string
-        content_type:
-          type: string
-        size:
-          type: integer
-        parse_status:
-          type: string
-          enum: [ok, error]
-        parse_errors:
-          type: array
-          items:
-            type: string
-          default: []
+        raw_content: { type: string }
+        content_type: { type: string }
+        size: { type: integer }
+        parse_status: { type: string, enum: [ok, error] }
+        parse_errors: { type: array, items: { type: string }, default: [] }
 
     StructureNode:
       type: object
@@ -156,20 +135,12 @@ components:
         node_id: { type: string }
         section_id: { type: string }
         parent_id: { type: ["string", "null"] }
-        role:
-          type: string
-          enum: [PRIMARY_RULE, EVIDENCE, CONDITION, EXCEPTION, CONSEQUENCE, DEFINITION, BOILERPLATE]
+        role: { type: string, enum: [PRIMARY_RULE, EVIDENCE, CONDITION, EXCEPTION, CONSEQUENCE, DEFINITION, BOILERPLATE] }
         depth: { type: integer, default: 0 }
         source_span_start: { type: ["integer", "null"] }
         source_span_end: { type: ["integer", "null"] }
-        validation_status:
-          type: string
-          enum: [valid, repaired, invalid]
-          default: valid
-        validation_errors:
-          type: array
-          items: { type: string }
-          default: []
+        validation_status: { type: string, enum: [valid, repaired, invalid], default: valid }
+        validation_errors: { type: array, items: { type: string }, default: [] }
         source_anchor: { type: string }
         source_text: { type: string }
         normalized_text: { type: string }
@@ -185,14 +156,8 @@ components:
               additionalProperties:
                 type: ["string", "null"]
             - type: "null"
-        tags:
-          type: array
-          items: { type: string }
-          default: []
-        blocked_flags:
-          type: array
-          items: { type: string }
-          default: []
+        tags: { type: array, items: { type: string }, default: [] }
+        blocked_flags: { type: array, items: { type: string }, default: [] }
         who: { type: ["string", "null"] }
         what: { type: ["string", "null"] }
         when: { type: ["string", "null"] }
@@ -205,9 +170,7 @@ components:
       required: [section_id, issue_type, message]
       properties:
         section_id: { type: string }
-        issue_type:
-          type: string
-          enum: [missing_primary, multiple_primary, boilerplate_leak, oversized_node, unclassified_node, unattached_child]
+        issue_type: { type: string, enum: [missing_primary, multiple_primary, boilerplate_leak, oversized_node, unclassified_node, unattached_child] }
         message: { type: string }
         node_id: { type: ["string", "null"] }
 
@@ -215,47 +178,26 @@ components:
       type: object
       required: [status]
       properties:
-        status:
-          type: string
-          enum: [clean, repaired, failed]
-        issues:
-          type: array
-          items:
-            $ref: "#/components/schemas/StructureValidationIssue"
-          default: []
-        repaired_sections:
-          type: array
-          items: { type: string }
-          default: []
+        status: { type: string, enum: [clean, repaired, failed] }
+        issues: { type: array, items: { $ref: "#/components/schemas/StructureValidationIssue" }, default: [] }
+        repaired_sections: { type: array, items: { type: string }, default: [] }
 
     StructureResult:
       type: object
       required: [nodes, node_count, section_count, validation_report]
       properties:
-        nodes:
-          type: array
-          items:
-            $ref: "#/components/schemas/StructureNode"
+        nodes: { type: array, items: { $ref: "#/components/schemas/StructureNode" } }
         node_count: { type: integer }
         section_count: { type: integer }
-        validation_report:
-          $ref: "#/components/schemas/StructureValidationReport"
+        validation_report: { $ref: "#/components/schemas/StructureValidationReport" }
 
     SelectionResult:
       type: object
       required: [selected_nodes, excluded_nodes, selection_log]
       properties:
-        selected_nodes:
-          type: array
-          items:
-            $ref: "#/components/schemas/StructureNode"
-        excluded_nodes:
-          type: array
-          items:
-            $ref: "#/components/schemas/StructureNode"
-        selection_log:
-          type: array
-          items: { type: string }
+        selected_nodes: { type: array, items: { $ref: "#/components/schemas/StructureNode" } }
+        excluded_nodes: { type: array, items: { $ref: "#/components/schemas/StructureNode" } }
+        selection_log: { type: array, items: { type: string } }
 
     RuleUnitNodeRef:
       type: object
@@ -311,10 +253,7 @@ components:
       type: object
       required: [rule_units, unit_count, ready_count, needs_review_count]
       properties:
-        rule_units:
-          type: array
-          items:
-            $ref: "#/components/schemas/RuleUnit"
+        rule_units: { type: array, items: { $ref: "#/components/schemas/RuleUnit" } }
         unit_count: { type: integer }
         ready_count: { type: integer }
         needs_review_count: { type: integer }
@@ -350,15 +289,9 @@ components:
       type: object
       required: [status]
       properties:
-        status:
-          type: string
-          enum: [executed, fallback, skipped, error]
+        status: { type: string, enum: [executed, fallback, skipped, error] }
         message: { type: ["string", "null"] }
-        node_results:
-          type: array
-          items:
-            $ref: "#/components/schemas/MeaningNodeResult"
-          default: []
+        node_results: { type: array, items: { $ref: "#/components/schemas/MeaningNodeResult" }, default: [] }
         overall_plain_meaning: { type: ["string", "null"] }
         summary_basis: { type: ["string", "null"] }
         summary_brief:
@@ -423,6 +356,29 @@ components:
         status: { type: string, enum: [executed, skipped] }
         node_results: { type: array, items: { $ref: "#/components/schemas/VerificationNodeResult" }, default: [] }
 
+    GovernanceReferenceRole:
+      type: object
+      required: [source, role]
+      properties:
+        source: { type: string }
+        role: { type: string }
+        reason: { type: ["string", "null"] }
+
+    GovernanceGateResult:
+      type: object
+      description: Pre-Meaning constraint result that exposes source-dependency limits before fluent meaning runs.
+      required: [status]
+      properties:
+        status: { type: string, enum: [match, needs_review] }
+        scope_lanes: { type: array, items: { type: string }, default: [] }
+        actor_scopes: { type: array, items: { type: string }, default: [] }
+        process_scopes: { type: array, items: { type: string }, default: [] }
+        evidence_categories: { type: array, items: { type: string }, default: [] }
+        reference_roles: { type: array, items: { $ref: "#/components/schemas/GovernanceReferenceRole" }, default: [] }
+        non_blending_rules: { type: array, items: { type: string }, default: [] }
+        practical_questions: { type: array, items: { type: string }, default: [] }
+        limits: { type: array, items: { type: string }, default: [] }
+
     GovernanceStatus:
       type: string
       enum:
@@ -448,8 +404,7 @@ components:
       required: [checkName, status]
       properties:
         checkName: { type: string }
-        status:
-          $ref: "#/components/schemas/GovernanceStatus"
+        status: { $ref: "#/components/schemas/GovernanceStatus" }
         issue: { type: ["string", "null"] }
         missingFields: { type: array, items: { type: string }, default: [] }
         comparedField: { type: ["string", "null"] }
@@ -470,62 +425,21 @@ components:
         sourceAnchor: { type: ["string", "null"] }
         sourceSystem: { type: ["string", "null"] }
         documentType: { type: ["string", "null"] }
-        overallStatus:
-          $ref: "#/components/schemas/GovernanceStatus"
-        checks:
-          type: array
-          items:
-            $ref: "#/components/schemas/GovernanceCheckResult"
-          default: []
-        activeIssues:
-          type: array
-          items:
-            $ref: "#/components/schemas/GovernanceCheckResult"
-          default: []
+        overallStatus: { $ref: "#/components/schemas/GovernanceStatus" }
+        checks: { type: array, items: { $ref: "#/components/schemas/GovernanceCheckResult" }, default: [] }
+        activeIssues: { type: array, items: { $ref: "#/components/schemas/GovernanceCheckResult" }, default: [] }
         principle: { type: string }
 
     GovernanceResult:
       type: object
       required: [status, record_count, issue_count, results, activeIssues, principle]
       properties:
-        status:
-          $ref: "#/components/schemas/GovernanceStatus"
+        status: { $ref: "#/components/schemas/GovernanceStatus" }
         record_count: { type: integer }
         issue_count: { type: integer }
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/GovernanceRecordResult"
-          default: []
-        activeIssues:
-          type: array
-          items:
-            $ref: "#/components/schemas/GovernanceCheckResult"
-          default: []
+        results: { type: array, items: { $ref: "#/components/schemas/GovernanceRecordResult" }, default: [] }
+        activeIssues: { type: array, items: { $ref: "#/components/schemas/GovernanceCheckResult" }, default: [] }
         principle: { type: string }
-
-    GovernanceReferenceRole:
-      type: object
-      required: [source, role]
-      properties:
-        source: { type: string }
-        role: { type: string }
-        reason: { type: ["string", "null"] }
-
-    GovernanceGateResult:
-      type: object
-      description: Pre-Meaning constraint result that exposes source-dependency limits before fluent meaning runs.
-      required: [status]
-      properties:
-        status: { type: string, enum: [match, needs_review] }
-        scope_lanes: { type: array, items: { type: string }, default: [] }
-        actor_scopes: { type: array, items: { type: string }, default: [] }
-        process_scopes: { type: array, items: { type: string }, default: [] }
-        evidence_categories: { type: array, items: { type: string }, default: [] }
-        reference_roles: { type: array, items: { $ref: "#/components/schemas/GovernanceReferenceRole" }, default: [] }
-        non_blending_rules: { type: array, items: { type: string }, default: [] }
-        practical_questions: { type: array, items: { type: string }, default: [] }
-        limits: { type: array, items: { type: string }, default: [] }
 
     OutputResult:
       type: object
@@ -544,13 +458,54 @@ components:
         governance_status: { type: string, default: match }
         governance_issue_count: { type: integer, default: 0 }
 
+    SourceMetadataContract:
+      type: object
+      required: [source_id, source_name]
+      properties:
+        source_id: { type: string }
+        source_name: { type: string }
+        source_role: { type: string, enum: [authoritative_record, derivative_record, reference_record, temporal_record, contextual_record, unknown], default: unknown }
+        source_system: { type: ["string", "null"] }
+        source_url: { type: ["string", "null"] }
+        adapter: { type: ["string", "null"] }
+        matched_text: { type: ["string", "null"] }
+        source_text: { type: ["string", "null"] }
+        resolution_state:
+          type: string
+          enum: [not_attempted, found, partial, multiple_candidates, not_found, manual_required, failed, passage_not_found, version_unresolved, reference_chain_open, contextual_fact_missing, conflict_unresolved, threshold_not_met, scope_exceeded]
+          default: not_attempted
+        version_or_time_window: { type: ["string", "null"] }
+        dependencies_open: { type: array, items: { type: string }, default: [] }
+        anchors_available: { type: array, items: { type: string }, default: [] }
+        anchors_missing: { type: array, items: { type: string }, default: [] }
+        anchors_conflict: { type: array, items: { type: string }, default: [] }
+        review_state: { type: string, enum: [ready, needs_review, blocked], default: ready }
+        related_rule_unit_ids: { type: array, items: { type: string }, default: [] }
+        related_node_ids: { type: array, items: { type: string }, default: [] }
+        limits: { type: array, items: { type: string }, default: [] }
+
+    HumanReviewHandoff:
+      type: object
+      required: [handoff_id, handoff_type, severity, reason, human_question]
+      properties:
+        handoff_id: { type: string }
+        handoff_type: { type: string, enum: [threshold_not_met, conflict_requiring_judgment, inference_chain_too_long, version_or_temporal_ambiguity, contextual_fact_required, scope_exceeded] }
+        severity: { type: string, enum: [alert, blocked, degraded, review_required] }
+        status: { type: string, enum: [active], default: active }
+        affected_output_ids: { type: array, items: { type: string }, default: [] }
+        source_objects: { type: array, items: { type: string }, default: [] }
+        dependencies: { type: array, items: { type: string }, default: [] }
+        anchors_present: { type: array, items: { type: string }, default: [] }
+        anchors_missing: { type: array, items: { type: string }, default: [] }
+        reason: { type: string }
+        human_question: { type: string }
+        can_proceed: { type: boolean, default: false }
+
     PipelineError:
       type: object
       required: [layer, error, fatal]
       properties:
-        layer:
-          type: string
-          enum: [input, structure, origin, selection, rule_units, governance_gate, verification, meaning, governance, output]
+        layer: { type: string, enum: [input, structure, origin, selection, rule_units, governance_gate, verification, meaning, governance, output] }
         error: { type: string }
         fatal: { type: boolean, default: false }
 
@@ -569,6 +524,8 @@ components:
         governance: { $ref: "#/components/schemas/GovernanceResult" }
         output: { $ref: "#/components/schemas/OutputResult" }
         errors: { type: array, items: { $ref: "#/components/schemas/PipelineError" }, default: [] }
+        source_metadata: { type: array, items: { $ref: "#/components/schemas/SourceMetadataContract" }, default: [] }
+        human_review_handoffs: { type: array, items: { $ref: "#/components/schemas/HumanReviewHandoff" }, default: [] }
 
     ValidationError:
       type: object
