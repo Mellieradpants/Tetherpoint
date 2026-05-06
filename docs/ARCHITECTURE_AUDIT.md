@@ -49,7 +49,7 @@ Core target primitives:
 | `src/components/WorkspaceConsole.tsx` | Current inspection UI console | Shows pipeline and unit-level inspection | Aligned at high level, but still too backend-console-like for final UX |
 | `src/components/Workspace.tsx` | Additional current workspace UI/types | Contains current frontend response typing and older inspection patterns | Needs review before UI surgery |
 | `src/components/ReceiptWorkspace.tsx` | User-facing result workspace with reference/extended meaning behavior | Contains useful reference dependency UI patterns | Candidate source for first interface pass |
-| `docs/CODEX_BUILD_ANCHOR.md` | Agent alignment anchor | Prevents drift before Codex-assisted changes | Aligned |
+| `docs/ASSISTANT_BUILD_ANCHOR.md` | Assistant alignment anchor | Prevents drift before assistant-assisted changes | Aligned |
 | `ARCHITECTURE.md` | Architecture source of truth | Defines target domain-neutral model | Aligned |
 
 ## What is already strong
@@ -311,11 +311,11 @@ Status: first frontend pass complete and deployed.
 8. Then define retrieval/domain-adapter contracts.
 9. Only then consider schema renaming or Trace Unit migration.
 
-## Codex guardrails
+## Assistant guardrails
 
-Before Codex-assisted implementation:
+Before assistant-assisted implementation:
 
-- read `docs/CODEX_BUILD_ANCHOR.md`
+- read `docs/ASSISTANT_BUILD_ANCHOR.md`
 - read `ARCHITECTURE.md`
 - read this audit
 - do not overfit to legislation, medicine, insurance, or any one domain
