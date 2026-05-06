@@ -328,6 +328,71 @@ class OutputResult(BaseModel):
     governance_issue_count: int = 0
 
 
+class SourceMetadataContract(BaseModel):
+    source_id: str
+    source_name: str
+    source_role: Literal[
+        "authoritative_record",
+        "derivative_record",
+        "reference_record",
+        "temporal_record",
+        "contextual_record",
+        "unknown",
+    ] = "unknown"
+    source_system: Optional[str] = None
+    source_url: Optional[str] = None
+    adapter: Optional[str] = None
+    matched_text: Optional[str] = None
+    source_text: Optional[str] = None
+    resolution_state: Literal[
+        "not_attempted",
+        "found",
+        "partial",
+        "multiple_candidates",
+        "not_found",
+        "manual_required",
+        "failed",
+        "passage_not_found",
+        "version_unresolved",
+        "reference_chain_open",
+        "contextual_fact_missing",
+        "conflict_unresolved",
+        "threshold_not_met",
+        "scope_exceeded",
+    ] = "not_attempted"
+    version_or_time_window: Optional[str] = None
+    dependencies_open: list[str] = Field(default_factory=list)
+    anchors_available: list[str] = Field(default_factory=list)
+    anchors_missing: list[str] = Field(default_factory=list)
+    anchors_conflict: list[str] = Field(default_factory=list)
+    review_state: Literal["ready", "needs_review", "blocked"] = "ready"
+    related_rule_unit_ids: list[str] = Field(default_factory=list)
+    related_node_ids: list[str] = Field(default_factory=list)
+    limits: list[str] = Field(default_factory=list)
+
+
+class HumanReviewHandoff(BaseModel):
+    handoff_id: str
+    handoff_type: Literal[
+        "threshold_not_met",
+        "conflict_requiring_judgment",
+        "inference_chain_too_long",
+        "version_or_temporal_ambiguity",
+        "contextual_fact_required",
+        "scope_exceeded",
+    ]
+    severity: Literal["alert", "blocked", "degraded", "review_required"]
+    status: Literal["active"] = "active"
+    affected_output_ids: list[str] = Field(default_factory=list)
+    source_objects: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    anchors_present: list[str] = Field(default_factory=list)
+    anchors_missing: list[str] = Field(default_factory=list)
+    reason: str
+    human_question: str
+    can_proceed: bool = False
+
+
 PipelineLayerName = Literal[
     "input",
     "structure",
@@ -360,3 +425,5 @@ class PipelineResponse(BaseModel):
     governance: GovernanceResult
     output: OutputResult
     errors: list[PipelineError] = Field(default_factory=list)
+    source_metadata: list[SourceMetadataContract] = Field(default_factory=list)
+    human_review_handoffs: list[HumanReviewHandoff] = Field(default_factory=list)
