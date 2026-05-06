@@ -129,6 +129,8 @@ Required handoff payload:
 
 Every human-review handoff should be representable as a structured object.
 
+The JSON below is a conceptual object sketch. The backend Pydantic and OpenAPI implementation uses snake_case field names, such as `handoff_id`, `handoff_type`, `affected_output_ids`, `source_objects`, `anchors_present`, `anchors_missing`, `human_question`, and `can_proceed`.
+
 ```json
 {
   "handoffId": "string",
