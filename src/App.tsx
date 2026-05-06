@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { AnalyzeForm } from "./components/AnalyzeForm";
-import { ContractStateSections } from "./components/ContractStateSections";
 import { ReceiptWorkspace, type PipelineResponse } from "./components/ReceiptWorkspace";
 import { analyzeDocument } from "./lib/api-client";
 
@@ -161,7 +160,6 @@ function App() {
           {result ? (
             <div className="flex-1 md:overflow-hidden">
               <div className="flex h-full min-h-0 flex-col">
-                <ContractStateSections data={result} />
                 <div className="min-h-0 flex-1">
                   <ReceiptWorkspace data={result} />
                 </div>
