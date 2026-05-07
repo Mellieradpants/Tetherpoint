@@ -232,6 +232,36 @@ class TestFullPipeline:
         assert "referenced_source_text" in source.anchors_missing
         assert source.limits
 
+    def test_source_metadata_populates_for_target_usc_citations(self):
+        req = AnalyzeRequest(
+            content=(
+                "52 U.S.C. 20502 defines terms. "
+                "52 U.S.C. 20503 describes registration application availability. "
+                "52 U.S.C. 20505 describes motor vehicle application procedures. "
+                "A State shall process voter registration applications."
+            ),
+            content_type=ContentType.text,
+            options=AnalyzeOptions(run_meaning=False, run_origin=True, run_verification=False),
+        )
+        result = run_pipeline(req)
+        source_names = [item.source_name for item in result.source_metadata]
+        sources = {item.source_name: item for item in result.source_metadata}
+
+        for citation in ["52 U.S.C. 20502", "52 U.S.C. 20503", "52 U.S.C. 20505"]:
+            assert citation in sources, source_names
+            source = sources[citation]
+            assert source.source_id == citation.lower().replace(" u.s.c. ", "-usc-")
+            assert source.source_role == "reference_record"
+            assert source.source_system == "U.S. Code"
+            assert source.source_url is None
+            assert source.matched_text == citation
+            assert source.source_text is None
+            assert source.resolution_state in {"manual_required", "not_attempted"}
+            assert source.review_state == "needs_review"
+            assert "reference_resolution_dependency" in source.dependencies_open
+            assert "referenced_source_text" in source.anchors_missing
+            assert any("not been retrieved" in limit for limit in source.limits)
+
     def test_human_review_handoff_populates_for_unresolved_reference_dependency(self):
         req = AnalyzeRequest(
             content=(
