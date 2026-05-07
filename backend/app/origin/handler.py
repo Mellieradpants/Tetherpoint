@@ -57,6 +57,20 @@ _KNOWN_REFERENCED_SOURCES = {
         "why_it_matters": "The current text relies on identification-document requirements associated with this act.",
     },
 }
+_TARGET_USC_CITATIONS = {
+    "52 u.s.c. 20502": {
+        "reference_id": "52-usc-20502",
+        "name": "52 U.S.C. 20502",
+    },
+    "52 u.s.c. 20503": {
+        "reference_id": "52-usc-20503",
+        "name": "52 U.S.C. 20503",
+    },
+    "52 u.s.c. 20505": {
+        "reference_id": "52-usc-20505",
+        "name": "52 U.S.C. 20505",
+    },
+}
 
 _TEXT_IDENTITY_LABELS = {
     "source system": "source_system",
@@ -110,6 +124,31 @@ def _append_unique_signal(
     trace.append(f"{signal} -> {reason}")
 
 
+def _normalize_usc_citation(value: str) -> str:
+    cleaned = " ".join(value.split()).strip(" .;,")
+    match = re.match(r"^(\d+)\s+U\.?S\.?C\.?\s*([A-Za-z0-9.-]+)$", cleaned, re.I)
+    if not match:
+        return cleaned
+    return f"{match.group(1)} U.S.C. {match.group(2)}"
+
+
+def _build_usc_referenced_source(matched_text: str) -> ReferencedSource | None:
+    cleaned = " ".join(matched_text.split()).strip(" .;,")
+    normalized = _normalize_usc_citation(cleaned)
+    target = _TARGET_USC_CITATIONS.get(normalized.lower())
+    if target is None:
+        return None
+    return ReferencedSource(
+        reference_id=target["reference_id"],
+        name=target["name"],
+        reference_type="U.S. Code citation",
+        matched_text=cleaned,
+        source_system="U.S. Code",
+        status="reference_detected_no_known_link",
+        why_it_matters="Source text for this U.S. Code citation has not been retrieved yet.",
+    )
+
+
 def _build_referenced_source(matched_text: str) -> ReferencedSource:
     cleaned = " ".join(matched_text.split()).strip(" .;,")
     if cleaned.lower() == "the national voter registration act of 1993":
@@ -132,9 +171,14 @@ def _referenced_sources_from_signals(signals: list[OriginSignal], trace: list[st
     seen: set[str] = set()
 
     for signal in signals:
-        if signal.signal != "referenced_act":
+        if signal.signal == "referenced_act":
+            source = _build_referenced_source(signal.value)
+        elif signal.signal == "usc_citation":
+            source = _build_usc_referenced_source(signal.value)
+            if source is None:
+                continue
+        else:
             continue
-        source = _build_referenced_source(signal.value)
         if source.reference_id in seen:
             continue
         seen.add(source.reference_id)
