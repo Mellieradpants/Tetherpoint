@@ -61,14 +61,20 @@ _TARGET_USC_CITATIONS = {
     "52 u.s.c. 20502": {
         "reference_id": "52-usc-20502",
         "name": "52 U.S.C. 20502",
+        "title": "52",
+        "section": "20502",
     },
     "52 u.s.c. 20503": {
         "reference_id": "52-usc-20503",
         "name": "52 U.S.C. 20503",
+        "title": "52",
+        "section": "20503",
     },
     "52 u.s.c. 20505": {
         "reference_id": "52-usc-20505",
         "name": "52 U.S.C. 20505",
+        "title": "52",
+        "section": "20505",
     },
 }
 
@@ -132,6 +138,13 @@ def _normalize_usc_citation(value: str) -> str:
     return f"{match.group(1)} U.S.C. {match.group(2)}"
 
 
+def _build_olrc_uscode_url(title: str, section: str) -> str:
+    return (
+        "https://uscode.house.gov/view.xhtml?"
+        f"req=granuleid:USC-prelim-title{title}-section{section}"
+    )
+
+
 def _build_usc_referenced_source(matched_text: str) -> ReferencedSource | None:
     cleaned = " ".join(matched_text.split()).strip(" .;,")
     normalized = _normalize_usc_citation(cleaned)
@@ -143,9 +156,10 @@ def _build_usc_referenced_source(matched_text: str) -> ReferencedSource | None:
         name=target["name"],
         reference_type="U.S. Code citation",
         matched_text=cleaned,
-        source_system="U.S. Code",
-        status="reference_detected_no_known_link",
-        why_it_matters="Source text for this U.S. Code citation has not been retrieved yet.",
+        source_system="U.S. Code / Office of the Law Revision Counsel",
+        official_source_url=_build_olrc_uscode_url(target["title"], target["section"]),
+        status="official_path_generated_no_retrieval",
+        why_it_matters="Official source path generated. Source text has not been retrieved yet.",
     )
 
 
