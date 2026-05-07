@@ -142,6 +142,7 @@ def _build_olrc_uscode_url(title: str, section: str) -> str:
     return (
         "https://uscode.house.gov/view.xhtml?"
         f"req=granuleid:USC-prelim-title{title}-section{section}"
+        "&num=0&edition=prelim"
     )
 
 
