@@ -42,6 +42,8 @@ def _source_key(name: str | None, url: str | None, matched_text: str | None) -> 
 
 
 def _origin_resolution_state(status: str | None) -> str:
+    if status == "official_path_generated_no_retrieval":
+        return "not_attempted"
     if status == "official_reference_detected":
         return "found"
     if status == "reference_detected_no_known_link":
@@ -75,11 +77,17 @@ def _build_source_metadata(
             source_url=source.official_source_url,
             matched_text=source.matched_text,
             resolution_state=_origin_resolution_state(source.status),
-            review_state="needs_review"
-            if source.status == "reference_detected_no_known_link"
-            else "ready",
+            review_state="ready",
         )
+        if source.status == "official_path_generated_no_retrieval":
+            contract.review_state = "needs_review"
+            contract.dependencies_open.append("reference_resolution_dependency")
+            contract.anchors_missing.append("referenced_source_text")
+            contract.limits.append(
+                source.why_it_matters or "Source text has not been retrieved."
+            )
         if source.status == "reference_detected_no_known_link":
+            contract.review_state = "needs_review"
             contract.dependencies_open.append("official_source_link")
             contract.limits.append(source.why_it_matters or "Official source link is not mapped.")
         source_metadata[contract.source_id] = contract
