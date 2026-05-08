@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { PipelineResponse } from "../Workspace";
 
 export type Tone = "good" | "review" | "bad" | "neutral";
 
@@ -55,6 +56,15 @@ export function toneClass(tone: Tone): string {
 export function splitParagraphs(text: string | null | undefined): string[] {
   if (!text || !text.trim()) return [];
   return text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+}
+
+export function ruleTextById(data: PipelineResponse): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const unit of safeArray(data.rule_units?.rule_units)) {
+    const text = unit.source_text_combined || unit.primary_text || "";
+    if (text) map.set(unit.rule_unit_id, text);
+  }
+  return map;
 }
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
