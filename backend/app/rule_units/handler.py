@@ -124,6 +124,15 @@ def _anchors_for_reference(nodes: list[StructureNode], reference: str) -> list[s
     return _unique_preserve_order(anchors)
 
 
+def _unresolved_reference_limit(official_source_url: str | None) -> str:
+    if official_source_url:
+        return (
+            "Official source path is available. Referenced source text has not been "
+            "retrieved into Tetherpoint, so Meaning does not import this source yet."
+        )
+    return "Referenced source text has not been retrieved and no official source path is mapped yet."
+
+
 def _packet_from_referenced_source(
     source: ReferencedSource,
     source_text: str,
@@ -140,7 +149,7 @@ def _packet_from_referenced_source(
         officialSourceUrl=source.official_source_url,
         retrievalStatus="not_attempted",
         anchors=anchors,
-        limits=["Referenced source text has not been retrieved; manual source text is required for Extended Meaning."],
+        limits=[_unresolved_reference_limit(source.official_source_url)],
     )
 
 
@@ -159,7 +168,7 @@ def _packet_from_signal(
         officialSourceUrl=None,
         retrievalStatus="not_attempted",
         anchors=_anchors_for_reference(source_nodes, signal.value),
-        limits=["Referenced source text has not been retrieved; manual source text is required for Extended Meaning."],
+        limits=[_unresolved_reference_limit(None)],
     )
 
 
