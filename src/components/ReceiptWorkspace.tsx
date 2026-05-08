@@ -1,6 +1,6 @@
 
 import { VerificationTab } from "./receipt-workspace/VerificationTab";
-import { safeArray, displayStatus, rawStatus } from "./receipt-workspace/shared";
+import { safeArray, displayStatus, rawStatus, ruleTextById } from "./receipt-workspace/shared";
 import { OriginTab } from "./receipt-workspace/OriginTab"; 
 import { useMemo, useState, type ReactNode } from "react";
 import { resolveReference, translatePlainMeaning, type ResolveReferenceResponse } from "../lib/api-client";
@@ -194,15 +194,6 @@ function TabButton({ tab, active, onClick, issueCount = 0 }: { tab: ResultTab; a
       <span className="block truncate whitespace-nowrap">{labels[tab]}{tab === "issues" && issueCount > 0 ? ` ${issueCount}` : ""}</span>
     </button>
   );
-}
-
-function ruleTextById(data: PipelineResponse): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const unit of safeArray(data.rule_units?.rule_units)) {
-    const text = unit.source_text_combined || unit.primary_text || "";
-    if (text) map.set(unit.rule_unit_id, text);
-  }
-  return map;
 }
 
 function buildResultText(data: PipelineResponse) {
