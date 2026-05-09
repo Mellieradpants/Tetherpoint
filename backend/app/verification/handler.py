@@ -23,10 +23,47 @@ _ASSERTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     )),
     ("government_publication", re.compile(
         r"\b(federal register|executive order|proclamation|regulation|agency|department|bureau)\b", re.I)),
+    ("scholarly_citation", re.compile(
+        r"\b(DOI|doi\.org|citation|cited by|references|bibliography|journal citation|volume\s+\d+|issue\s+\d+|"
+        r"pp\.?\s*\d+|et al\.|Crossref)\b",
+        re.I,
+    )),
+    ("publication_disclosure", re.compile(
+        r"\b(conflict of interest|competing interests?|funding statement|author contributions?|data availability statement|"
+        r"ethics statement|institutional review board|IRB|informed consent|publisher'?s note|disclosure statement|"
+        r"acknowledg(?:e)?ments?)\b",
+        re.I,
+    )),
+    ("conceptual_theory", re.compile(
+        r"\b(conceptual framework|theoretical framework|theory of|conceptual model|philosophical|epistemic|"
+        r"phenomenolog(?:y|ical)|ontology|cognitive architecture|consciousness|qualia|intentionality|"
+        r"embodied cognition|predictive processing)\b",
+        re.I,
+    )),
     ("scientific_biomedical", re.compile(
-        r"\b(study|research|clinical|trial|peer-reviewed|journal|findings|hypothesis|evidence-based)\b", re.I)),
+        r"\b(biomedical|neuroscience|clinical trial|randomized clinical trial|patient|patients|diagnosis|treatment|"
+        r"therapy|therapeutic|disease|disorder|symptom|brain|neural|neuron|cortex|fMRI|EEG|"
+        r"biomarker|genomic|pharmacological|medical intervention|evidence-based medicine)\b",
+        re.I,
+    )),
     ("statistical_public_data", re.compile(
-        r"\b(census|survey|statistics|percent|rate|population|demographic|data)\b", re.I)),
+        r"\b(Census|American Community Survey|ACS|Bureau of Labor Statistics|BLS|data\.gov|federal dataset|"
+        r"government statistics?|public[- ]data portal|official statistics?|population estimate|demographic table|"
+        r"statistical agency|national survey|administrative data)\b",
+        re.I,
+    )),
+    ("research_methodology", re.compile(
+        r"\b(methods?|methodology|materials and methods|participants?|sample size|cohort|randomi[sz]ed|"
+        r"control group|regression|qualitative|quantitative|survey instrument|interviews?|protocol|pre-registered|"
+        r"preregistration|replication|research dataset|study dataset|codebook|statistical analysis)\b",
+        re.I,
+    )),
+    ("academic_research_literature", re.compile(
+        r"\b(peer-reviewed|scholarly article|academic literature|literature review|systematic review|meta-analysis|"
+        r"journal article|published in|abstract|authors?|research summary|research recommendation|may benefit from|"
+        r"future research|findings suggest)\b",
+        re.I,
+    )),
     ("corporate_financial", re.compile(
         r"\b(SEC|filing|10-K|10-Q|annual report|quarterly|earnings|revenue|stock|shareholder)\b", re.I)),
     ("infrastructure_energy", re.compile(
@@ -39,6 +76,11 @@ _RECORD_SYSTEMS: dict[str, list[str]] = {
     "legal_legislative": ["Congress.gov", "GovInfo", "Federal Register"],
     "court_case_law": ["CourtListener", "GovInfo"],
     "government_publication": ["Federal Register", "GovInfo"],
+    "scholarly_citation": ["Crossref", "DOI Registry", "Publisher article page"],
+    "publication_disclosure": ["Publisher article page", "Journal disclosure section", "DOI/Crossref"],
+    "research_methodology": ["OSF", "Journal article methods section", "Publisher article page", "DOI/Crossref"],
+    "conceptual_theory": ["JSTOR", "PhilPapers", "DOI/Crossref", "Publisher article page"],
+    "academic_research_literature": ["DOI/Crossref", "Publisher article page", "JSTOR"],
     "scientific_biomedical": ["PubMed", "JSTOR"],
     "statistical_public_data": ["Census", "data.gov"],
     "corporate_financial": ["SEC EDGAR"],
