@@ -343,7 +343,7 @@ components:
         assertion_type:
           oneOf:
             - type: string
-              enum: [legal_legislative, court_case_law, government_publication, scientific_biomedical, statistical_public_data, corporate_financial, infrastructure_energy, historical_archival]
+              enum: [legal_legislative, court_case_law, government_publication, scholarly_citation, publication_disclosure, research_methodology, conceptual_theory, academic_research_literature, scientific_biomedical, statistical_public_data, corporate_financial, infrastructure_energy, historical_archival]
             - type: "null"
         verification_path_available: { type: boolean }
         expected_record_systems: { type: array, items: { type: string }, default: [] }
