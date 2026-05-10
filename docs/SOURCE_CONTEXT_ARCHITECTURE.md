@@ -103,6 +103,24 @@ Source capture and interpretation must stay separated as document intake grows.
 
 Anti-drift rule: a later layer may add a derived card or field only when it records traceability back to the earlier source object. Later layers must not silently rewrite earlier source snapshots, anchors, document pieces, node IDs, or source text.
 
+## Verified Internal Chain
+
+The document-first v2 chain now exists internally and is covered by backend tests. The backend suite has passed with `cd backend && python -m pytest app/tests/ -v` and `119 passed`.
+
+Layer map:
+
+1. PDF-derived extraction -> `CanonicalDocumentPacket`
+2. `CanonicalDocumentPacket` -> `DocumentStructureResult`
+3. `DocumentStructureResult` -> `SemanticStructureResult`
+4. `SemanticStructureResult` -> `SelectionV2Result`
+5. `SelectionV2Result` + Structure -> `RuleUnitV2CandidateResult`
+
+This chain preserves source text, anchors, page and block structure, semantic signals, selected signals, and rule-unit candidates as separate layers.
+
+It is intentionally not wired into `/analyze` yet. It does not parse binary PDFs, perform OCR, expose PDF upload UI, modify existing runtime pipeline behavior, or change Meaning, Verification, Governance, or existing Rule Units.
+
+Next implementation boundary: decide how and when this internal chain becomes an optional runtime path without collapsing it into the existing text-first pipeline.
+
 ## Architecture Rules
 
 - SourceContext does not create meaning.
