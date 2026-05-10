@@ -9,20 +9,31 @@ from app.meaning.handler import process_meaning
 from app.origin.handler import process_origin
 from app.output.handler import assemble_output
 from app.rule_units.handler import process_rule_units
+from app.rule_units_v2.handler import process_rule_units_v2_candidates
 from app.schemas.models import (
     AnalyzeRequest,
+    DocumentFirstV2Result,
     GovernanceCheckResult,
     GovernanceGateResult,
     GovernanceResult,
     HumanReviewHandoff,
+    InputResult,
+    MeaningResult,
     OriginResult,
+    OutputResult,
     PipelineError,
     PipelineResponse,
     RuleUnit,
     RuleUnitResult,
+    SelectionResult,
     SourceMetadataContract,
+    StructureResult,
+    StructureValidationReport,
 )
 from app.selection.handler import process_selection
+from app.selection_v2.handler import process_selection_v2
+from app.semantic_structure.handler import process_semantic_structure
+from app.structure.document_packet_adapter import document_structure_from_document_packet
 from app.structure.handler import process_structure
 from app.verification.handler import process_verification
 
@@ -249,6 +260,90 @@ def _build_human_review_handoffs(
     return handoffs
 
 
+def _empty_legacy_response(request: AnalyzeRequest, document_first_v2: DocumentFirstV2Result) -> PipelineResponse:
+    input_result = InputResult(
+        raw_content=request.content,
+        content_type=request.content_type.value,
+        size=len(request.content),
+        parse_status="ok",
+    )
+    structure_result = StructureResult(
+        nodes=[],
+        node_count=0,
+        section_count=0,
+        validation_report=StructureValidationReport(status="clean"),
+    )
+    selection_result = SelectionResult(selected_nodes=[], excluded_nodes=[], selection_log=[])
+    rule_unit_result = RuleUnitResult(rule_units=[], unit_count=0, ready_count=0, needs_review_count=0)
+    origin_result = OriginResult(status="skipped")
+    verification_result = process_verification([], run=False)
+    meaning_result = MeaningResult(status="skipped")
+    governance_gate_result = GovernanceGateResult(status="match")
+    governance_result = GovernanceResult(
+        status="match",
+        record_count=0,
+        issue_count=0,
+        principle="No governance records were produced for the document-first v2 diagnostic path.",
+    )
+    output_result = OutputResult(
+        summary={"document_first_v2_status": document_first_v2.status},
+        total_nodes=0,
+        selected_count=0,
+        excluded_count=0,
+        meaning_status=meaning_result.status,
+        origin_status=origin_result.status,
+        verification_status=verification_result.status,
+        governance_status=governance_result.status,
+        governance_issue_count=0,
+    )
+
+    return PipelineResponse(
+        input=input_result,
+        structure=structure_result,
+        selection=selection_result,
+        rule_units=rule_unit_result,
+        governance_gate=governance_gate_result,
+        meaning=meaning_result,
+        origin=origin_result,
+        verification=verification_result,
+        governance=governance_result,
+        output=output_result,
+        document_first_v2=document_first_v2,
+    )
+
+
+def _run_document_packet_pipeline(request: AnalyzeRequest) -> PipelineResponse:
+    packet = request.document_packet
+    if packet is None:
+        return _empty_legacy_response(request, DocumentFirstV2Result(status="skipped"))
+
+    try:
+        document_structure = document_structure_from_document_packet(packet)
+        semantic_structure = process_semantic_structure(document_structure)
+        selection_v2 = process_selection_v2(semantic_structure)
+        rule_unit_candidates = process_rule_units_v2_candidates(
+            document_structure,
+            semantic_structure,
+            selection_v2,
+        )
+    except Exception as exc:  # pragma: no cover - defensive diagnostic boundary
+        return _empty_legacy_response(
+            request,
+            DocumentFirstV2Result(status="error", error=str(exc)),
+        )
+
+    return _empty_legacy_response(
+        request,
+        DocumentFirstV2Result(
+            status="executed",
+            document_structure=document_structure,
+            semantic_structure=semantic_structure,
+            selection_v2=selection_v2,
+            rule_unit_candidates=rule_unit_candidates,
+        ),
+    )
+
+
 def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     """Execute the pipeline:
     Input -> Structure -> Origin -> Selection -> Rule Units -> Governance Gate -> Verification -> Meaning -> Governance -> Output
@@ -257,6 +352,9 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     interpretation units passed into Meaning. Governance evaluates anchored
     rule-unit records before final output assembly.
     """
+    if request.document_packet is not None:
+        return _run_document_packet_pipeline(request)
+
     errors: list[PipelineError] = []
 
     # 1. Input
