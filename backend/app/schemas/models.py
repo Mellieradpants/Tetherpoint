@@ -7,6 +7,12 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.rule_units_v2.handler import RuleUnitV2CandidateResult
+from app.schemas.document_packet import CanonicalDocumentPacket
+from app.selection_v2.handler import SelectionV2Result
+from app.semantic_structure.handler import SemanticStructureResult
+from app.structure.document_packet_adapter import DocumentStructureResult
+
 
 class ContentType(str, Enum):
     xml = "xml"
@@ -25,6 +31,7 @@ class AnalyzeRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=500_000)
     content_type: ContentType
     options: AnalyzeOptions = Field(default_factory=AnalyzeOptions)
+    document_packet: Optional[CanonicalDocumentPacket] = None
 
 
 class InputResult(BaseModel):
@@ -398,6 +405,15 @@ class HumanReviewHandoff(BaseModel):
     can_proceed: bool = False
 
 
+class DocumentFirstV2Result(BaseModel):
+    status: Literal["executed", "skipped", "error"]
+    document_structure: Optional[DocumentStructureResult] = None
+    semantic_structure: Optional[SemanticStructureResult] = None
+    selection_v2: Optional[SelectionV2Result] = None
+    rule_unit_candidates: Optional[RuleUnitV2CandidateResult] = None
+    error: Optional[str] = None
+
+
 PipelineLayerName = Literal[
     "input",
     "structure",
@@ -432,3 +448,6 @@ class PipelineResponse(BaseModel):
     errors: list[PipelineError] = Field(default_factory=list)
     source_metadata: list[SourceMetadataContract] = Field(default_factory=list)
     human_review_handoffs: list[HumanReviewHandoff] = Field(default_factory=list)
+    document_first_v2: DocumentFirstV2Result = Field(
+        default_factory=lambda: DocumentFirstV2Result(status="skipped")
+    )
