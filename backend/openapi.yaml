@@ -3,10 +3,8 @@ info:
   title: Tetherpoint
   description: >
     Interface-level traceability layer for source-dependent AI meaning.
-    Executable pipeline: Input -> Structure -> Origin -> Selection -> Rule Units -> Governance Gate -> Verification -> Meaning -> Governance -> Output.
-    Atomic Structure nodes are trace units; Rule Units are interpretation units.
-    The Governance Gate exposes source-dependency limits before Meaning runs.
-    Governance is a deterministic support and action-safety gate before final output assembly.
+    Executable text-first pipeline: Input -> Structure -> Origin -> Selection -> Rule Units -> Governance Gate -> Verification -> Meaning -> Governance -> Output.
+    Structured document_packet requests may also run the separated document-first v2 diagnostic path.
   version: "0.1.0"
   license:
     name: MIT
@@ -21,7 +19,7 @@ paths:
   /analyze:
     post:
       operationId: analyze
-      summary: Run the 10-layer source-dependent traceability pipeline on a source document
+      summary: Run source-dependent analysis on a source document
       requestBody:
         required: true
         content:
@@ -30,7 +28,7 @@ paths:
               $ref: "#/components/schemas/AnalyzeRequest"
       responses:
         "200":
-          description: Full pipeline result with all layer outputs
+          description: Pipeline result with optional document-first v2 diagnostic output
           content:
             application/json:
               schema:
@@ -117,6 +115,80 @@ components:
         content: { type: string, minLength: 1, maxLength: 500000 }
         content_type: { $ref: "#/components/schemas/ContentType" }
         options: { $ref: "#/components/schemas/AnalyzeOptions" }
+        document_packet:
+          oneOf:
+            - $ref: "#/components/schemas/CanonicalDocumentPacket"
+            - type: "null"
+
+    SourceType:
+      type: string
+      enum: [text, xml, html, json, pdf, unknown]
+
+    BlockType:
+      type: string
+      enum: [heading, paragraph, list_item, table, table_row, footnote, header, footer, unknown]
+
+    SourceAnchor:
+      type: object
+      required: [anchor_id, source_type, document_id]
+      properties:
+        anchor_id: { type: string }
+        source_type: { $ref: "#/components/schemas/SourceType" }
+        document_id: { type: string }
+        page_number: { type: ["integer", "null"] }
+        block_id: { type: ["string", "null"] }
+        char_start: { type: ["integer", "null"] }
+        char_end: { type: ["integer", "null"] }
+        bbox:
+          oneOf:
+            - type: array
+              items: { type: number }
+            - type: "null"
+        source_path: { type: ["string", "null"] }
+
+    CanonicalBlock:
+      type: object
+      required: [block_id, page_number, order, text, source_anchor]
+      properties:
+        block_id: { type: string }
+        page_number: { type: integer }
+        order: { type: integer }
+        text: { type: string }
+        source_anchor: { $ref: "#/components/schemas/SourceAnchor" }
+        raw_text: { type: ["string", "null"] }
+        normalized_text: { type: ["string", "null"] }
+        block_type: { $ref: "#/components/schemas/BlockType" }
+        extraction_warnings: { type: array, items: { type: string }, default: [] }
+        metadata: { type: object, additionalProperties: true, default: {} }
+
+    CanonicalPage:
+      type: object
+      required: [page_number]
+      properties:
+        page_number: { type: integer }
+        blocks: { type: array, items: { $ref: "#/components/schemas/CanonicalBlock" }, default: [] }
+        source_anchor:
+          oneOf:
+            - $ref: "#/components/schemas/SourceAnchor"
+            - type: "null"
+        raw_text: { type: ["string", "null"] }
+        extraction_warnings: { type: array, items: { type: string }, default: [] }
+        metadata: { type: object, additionalProperties: true, default: {} }
+
+    CanonicalDocumentPacket:
+      type: object
+      required: [document_id, source_type]
+      properties:
+        document_id: { type: string }
+        source_type: { $ref: "#/components/schemas/SourceType" }
+        pages: { type: array, items: { $ref: "#/components/schemas/CanonicalPage" }, default: [] }
+        title: { type: ["string", "null"] }
+        source_name: { type: ["string", "null"] }
+        source_uri: { type: ["string", "null"] }
+        source_hash: { type: ["string", "null"] }
+        extraction_profile: { type: object, additionalProperties: true, default: {} }
+        extraction_warnings: { type: array, items: { type: string }, default: [] }
+        metadata: { type: object, additionalProperties: true, default: {} }
 
     InputResult:
       type: object
@@ -209,7 +281,6 @@ components:
 
     RuleUnitReferencedSource:
       type: object
-      description: Source dependency packet for text that points outside the local source material.
       required: [name, referenceType, matchedText]
       properties:
         name: { type: string }
@@ -366,7 +437,6 @@ components:
 
     GovernanceGateResult:
       type: object
-      description: Pre-Meaning constraint result that exposes source-dependency limits before fluent meaning runs.
       required: [status]
       properties:
         status: { type: string, enum: [match, needs_review] }
@@ -381,13 +451,7 @@ components:
 
     GovernanceStatus:
       type: string
-      enum:
-        - match
-        - mismatch_detected
-        - contradiction_detected
-        - missing_required_source
-        - needs_review
-        - unsupported_downstream_action
+      enum: [match, mismatch_detected, contradiction_detected, missing_required_source, needs_review, unsupported_downstream_action]
 
     GovernanceRecord:
       type: object
@@ -501,6 +565,144 @@ components:
         human_question: { type: string }
         can_proceed: { type: boolean, default: false }
 
+    DocumentStructureNode:
+      type: object
+      properties:
+        document_id: { type: string }
+        structural_node_id: { type: string }
+        parent_id: { type: ["string", "null"] }
+        page_number: { type: ["integer", "null"] }
+        block_id: { type: ["string", "null"] }
+        block_type:
+          oneOf:
+            - $ref: "#/components/schemas/BlockType"
+            - type: "null"
+        structural_type: { type: string, enum: [document, page, heading, paragraph, list_item, table, table_row, footnote, header, footer, unknown] }
+        order: { type: integer }
+        depth: { type: integer }
+        source_text: { type: string }
+        normalized_text: { type: string }
+        source_anchor:
+          oneOf:
+            - $ref: "#/components/schemas/SourceAnchor"
+            - type: "null"
+
+    DocumentStructureResult:
+      type: object
+      properties:
+        document_id: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/DocumentStructureNode" } }
+
+    SemanticStructureSignal:
+      type: object
+      properties:
+        signal_id: { type: string }
+        document_id: { type: string }
+        structural_node_id: { type: string }
+        signal_type: { type: string }
+        anchor_text: { type: string }
+        source_anchor:
+          oneOf:
+            - $ref: "#/components/schemas/SourceAnchor"
+            - type: "null"
+        detection_basis: { type: string, enum: [explicit_text, structural_pattern] }
+        actor: { type: ["string", "null"] }
+        action: { type: ["string", "null"] }
+        condition: { type: ["string", "null"] }
+        temporal: { type: ["string", "null"] }
+        target: { type: ["string", "null"] }
+        confidence: { type: number, default: 1.0 }
+
+    SemanticStructureResult:
+      type: object
+      properties:
+        document_id: { type: string }
+        signals: { type: array, items: { $ref: "#/components/schemas/SemanticStructureSignal" }, default: [] }
+        signal_count: { type: integer, default: 0 }
+
+    SelectedSemanticSignal:
+      type: object
+      properties:
+        signal_id: { type: string }
+        document_id: { type: string }
+        structural_node_id: { type: string }
+        signal_type: { type: string }
+        anchor_text: { type: string }
+        source_anchor: { $ref: "#/components/schemas/SourceAnchor" }
+        eligibility_reason: { type: string }
+
+    ExcludedSemanticSignal:
+      type: object
+      properties:
+        signal_id: { type: string }
+        document_id: { type: string }
+        structural_node_id: { type: string }
+        signal_type: { type: string }
+        anchor_text: { type: string }
+        source_anchor:
+          oneOf:
+            - $ref: "#/components/schemas/SourceAnchor"
+            - type: "null"
+        exclusion_reason: { type: string }
+
+    SelectionV2Result:
+      type: object
+      properties:
+        document_id: { type: string }
+        selected_signals: { type: array, items: { $ref: "#/components/schemas/SelectedSemanticSignal" }, default: [] }
+        excluded_signals: { type: array, items: { $ref: "#/components/schemas/ExcludedSemanticSignal" }, default: [] }
+        selection_log: { type: array, items: { type: string }, default: [] }
+        selected_count: { type: integer, default: 0 }
+        excluded_count: { type: integer, default: 0 }
+
+    RuleUnitV2Candidate:
+      type: object
+      properties:
+        candidate_id: { type: string }
+        document_id: { type: string }
+        structural_node_id: { type: string }
+        source_anchor:
+          oneOf:
+            - $ref: "#/components/schemas/SourceAnchor"
+            - type: "null"
+        source_text: { type: string }
+        selected_signal_ids: { type: array, items: { type: string }, default: [] }
+        signal_types: { type: array, items: { type: string }, default: [] }
+        anchor_texts: { type: array, items: { type: string }, default: [] }
+        assembly_status: { type: string, enum: [ready, needs_review, blocked] }
+        assembly_notes: { type: array, items: { type: string }, default: [] }
+
+    RuleUnitV2CandidateResult:
+      type: object
+      properties:
+        document_id: { type: string }
+        candidates: { type: array, items: { $ref: "#/components/schemas/RuleUnitV2Candidate" }, default: [] }
+        candidate_count: { type: integer, default: 0 }
+        assembly_log: { type: array, items: { type: string }, default: [] }
+
+    DocumentFirstV2Result:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [executed, skipped, error] }
+        document_structure:
+          oneOf:
+            - $ref: "#/components/schemas/DocumentStructureResult"
+            - type: "null"
+        semantic_structure:
+          oneOf:
+            - $ref: "#/components/schemas/SemanticStructureResult"
+            - type: "null"
+        selection_v2:
+          oneOf:
+            - $ref: "#/components/schemas/SelectionV2Result"
+            - type: "null"
+        rule_unit_candidates:
+          oneOf:
+            - $ref: "#/components/schemas/RuleUnitV2CandidateResult"
+            - type: "null"
+        error: { type: ["string", "null"] }
+
     PipelineError:
       type: object
       required: [layer, error, fatal]
@@ -526,6 +728,7 @@ components:
         errors: { type: array, items: { $ref: "#/components/schemas/PipelineError" }, default: [] }
         source_metadata: { type: array, items: { $ref: "#/components/schemas/SourceMetadataContract" }, default: [] }
         human_review_handoffs: { type: array, items: { $ref: "#/components/schemas/HumanReviewHandoff" }, default: [] }
+        document_first_v2: { $ref: "#/components/schemas/DocumentFirstV2Result" }
 
     ValidationError:
       type: object
