@@ -1,4 +1,4 @@
-"""Tests for converting CanonicalDocumentPacket blocks to Structure-ready records."""
+"""Tests for converting CanonicalDocumentPacket blocks to document-first Structure."""
 
 from app.schemas.document_packet import (
     BlockType,
@@ -8,7 +8,10 @@ from app.schemas.document_packet import (
     SourceAnchor,
     SourceType,
 )
-from app.structure.document_packet_adapter import structure_ready_from_document_packet
+from app.structure.document_packet_adapter import (
+    document_structure_from_document_packet,
+    structure_ready_from_document_packet,
+)
 
 
 FORBIDDEN_FIELDS = {
@@ -21,12 +24,14 @@ FORBIDDEN_FIELDS = {
     "obligation",
     "condition",
     "exception",
+    "role",
     "PRIMARY_RULE",
     "CONDITION",
     "EXCEPTION",
     "DEFINITION",
     "EVIDENCE",
     "CONSEQUENCE",
+    "BOILERPLATE",
 }
 
 
@@ -75,61 +80,85 @@ def _packet() -> CanonicalDocumentPacket:
     )
 
 
-def test_packet_with_one_page_two_blocks_converts_to_two_structure_ready_records():
+def _block_nodes():
+    result = document_structure_from_document_packet(_packet())
+    return [node for node in result.nodes if node.block_id]
+
+
+def test_packet_with_one_page_heading_and_paragraph_converts_to_document_structure_nodes():
+    result = document_structure_from_document_packet(_packet())
+
+    assert result.document_id == "doc-structure-001"
+    assert [node.structural_type for node in result.nodes] == [
+        "document",
+        "page",
+        "heading",
+        "paragraph",
+    ]
+    assert len(_block_nodes()) == 2
+
+
+def test_compatibility_wrapper_returns_document_structure_result():
     result = structure_ready_from_document_packet(_packet())
 
     assert result.document_id == "doc-structure-001"
-    assert len(result.blocks) == 2
+    assert len(result.nodes) == 4
 
 
-def test_structure_adapter_preserves_document_piece_fields_and_anchor():
-    result = structure_ready_from_document_packet(_packet())
-    first, second = result.blocks
+def test_document_structure_preserves_document_piece_fields_and_anchor():
+    first, second = _block_nodes()
 
     assert first.document_id == "doc-structure-001"
+    assert first.structural_node_id == "document:doc-structure-001:page:2:block:heading-1"
+    assert first.parent_id == "document:doc-structure-001:page:2"
     assert first.page_number == 2
     assert first.block_id == "heading-1"
     assert first.block_type == BlockType.heading
+    assert first.structural_type == "heading"
     assert first.order == 1
+    assert first.depth == 2
     assert first.source_text == "Section 1"
     assert first.normalized_text == "Section 1"
+    assert first.source_anchor is not None
     assert first.source_anchor.anchor_id == "pdf-page-2-block-heading-1"
     assert first.source_anchor.block_id == "heading-1"
 
     assert second.page_number == 2
     assert second.block_id == "paragraph-1"
     assert second.block_type == BlockType.paragraph
+    assert second.structural_type == "paragraph"
     assert second.order == 2
+    assert second.depth == 2
     assert second.source_text == "The applicant shall provide proof."
+    assert second.normalized_text == "The applicant shall provide proof."
+    assert second.source_anchor is not None
     assert second.source_anchor.anchor_id == "pdf-page-2-block-paragraph-1"
 
 
-def test_heading_block_maps_to_structural_heading_not_semantic_role():
-    result = structure_ready_from_document_packet(_packet())
-    heading = result.blocks[0]
+def test_heading_block_maps_to_structural_heading_only():
+    heading = _block_nodes()[0]
     payload = heading.model_dump()
+    payload_text = str(payload)
 
     assert heading.structural_type == "heading"
     assert "role" not in payload
-    assert "PRIMARY_RULE" not in str(payload)
+    assert "PRIMARY_RULE" not in payload_text
 
 
-def test_paragraph_block_does_not_receive_semantic_labels():
-    result = structure_ready_from_document_packet(_packet())
-    paragraph = result.blocks[1]
+def test_paragraph_with_shall_does_not_become_primary_rule_or_obligation():
+    paragraph = _block_nodes()[1]
     payload = paragraph.model_dump()
     payload_text = str(payload)
 
     assert paragraph.structural_type == "paragraph"
+    assert paragraph.source_text == "The applicant shall provide proof."
+    assert "role" not in payload
     assert "obligation" not in payload
-    assert "condition" not in payload
-    assert "exception" not in payload
-    assert "CONDITION" not in payload_text
-    assert "EXCEPTION" not in payload_text
+    assert "PRIMARY_RULE" not in payload_text
 
 
-def test_structure_adapter_output_has_no_meaning_verification_or_rule_unit_fields():
-    result = structure_ready_from_document_packet(_packet())
+def test_document_structure_output_has_no_semantic_role_meaning_verification_or_rule_unit_fields():
+    result = document_structure_from_document_packet(_packet())
     payload = result.model_dump()
     payload_text = str(payload)
 
