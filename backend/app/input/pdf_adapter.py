@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.document_packet import (
+    BlockType,
     CanonicalBlock,
     CanonicalDocumentPacket,
     CanonicalPage,
@@ -70,7 +71,7 @@ def canonical_packet_from_extracted_pdf(extracted: dict[str, Any]) -> CanonicalD
                     text=text,
                     raw_text=text,
                     normalized_text=text,
-                    block_type=str(block.get("block_type", "text")),
+                    block_type=block.get("block_type", BlockType.unknown),
                     source_anchor=anchor,
                     extraction_warnings=_warnings_from(block),
                 )

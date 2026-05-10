@@ -1,7 +1,10 @@
 """Tests for the PDF intake adapter stub."""
 
+import pytest
+from pydantic import ValidationError
+
 from app.input.pdf_adapter import canonical_packet_from_extracted_pdf
-from app.schemas.document_packet import SourceType
+from app.schemas.document_packet import BlockType, SourceType
 
 
 SEMANTIC_FIELDS = {
@@ -76,6 +79,29 @@ def test_pdf_adapter_preserves_page_block_text_order_and_anchor():
     assert anchor.char_end == 58
     assert anchor.bbox == [12.0, 24.0, 300.0, 80.0]
     assert anchor.source_path == "s3://example/source.pdf"
+
+
+def test_pdf_adapter_preserves_valid_paragraph_block_type():
+    packet = canonical_packet_from_extracted_pdf(_sample_extracted_pdf())
+
+    assert packet.pages[0].blocks[0].block_type == BlockType.paragraph
+
+
+def test_pdf_adapter_defaults_missing_block_type_to_unknown():
+    extracted = _sample_extracted_pdf()
+    del extracted["pages"][0]["blocks"][0]["block_type"]
+
+    packet = canonical_packet_from_extracted_pdf(extracted)
+
+    assert packet.pages[0].blocks[0].block_type == BlockType.unknown
+
+
+def test_pdf_adapter_rejects_invalid_block_type():
+    extracted = _sample_extracted_pdf()
+    extracted["pages"][0]["blocks"][0]["block_type"] = "caption"
+
+    with pytest.raises(ValidationError):
+        canonical_packet_from_extracted_pdf(extracted)
 
 
 def test_pdf_adapter_preserves_extraction_warnings():

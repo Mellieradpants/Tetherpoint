@@ -21,6 +21,18 @@ class SourceType(str, Enum):
     unknown = "unknown"
 
 
+class BlockType(str, Enum):
+    heading = "heading"
+    paragraph = "paragraph"
+    list_item = "list_item"
+    table = "table"
+    table_row = "table_row"
+    footnote = "footnote"
+    header = "header"
+    footer = "footer"
+    unknown = "unknown"
+
+
 class SourceAnchor(BaseModel):
     anchor_id: str
     source_type: SourceType
@@ -41,7 +53,7 @@ class CanonicalBlock(BaseModel):
     source_anchor: SourceAnchor
     raw_text: Optional[str] = None
     normalized_text: Optional[str] = None
-    block_type: str = "text"
+    block_type: BlockType = BlockType.unknown
     extraction_warnings: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

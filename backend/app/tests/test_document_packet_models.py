@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.document_packet import (
+    BlockType,
     CanonicalBlock,
     CanonicalDocumentPacket,
     CanonicalPage,
@@ -12,8 +13,8 @@ from app.schemas.document_packet import (
 )
 
 
-def test_canonical_document_packet_validates_document_pieces():
-    anchor = SourceAnchor(
+def _source_anchor() -> SourceAnchor:
+    return SourceAnchor(
         anchor_id="page-1-block-1",
         source_type=SourceType.pdf,
         document_id="doc-001",
@@ -23,6 +24,10 @@ def test_canonical_document_packet_validates_document_pieces():
         char_end=48,
         bbox=[10.0, 20.0, 300.0, 60.0],
     )
+
+
+def test_canonical_document_packet_validates_document_pieces():
+    anchor = _source_anchor()
     block = CanonicalBlock(
         block_id="block-001",
         page_number=1,
@@ -46,6 +51,44 @@ def test_canonical_document_packet_validates_document_pieces():
     assert packet.source_type == SourceType.pdf
     assert packet.pages[0].blocks[0].source_anchor.anchor_id == "page-1-block-1"
     assert packet.pages[0].blocks[0].text == "An applicant shall provide documentary proof."
+
+
+def test_canonical_block_accepts_valid_block_type_values():
+    for block_type in BlockType:
+        block = CanonicalBlock(
+            block_id=f"block-{block_type.value}",
+            page_number=1,
+            order=1,
+            text="Source text.",
+            source_anchor=_source_anchor(),
+            block_type=block_type.value,
+        )
+
+        assert block.block_type == block_type
+
+
+def test_canonical_block_defaults_missing_block_type_to_unknown():
+    block = CanonicalBlock(
+        block_id="block-001",
+        page_number=1,
+        order=1,
+        text="Source text.",
+        source_anchor=_source_anchor(),
+    )
+
+    assert block.block_type == BlockType.unknown
+
+
+def test_canonical_block_rejects_invalid_block_type():
+    with pytest.raises(ValidationError):
+        CanonicalBlock(
+            block_id="block-001",
+            page_number=1,
+            order=1,
+            text="Source text.",
+            source_anchor=_source_anchor(),
+            block_type="caption",
+        )
 
 
 def test_canonical_document_packet_rejects_invalid_source_type():
