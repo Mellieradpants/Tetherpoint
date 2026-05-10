@@ -87,6 +87,22 @@ Stores human review packets generated from unresolved source dependencies, missi
 | Final Governance | Writes support and safety findings. |
 | Output | Presents projections only. |
 
+## Layer Ownership / Anti-Drift Rule
+
+Source capture and interpretation must stay separated as document intake grows.
+
+| Layer | Boundary |
+| --- | --- |
+| PDF Intake | Owns source capture and adapter output. It may produce usable text and source locations, but it must not assign semantic labels. |
+| Structure | Owns document pieces, anchors, spans, ordering, and structural node links. It must not write plain meaning. |
+| Semantic Structure | Owns explicit meaning-signals inside pieces, such as actor/action/condition fields, while preserving source text and anchors. |
+| Selection | Owns eligibility. It must not rewrite source text. |
+| Rule Units | Own grouping and must preserve node IDs and anchors. |
+| Governance | Owns pass, block, review, and limit states. |
+| Meaning | Explains only governed outputs and must not create anchors. |
+
+Anti-drift rule: a later layer may add a derived card or field only when it records traceability back to the earlier source object. Later layers must not silently rewrite earlier source snapshots, anchors, document pieces, node IDs, or source text.
+
 ## Architecture Rules
 
 - SourceContext does not create meaning.
