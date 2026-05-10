@@ -199,6 +199,7 @@ class TestFullPipeline:
         assert result.verification is not None
         assert result.governance is not None
         assert result.output is not None
+        assert result.document_first_v2.status == "skipped"
         assert result.errors is not None
         assert result.source_metadata == []
         assert result.human_review_handoffs == []
@@ -320,7 +321,9 @@ class TestFullPipeline:
             "errors",
             "source_metadata",
             "human_review_handoffs",
+            "document_first_v2",
         }
         assert required_keys == set(body.keys())
         assert body["source_metadata"] == []
         assert body["human_review_handoffs"] == []
+        assert body["document_first_v2"]["status"] == "skipped"
