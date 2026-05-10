@@ -252,8 +252,9 @@ class TestFullPipeline:
             source = sources[citation]
             assert source.source_id == citation.lower().replace(" u.s.c. ", "-usc-")
             assert source.source_role == "reference_record"
-            assert source.source_system == "U.S. Code"
-            assert source.source_url is None
+            assert source.source_system == "U.S. Code / Office of the Law Revision Counsel"
+            assert source.source_url
+            assert "uscode.house.gov" in source.source_url
             assert source.matched_text == citation
             assert source.source_text is None
             assert source.resolution_state in {"manual_required", "not_attempted"}
