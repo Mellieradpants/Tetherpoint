@@ -2,7 +2,7 @@
 
 Source-anchored parsing stack. API-first.
 
-The backend supports Tetherpoint's interface-level traceability goal:
+The backend supports Tetherpoint’s interface-level traceability goal:
 
 ```text
 Traceability before fluency.
@@ -35,15 +35,15 @@ Atomic Structure nodes are traceability units. Rule Units are coherent interpret
 
 ```text
 Input
--> Structure
--> Origin
--> Selection
--> Rule Units
--> Governance Gate
--> Verification
--> Meaning
--> Governance
--> Output
+→ Structure
+→ Origin
+→ Selection
+→ Rule Units
+→ Governance Gate
+→ Verification
+→ Meaning
+→ Governance
+→ Output
 ```
 
 The backend should preserve this contract:
@@ -366,25 +366,25 @@ backend/app/tests/test_governance.py
 
 ## What each layer does
 
-1. Input - Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
+1. Input — Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
 
-2. Structure - Deterministic parsing via 10 subsystems: SSE, LNS, CFS, 5W1H, AAC, TPS, SJM, MPS, RDS, and ISC. Each node carries source anchors for traceability.
+2. Structure — Deterministic parsing via 10 subsystems: SSE, LNS, CFS, 5W1H, AAC, TPS, SJM, MPS, RDS, and ISC. Each node carries source anchors for traceability.
 
-3. Origin - Extracts provenance and source-reference signals from the source document. For HTML, this includes canonical URL, author, publish time, JSON-LD publisher, Open Graph tags, and Twitter card tags. For JSON/XML, this includes explicit metadata fields. Distribution metadata stays separate from origin identity.
+3. Origin — Extracts provenance and source-reference signals from the source document. For HTML, this includes canonical URL, author, publish time, JSON-LD publisher, Open Graph tags, and Twitter card tags. For JSON/XML, this includes explicit metadata fields. Distribution metadata stays separate from origin identity.
 
-4. Selection - Deterministic eligibility check. Nodes must have source text, must not be CFS-blocked, and must contain at least one structured signal. Nodes pass through unchanged.
+4. Selection — Deterministic eligibility check. Nodes must have source text, must not be CFS-blocked, and must contain at least one structured signal. Nodes pass through unchanged.
 
-5. Rule Units - Groups selected structure nodes into coherent interpretation units while preserving supporting source-node IDs and referenced-source dependency packets.
+5. Rule Units — Groups selected structure nodes into coherent interpretation units while preserving supporting source-node IDs and referenced-source dependency packets.
 
-6. Governance Gate - Checks for reference boundaries, practical source questions, non-blending constraints, and source-dependency limits before Verification and Meaning.
+6. Governance Gate — Checks for reference boundaries, practical source questions, non-blending constraints, and source-dependency limits before Verification and Meaning.
 
-7. Verification - Routes Rule Units to candidate record systems. Detects broad assertion types and maps them to record systems such as Congress.gov, PubMed, SEC EDGAR, FERC, and National Archives. This is routing logic, not truth logic.
+7. Verification — Routes Rule Units to candidate record systems. Detects broad assertion types and maps them to record systems such as Congress.gov, PubMed, SEC EDGAR, FERC, and National Archives. This is routing logic, not truth logic.
 
-8. Meaning - Produces document-level plain meaning from a deterministic Rule Unit brief. It does not use scope labels, shift labels, or comparison lenses. Meaning must remain bounded to supplied and anchored source material.
+8. Meaning — Produces document-level plain meaning from a deterministic Rule Unit brief. It does not use scope labels, shift labels, or comparison lenses. Meaning must remain bounded to supplied and anchored source material.
 
-9. Governance - Evaluates normalized anchored records for required source support, field-level contradictions when comparison records are supplied, and downstream action safety when an action is requested. It emits review status only; it does not decide truth or repair data.
+9. Governance — Evaluates normalized anchored records for required source support, field-level contradictions when comparison records are supplied, and downstream action safety when an action is requested. It emits review status only; it does not decide truth or repair data.
 
-10. Output - Assembles the final response from upstream layers. Presentation only.
+10. Output — Assembles the final response from upstream layers. Presentation only.
 
 ## Project structure
 
