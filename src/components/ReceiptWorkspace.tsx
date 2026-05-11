@@ -167,6 +167,14 @@ function SupportChipList({ items, empty }: { items: string[]; empty: string }) {
   );
 }
 
+function DocumentFirstModeNotice() {
+  return (
+    <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm leading-6 text-gold-muted">
+      Document-first inspection mode is running. Support objects are visible below. Meaning, Origin, Verification, and Governance are not connected to this document-first path yet.
+    </div>
+  );
+}
+
 function SupportPathPanel({ data }: { data: PipelineResponse }) {
   const supportPath = (data as PipelineResponseWithDocumentFirst).document_first_v2;
 
@@ -207,6 +215,8 @@ function SupportPathPanel({ data }: { data: PipelineResponse }) {
         <div className="flex flex-wrap gap-2">
           <StatusPill label="document_first_v2" status={supportPath.status} />
         </div>
+
+        <DocumentFirstModeNotice />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SupportMetric label="Document nodes" value={safeArray(documentStructure?.nodes).length} />
