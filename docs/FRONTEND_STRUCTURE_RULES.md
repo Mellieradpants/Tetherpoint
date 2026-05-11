@@ -17,6 +17,22 @@ The frontend code must follow the same rule:
 - plain names
 - no hidden junk drawers
 
+## Mobile readability rule
+
+Mobile is a required check for frontend work, not a later polish pass.
+
+Navigation text, status text, and support labels must stay horizontally readable on mobile. Do not use rotated text, vertical stacked letters, or sideways labels as a fix for cramped space.
+
+If a label does not fit, use one of these patterns instead:
+
+- a shorter stable horizontal label
+- a wider tap target
+- a horizontally scrollable tab row
+- a wrapped row that keeps each label readable
+- a compact icon only if the meaning is also available through accessible text
+
+Mobile checks must include form controls, sample buttons, result panels, long source text, wide identifiers, tab navigation, and structured output wrapping or scrolling.
+
 ## No junk-drawer files
 
 A file must not become a catch-all for unrelated UI, state, helpers, API behavior, contract rendering, and domain logic.
@@ -214,6 +230,7 @@ Every frontend task should specify:
 - expected render behavior
 - verification step
 - cleanup check
+- mobile readability check
 - plain-language commit message
 
 ## Cleanup check
@@ -226,6 +243,7 @@ Before a frontend task is complete, verify:
 - Did shared helpers stay generic?
 - Did contract rendering stay attached to the correct meaning layer?
 - Did any temporary bridge logic need a follow-up note or removal?
+- Does the result remain horizontally readable on mobile without rotated or vertical label text?
 - Would a new engineer understand the file structure without private context?
 - Is the commit message specific enough to navigate by later?
 
