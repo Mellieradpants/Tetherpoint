@@ -80,6 +80,98 @@ SEC. 2. Ensuring only citizens are registered to vote in elections for Federal o
 
 “(2) NOTIFICATION OF REQUIREMENT.—Upon receiving an otherwise completed mail voter registration application form prescribed by the Election Assistance Commission pursuant to section 9(a)(2) or a form described in paragraph (1) or (2) of subsection (a), the appropriate election official shall transmit a notice to the applicant of the requirement to present documentary proof of United States citizenship under this subsection, and shall include in the notice instructions to enable the applicant to meet the requirement.`;
 
+const DOCUMENT_PACKET_SAMPLE_TEXT = JSON.stringify(
+  {
+    content: "H.R. 22 SAVE Act structured document packet excerpt",
+    content_type: "text",
+    options: {
+      run_meaning: true,
+      run_origin: true,
+      run_verification: true,
+    },
+    document_packet: {
+      document_id: "hr-22-save-act-excerpt",
+      source_type: "pdf",
+      source_name: "H.R. 22 SAVE Act excerpt",
+      source_uri: "https://www.congress.gov/bill/119th-congress/house-bill/22/text",
+      pages: [
+        {
+          page_number: 1,
+          blocks: [
+            {
+              block_id: "heading-1",
+              page_number: 1,
+              order: 1,
+              text: "H. R. 22",
+              block_type: "heading",
+              source_anchor: {
+                anchor_id: "hr22-page-1-heading-1",
+                source_type: "pdf",
+                document_id: "hr-22-save-act-excerpt",
+                page_number: 1,
+                block_id: "heading-1",
+              },
+            },
+            {
+              block_id: "purpose-1",
+              page_number: 1,
+              order: 2,
+              text: "To amend the National Voter Registration Act of 1993 to require proof of United States citizenship to register an individual to vote in elections for Federal office, and for other purposes.",
+              normalized_text: "To amend the National Voter Registration Act of 1993 to require proof of United States citizenship to register an individual to vote in elections for Federal office, and for other purposes.",
+              block_type: "paragraph",
+              source_anchor: {
+                anchor_id: "hr22-page-1-purpose-1",
+                source_type: "pdf",
+                document_id: "hr-22-save-act-excerpt",
+                page_number: 1,
+                block_id: "purpose-1",
+                char_start: 0,
+                char_end: 174,
+              },
+            },
+            {
+              block_id: "section-2-registration-requirement",
+              page_number: 1,
+              order: 3,
+              text: "Under any method of voter registration in a State, the State shall not accept and process an application to register to vote in an election for Federal office unless the applicant presents documentary proof of United States citizenship with the application.",
+              normalized_text: "Under any method of voter registration in a State, the State shall not accept and process an application to register to vote in an election for Federal office unless the applicant presents documentary proof of United States citizenship with the application.",
+              block_type: "paragraph",
+              source_anchor: {
+                anchor_id: "hr22-page-1-section-2-registration-requirement",
+                source_type: "pdf",
+                document_id: "hr-22-save-act-excerpt",
+                page_number: 1,
+                block_id: "section-2-registration-requirement",
+                char_start: 0,
+                char_end: 239,
+              },
+            },
+            {
+              block_id: "section-6-mail-proof-deadline",
+              page_number: 2,
+              order: 4,
+              text: "An applicant who submits the mail voter registration application form shall not be registered to vote in an election for Federal office unless the applicant presents documentary proof of United States citizenship in person to the office of the appropriate election official not later than the deadline provided by State law for the receipt of a completed voter registration application for the election.",
+              normalized_text: "An applicant who submits the mail voter registration application form shall not be registered to vote in an election for Federal office unless the applicant presents documentary proof of United States citizenship in person to the office of the appropriate election official not later than the deadline provided by State law for the receipt of a completed voter registration application for the election.",
+              block_type: "paragraph",
+              source_anchor: {
+                anchor_id: "hr22-page-2-section-6-mail-proof-deadline",
+                source_type: "pdf",
+                document_id: "hr-22-save-act-excerpt",
+                page_number: 2,
+                block_id: "section-6-mail-proof-deadline",
+                char_start: 0,
+                char_end: 382,
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  null,
+  2
+);
+
 const CONTENT_TYPES = ["text", "html", "xml", "json"] as const;
 
 interface AnalyzeFormProps {
@@ -130,8 +222,7 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
         rows={6}
       />
 
-
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="submit"
           disabled={loading || !content.trim()}
@@ -145,6 +236,13 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
           className="rounded-md bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
         >
           Load Sample
+        </button>
+        <button
+          type="button"
+          onClick={() => { setContent(DOCUMENT_PACKET_SAMPLE_TEXT); setContentType("json"); }}
+          className="rounded-md bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
+        >
+          Load Packet Sample
         </button>
       </div>
     </form>
