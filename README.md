@@ -53,6 +53,14 @@ Current commit rule:
 One commit = one scoped change = one plain-language message.
 ```
 
+Current UI workflow rule:
+
+```text
+Every frontend-facing change must include a mobile check in the same pass. Mobile is not a later cleanup phase.
+```
+
+Mobile checks should cover form controls, sample buttons, result panels, long source text, wide identifiers, tab navigation, and any structured output that may wrap or scroll differently on a phone.
+
 ## Current status
 
 This repository contains a working full-stack prototype:
