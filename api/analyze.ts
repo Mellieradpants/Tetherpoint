@@ -10,6 +10,7 @@ type AnalyzeBody = {
   content: string;
   content_type: string;
   options: AnalyzeOptions;
+  document_packet?: unknown;
 };
 
 type SecurityCheckResult = {
@@ -193,7 +194,22 @@ function parseAnalyzeBody(rawBody: string): AnalyzeBody {
       run_origin: Boolean(rawOptions.run_origin),
       run_verification: Boolean(rawOptions.run_verification),
     },
+    document_packet: record.document_packet,
   };
+}
+
+function buildBackendAnalyzeBody(body: AnalyzeBody): Record<string, unknown> {
+  const backendBody: Record<string, unknown> = {
+    content: body.content,
+    content_type: body.content_type,
+    options: body.options,
+  };
+
+  if (body.document_packet !== undefined) {
+    backendBody.document_packet = body.document_packet;
+  }
+
+  return backendBody;
 }
 
 export default async function handler(req: any, res: any) {
@@ -249,11 +265,7 @@ export default async function handler(req: any, res: any) {
         "Content-Type": "application/json",
         "x-analyze-secret": analyzeSecret,
       },
-      body: JSON.stringify({
-        content: body.content,
-        content_type: body.content_type,
-        options: body.options,
-      }),
+      body: JSON.stringify(buildBackendAnalyzeBody(body)),
     });
 
     const text = await response.text();
