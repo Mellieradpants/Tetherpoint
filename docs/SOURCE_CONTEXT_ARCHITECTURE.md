@@ -1,6 +1,6 @@
 # SourceContext Architecture Alignment
 
-This document records the architecture alignment for a future SourceContext / DocumentMap contract. It is intentionally documentation-only. It does not add SourceContext implementation, change pipeline order, add PDF parsing, add OCR, add external libraries, or change public API response fields.
+This document records the architecture alignment for SourceContext, DocumentMap, and the document-first v2 runtime path. It is intentionally focused on source and document state. It does not add binary PDF parsing, OCR, upload UI, frontend behavior, or new Meaning behavior.
 
 ## Direction
 
@@ -20,13 +20,11 @@ The current source-card logic already exists in fragments:
 
 `SourceMetadataContract` is currently the closest object to a public source-card projection. However, it is built after the main pipeline and is not yet a shared spine that travels through the pipeline.
 
-SourceContext should be internal-only first. Existing public response fields should remain stable. The existing `source_metadata` field should remain as a compatibility projection generated from the internal SourceContext until the contract is mature enough to expose directly.
+SourceContext should be internal-first. Existing public response fields should remain stable unless a scoped API contract change updates backend models, OpenAPI, tests, and docs in the same pass. The existing `source_metadata` field should remain as a compatibility projection generated from internal source state until the contract is mature enough to expose directly.
 
-PDF and broader document parsing should wait until SourceContext exists. The PDF parser should be treated as an adapter, not the architecture itself.
+PDF and broader document parsing must be treated as adapter work, not the architecture itself. A parser may create source text and document locations. It must not create meaning, verification, governance, or final output.
 
-No pipeline reorder should happen yet. The Governance Gate / Verification order should remain unresolved until SourceContext integration clarifies what the gate needs to read.
-
-## Proposed Sections
+## Proposed SourceContext Sections
 
 ### `source_document`
 
@@ -95,7 +93,7 @@ Source capture and interpretation must stay separated as document intake grows.
 | --- | --- |
 | PDF Intake | Owns source capture and adapter output. It may produce usable text and source locations, but it must not assign semantic labels. |
 | Structure | Owns document pieces, anchors, spans, ordering, and structural node links. It must not write plain meaning. |
-| Semantic Structure | Owns explicit meaning-signals inside pieces, such as actor/action/condition fields, while preserving source text and anchors. |
+| Semantic Structure | Owns explicit meaning-signals inside pieces while preserving source text and anchors. |
 | Selection | Owns eligibility. It must not rewrite source text. |
 | Rule Units | Own grouping and must preserve node IDs and anchors. |
 | Governance | Owns pass, block, review, and limit states. |
@@ -103,40 +101,69 @@ Source capture and interpretation must stay separated as document intake grows.
 
 Anti-drift rule: a later layer may add a derived card or field only when it records traceability back to the earlier source object. Later layers must not silently rewrite earlier source snapshots, anchors, document pieces, node IDs, or source text.
 
-## Verified Internal Chain
+## Current Document-First v2 Runtime Path
 
-The document-first v2 chain now exists internally and is covered by backend tests. The backend suite has passed with `cd backend && python -m pytest app/tests/ -v` and `119 passed`.
+The document-first v2 chain now exists as an optional backend `/analyze` path for structured `document_packet` input.
 
-Layer map:
+This path is tested. The backend suite has passed with:
 
-1. PDF-derived extraction -> `CanonicalDocumentPacket`
-2. `CanonicalDocumentPacket` -> `DocumentStructureResult`
-3. `DocumentStructureResult` -> `SemanticStructureResult`
-4. `SemanticStructureResult` -> `SelectionV2Result`
-5. `SelectionV2Result` + Structure -> `RuleUnitV2CandidateResult`
+```text
+cd backend && python -m pytest app/tests/ -v
+124 passed
+```
 
-This chain preserves source text, anchors, page and block structure, semantic signals, selected signals, and rule-unit candidates as separate layers.
+Current chain:
 
-It is intentionally not wired into `/analyze` yet. It does not parse binary PDFs, perform OCR, expose PDF upload UI, modify existing runtime pipeline behavior, or change Meaning, Verification, Governance, or existing Rule Units.
+1. structured document packet input becomes `CanonicalDocumentPacket`
+2. `CanonicalDocumentPacket` becomes `DocumentStructureResult`
+3. `DocumentStructureResult` becomes `SemanticStructureResult`
+4. `SemanticStructureResult` becomes `SelectionV2Result`
+5. `SelectionV2Result` and Structure become `RuleUnitV2CandidateResult`
 
-Next implementation boundary: decide how and when this internal chain becomes an optional runtime path without collapsing it into the existing text-first pipeline.
+The response keeps this path separate under `document_first_v2`.
+
+This path preserves source text, anchors, page and block structure, semantic signals, selected signals, and rule-unit candidates as separate layer outputs.
+
+This path does not parse binary PDFs, perform OCR, expose PDF upload UI, run existing Meaning, run existing Verification, run Governance, modify existing Rule Units, or merge v2 candidates into the existing text-first runtime pipeline.
+
+The existing text, XML, HTML, and JSON `/analyze` path remains the primary runtime pipeline. For those inputs, `document_first_v2.status` is `skipped`.
+
+## Current Runtime Boundary
+
+There are currently two backend paths by design:
+
+- the existing text-first path for `text`, `xml`, `html`, and `json`
+- the document-first v2 path for structured `document_packet` input
+
+This is a controlled migration boundary, not a permanent product goal. The document-first path exists separately so page/block source structure is not forced into older semantic roles too early.
+
+The next implementation decision is how to converge around a shared core without collapsing layer ownership. Do not merge these paths by mapping document blocks into old semantic roles such as `PRIMARY_RULE`, `CONDITION`, `EXCEPTION`, `EVIDENCE`, `DEFINITION`, or `CONSEQUENCE`.
 
 ## Architecture Rules
 
 - SourceContext does not create meaning.
 - Document extraction creates usable source text, not interpretation.
 - Earlier source snapshots and cards should not be silently rewritten by later layers.
-- Later layers may create derived cards or fields with traceability.
+- Later layers may create derived cards or fields only with traceability.
 - Meaning remains bounded to selected, source-backed rule units.
 - Verification remains routing-only.
 - Governance Gate decides what Meaning may safely use.
 - Final Governance checks support and safety.
 - PDF parser is an adapter, not the architecture.
+- Document-first v2 is a source-backed runtime diagnostic path, not final Meaning output.
 
 ## Migration Notes
 
-The first implementation should add an internal SourceContext spine without changing public response fields. Existing `source_metadata` should continue to be emitted as a compatibility projection.
+The current `document_first_v2` path proves the source-backed document chain without replacing the existing runtime pipeline.
 
-Origin can then be refactored into a report/view over SourceContext sections. That refactor should preserve current Origin output shape while moving source intelligence into the shared contract.
+Future integration should move toward one shared core with input-specific adapters. The safe convergence target is:
 
-PDF and document adapters should come after the contract exists, so they can populate `source_document`, `extraction_profile`, `document_map`, and `source_snapshots` without changing downstream architecture.
+- intake adapter creates source/document state
+- Structure owns document pieces and anchors
+- Semantic Structure owns explicit signals
+- Selection owns eligibility
+- Rule Units own grouping
+- Governance and Verification preserve limits and routes
+- Meaning explains only bounded, governed outputs
+
+Do not add PDF upload, OCR, frontend display, final Meaning, Verification, or Governance behavior to the document-first path until the contract for that next boundary is explicit and tested.
