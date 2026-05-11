@@ -2,7 +2,7 @@
 
 Source-anchored parsing stack. API-first.
 
-The backend supports Tetherpoint’s interface-level traceability goal:
+The backend supports Tetherpoint's interface-level traceability goal:
 
 ```text
 Traceability before fluency.
@@ -35,15 +35,15 @@ Atomic Structure nodes are traceability units. Rule Units are coherent interpret
 
 ```text
 Input
-→ Structure
-→ Origin
-→ Selection
-→ Rule Units
-→ Governance Gate
-→ Verification
-→ Meaning
-→ Governance
-→ Output
+-> Structure
+-> Origin
+-> Selection
+-> Rule Units
+-> Governance Gate
+-> Verification
+-> Meaning
+-> Governance
+-> Output
 ```
 
 The backend should preserve this contract:
@@ -285,6 +285,72 @@ curl -X POST http://localhost:8000/analyze \
   }'
 ```
 
+## Sample document_packet request
+
+This sample is for backend runtime smoke testing with structured document input. It is not binary PDF upload and it does not run OCR. It assumes PDF or text extraction has already happened upstream and the caller is sending extracted page/block data as a `document_packet`.
+
+```json
+{
+  "content": "structured document packet smoke test",
+  "content_type": "text",
+  "options": {
+    "run_meaning": true,
+    "run_origin": true,
+    "run_verification": true
+  },
+  "document_packet": {
+    "document_id": "sample-packet-001",
+    "source_type": "pdf",
+    "source_name": "Sample extracted PDF packet",
+    "pages": [
+      {
+        "page_number": 1,
+        "blocks": [
+          {
+            "block_id": "heading-1",
+            "page_number": 1,
+            "order": 1,
+            "text": "Application Requirements",
+            "block_type": "heading",
+            "source_anchor": {
+              "anchor_id": "pdf-page-1-block-heading-1",
+              "source_type": "pdf",
+              "document_id": "sample-packet-001",
+              "page_number": 1,
+              "block_id": "heading-1"
+            }
+          },
+          {
+            "block_id": "paragraph-1",
+            "page_number": 1,
+            "order": 2,
+            "text": "The applicant shall provide proof within 30 days.",
+            "normalized_text": "The applicant shall provide proof within 30 days.",
+            "block_type": "paragraph",
+            "source_anchor": {
+              "anchor_id": "pdf-page-1-block-paragraph-1",
+              "source_type": "pdf",
+              "document_id": "sample-packet-001",
+              "page_number": 1,
+              "block_id": "paragraph-1",
+              "char_start": 0,
+              "char_end": 50
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Expected response behavior:
+
+- `document_first_v2.status` is `executed`.
+- `document_first_v2.document_structure`, `semantic_structure`, `selection_v2`, and `rule_unit_candidates` are populated.
+- Existing text-first runtime layers stay skipped or empty for the `document_packet` path: old `meaning` is `skipped`, old `verification` is `skipped`, old `rule_units.rule_units` is empty, and old `governance.record_count` is `0`.
+- `document_first_v2.rule_unit_candidates.candidates` contains a ready candidate backed by `paragraph-1` with `obligation`, `timing`, and `evidence_requirement` signals.
+
 ## Run tests
 
 ```bash
@@ -300,25 +366,25 @@ backend/app/tests/test_governance.py
 
 ## What each layer does
 
-1. Input — Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
+1. Input - Accepts raw content in xml, html, json, or text. Validates well-formedness. Preserves raw input. Records size and parse status. No interpretation.
 
-2. Structure — Deterministic parsing via 10 subsystems: SSE, LNS, CFS, 5W1H, AAC, TPS, SJM, MPS, RDS, and ISC. Each node carries source anchors for traceability.
+2. Structure - Deterministic parsing via 10 subsystems: SSE, LNS, CFS, 5W1H, AAC, TPS, SJM, MPS, RDS, and ISC. Each node carries source anchors for traceability.
 
-3. Origin — Extracts provenance and source-reference signals from the source document. For HTML, this includes canonical URL, author, publish time, JSON-LD publisher, Open Graph tags, and Twitter card tags. For JSON/XML, this includes explicit metadata fields. Distribution metadata stays separate from origin identity.
+3. Origin - Extracts provenance and source-reference signals from the source document. For HTML, this includes canonical URL, author, publish time, JSON-LD publisher, Open Graph tags, and Twitter card tags. For JSON/XML, this includes explicit metadata fields. Distribution metadata stays separate from origin identity.
 
-4. Selection — Deterministic eligibility check. Nodes must have source text, must not be CFS-blocked, and must contain at least one structured signal. Nodes pass through unchanged.
+4. Selection - Deterministic eligibility check. Nodes must have source text, must not be CFS-blocked, and must contain at least one structured signal. Nodes pass through unchanged.
 
-5. Rule Units — Groups selected structure nodes into coherent interpretation units while preserving supporting source-node IDs and referenced-source dependency packets.
+5. Rule Units - Groups selected structure nodes into coherent interpretation units while preserving supporting source-node IDs and referenced-source dependency packets.
 
-6. Governance Gate — Checks for reference boundaries, practical source questions, non-blending constraints, and source-dependency limits before Verification and Meaning.
+6. Governance Gate - Checks for reference boundaries, practical source questions, non-blending constraints, and source-dependency limits before Verification and Meaning.
 
-7. Verification — Routes Rule Units to candidate record systems. Detects broad assertion types and maps them to record systems such as Congress.gov, PubMed, SEC EDGAR, FERC, and National Archives. This is routing logic, not truth logic.
+7. Verification - Routes Rule Units to candidate record systems. Detects broad assertion types and maps them to record systems such as Congress.gov, PubMed, SEC EDGAR, FERC, and National Archives. This is routing logic, not truth logic.
 
-8. Meaning — Produces document-level plain meaning from a deterministic Rule Unit brief. It does not use scope labels, shift labels, or comparison lenses. Meaning must remain bounded to supplied and anchored source material.
+8. Meaning - Produces document-level plain meaning from a deterministic Rule Unit brief. It does not use scope labels, shift labels, or comparison lenses. Meaning must remain bounded to supplied and anchored source material.
 
-9. Governance — Evaluates normalized anchored records for required source support, field-level contradictions when comparison records are supplied, and downstream action safety when an action is requested. It emits review status only; it does not decide truth or repair data.
+9. Governance - Evaluates normalized anchored records for required source support, field-level contradictions when comparison records are supplied, and downstream action safety when an action is requested. It emits review status only; it does not decide truth or repair data.
 
-10. Output — Assembles the final response from upstream layers. Presentation only.
+10. Output - Assembles the final response from upstream layers. Presentation only.
 
 ## Project structure
 
