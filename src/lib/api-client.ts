@@ -3,15 +3,18 @@
  * so the browser never handles secrets directly.
  */
 
+interface AnalyzeOptions {
+  run_meaning: boolean;
+  run_origin: boolean;
+  run_verification: boolean;
+}
+
 interface AnalyzeRequest {
   content: string;
   content_type: string;
   language?: string;
-  options: {
-    run_meaning: boolean;
-    run_origin: boolean;
-    run_verification: boolean;
-  };
+  options: AnalyzeOptions;
+  document_packet?: unknown;
 }
 
 interface TranslatePlainMeaningRequest {
@@ -147,17 +150,47 @@ async function readErrorMessage(response: Response, fallback: string) {
   return { text, message };
 }
 
+function buildAnalyzeBody(request: AnalyzeRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    content: request.content,
+    content_type: request.content_type,
+    options: request.options,
+  };
+
+  if (request.document_packet !== undefined) {
+    body.document_packet = request.document_packet;
+  }
+
+  if (request.content_type === "json") {
+    try {
+      const parsed = JSON.parse(request.content);
+      if (parsed && typeof parsed === "object" && "document_packet" in parsed) {
+        const envelope = parsed as Record<string, unknown>;
+        return {
+          content: typeof envelope.content === "string" ? envelope.content : request.content,
+          content_type: typeof envelope.content_type === "string" ? envelope.content_type : request.content_type,
+          options:
+            envelope.options && typeof envelope.options === "object"
+              ? envelope.options
+              : request.options,
+          document_packet: envelope.document_packet,
+        };
+      }
+    } catch {
+      return body;
+    }
+  }
+
+  return body;
+}
+
 export async function analyzeDocument(request: AnalyzeRequest) {
   const response = await fetch("/api/analyze", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      content: request.content,
-      content_type: request.content_type,
-      options: request.options,
-    }),
+    body: JSON.stringify(buildAnalyzeBody(request)),
   });
 
   if (!response.ok) {
