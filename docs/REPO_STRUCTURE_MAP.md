@@ -2,369 +2,231 @@
 
 ## Purpose
 
-This document provides a human-readable map of the Tetherpoint repository.
+This document maps the active Tetherpoint repository structure.
 
-It is intended for:
+It is intended for engineers, AI agents, reviewers, and collaborators who need to understand where responsibilities live before changing code.
 
-- engineers joining the project
-- AI agents assisting with implementation
-- reviewers evaluating repository organization
-- collaborators entering the system without prior context
+This is not a full architecture document. For project architecture, start with `README.md` and `docs/TETHERPOINT_OVERVIEW.md`. For agent workflow and task discipline, read `docs/AGENT_WORKFLOW.md`.
 
-This document explains:
+## Top-level areas
 
-- where major responsibilities live
-- which frontend surfaces are active
-- which files are alternate/stale
-- how the frontend and backend are separated
-- where new contributors should start
-- what areas require extra caution
+### `/backend`
 
-This is not a full architecture document.
+Owns the FastAPI backend and traceability pipeline:
 
-Read first:
-
-1. `README.md`
-2. `docs/TETHERPOINT_OVERVIEW.md`
-3. `docs/FRONTEND_STRUCTURE_RULES.md`
-4. `docs/FRONTEND_STRUCTURE_INVENTORY.md`
-5. `docs/REPO_STRUCTURE_MAP.md`
-
----
-
-# Current Project Direction
-
-Tetherpoint is evolving from a legislation-focused prototype into a broader source-dependent interpretation and verification system.
-
-Current cleanup direction:
-
-- reduce large mixed frontend files
-- separate frontend ownership boundaries
-- improve repo readability
-- preserve explicit source/meaning/governance separation
-- make active vs alternate surfaces visible
-
-Feature work is currently secondary to cleanup and stabilization.
-
----
-
-# Top-Level Repository Areas
-
-## `/backend`
-
-Purpose:
-
-- pipeline execution
-- parsing
+- input validation
 - structure extraction
 - origin processing
+- selection
+- rule-unit assembly
+- governance gate
 - verification routing
-- governance logic
-- bounded meaning generation
-- API endpoints
-- OpenAPI contract generation
+- bounded meaning
+- governance checks
+- output assembly
+- OpenAPI contract
 
 Rules:
 
-- backend behavior changes must remain traceable
-- frontend cleanup should not casually modify backend behavior
-- schema and contract changes require explicit scope
+- Do not change backend behavior during frontend cleanup unless explicitly scoped.
+- Schema or response-shape changes must update backend models, OpenAPI, frontend types, tests, and docs in the same pass.
+- Document-intake behavior belongs in backend adapter work, not frontend cleanup.
 
-Key areas:
+Key files and areas:
 
-- adapters
-- parsers
-- governance
-- verification
-- API routes
-- OpenAPI generation
+- `backend/app/pipeline/runner.py`
+- `backend/app/schemas/models.py`
+- `backend/app/schemas/document_packet.py`
+- `backend/app/structure/document_packet_adapter.py`
+- `backend/openapi.yaml`
+- `backend/README.md`
 
----
+### `/src`
 
-## `/src`
+Owns the React/Vite frontend:
 
-Purpose:
+- app shell
+- input form
+- result workspace
+- tab surfaces
+- frontend API client
+- UI presentation of source, meaning, verification, and governance state
 
-- frontend application
-- workspace UI
-- analysis input
-- inspection surfaces
+### `/docs`
+
+Owns stable project orientation:
+
+- architecture overview
+- agent workflow rules
+- repository map
+- human review handoff behavior
+- source/document architecture notes
+
+Docs should stay current and should not preserve temporary cleanup scaffolding after the cleanup has been absorbed into code.
+
+## Active frontend surfaces
+
+### `src/App.tsx`
+
+Active app shell.
+
+Owns:
+
+- application-level state
+- input visibility
+- `AnalyzeForm` mount
+- `ReceiptWorkspace` mount
+
+Must not own:
+
 - tab rendering
-- API client calls
+- source metadata display
+- governance display
+- result detail logic
 
-Primary frontend ownership area.
+### `src/components/AnalyzeForm.tsx`
 
----
+Active input form.
 
-## `/src/components`
+Owns:
 
-Purpose:
+- document input controls
+- content type selector
+- submit controls
+- sample button behavior
 
-- frontend React components
-- workspace rendering
-- form rendering
-- contract display
-- result surfaces
+Remaining cleanup:
 
-Current important distinction:
+- move large hard-coded sample text into a dedicated sample file.
 
-Some files are active.
-Some files are alternate/stale.
+### `src/components/ReceiptWorkspace.tsx`
 
-Do not assume every workspace file is active.
+Active result workspace shell.
 
----
+Owns:
 
-# Active Frontend Surface
-
-## `src/components/ReceiptWorkspace.tsx`
-
-Current status:
-
-- ACTIVE result workspace
-- mounted from `App.tsx`
-
-Current role:
-
-- workspace shell
+- workspace layout
+- selected tab state
 - tab routing
-- multiple tab render surfaces
-- helper ownership
-- translation/extended meaning UI
+- top result header
+- error banner placement
+- support-path placement
 
-Current cleanup direction:
+Must not own:
 
-- reduce into shell-only responsibility
-- extract tab ownership into separate files
+- individual tab logic
+- contract summary logic
+- support-path internals
+- copy/export internals
+- API behavior
 
-High caution file.
+### `src/components/receipt-workspace/`
 
-Do not perform broad rewrites.
+Active tab and panel directory.
 
----
+Current extracted surfaces:
 
-## `src/App.tsx`
+- `MeaningTab.tsx`
+- `OriginTab.tsx`
+- `VerificationTab.tsx`
+- `GovernanceTab.tsx`
+- `IssuesTab.tsx`
+- `SupportPathPanel.tsx`
+- `ResultActions.tsx`
+- `ExtendedMeaningPanel.tsx`
+- `shared.tsx`
 
-Current status:
+Ownership rules:
 
-- ACTIVE app shell
+- Origin owns provenance, referenced sources, and `source_metadata` rendering.
+- Governance owns review state, governance checks, and `human_review_handoffs` rendering.
+- Verification owns evidence routes and expected record systems.
+- Meaning owns bounded plain-language output and related meaning tools.
+- Issues owns pipeline and governance issue lists.
+- Support Path owns `document_first_v2` display only.
+- `shared.tsx` owns small reusable UI primitives and pure helpers only.
 
-Role:
+### `src/components/ContractStateSections.tsx`
 
-- application shell
-- result state ownership
-- form/workspace orchestration
+Reusable contract-summary component file.
 
-Rules:
+Owns:
 
-- do not add tab logic here
-- do not mount global contract cards here
+- `SourceMetadataSummary`
+- `HumanReviewSummary`
+- compatibility wrapper `ContractStateSections`
 
----
+Placement rule:
 
-## `src/components/AnalyzeForm.tsx`
+- Source Metadata summary should render inside Origin.
+- Human Review summary should render inside Governance.
+- Do not globally mount contract cards unless a separate alert-strip design is explicitly approved.
 
-Current status:
+### `src/lib/api-client.ts`
 
-- ACTIVE
+Frontend API client.
 
-Role:
+Owns:
 
-- document input
-- submission controls
-- sample content
+- `/api/analyze` call helper
+- `/api/translate` call helper
+- `/api/resolve-reference` call helper
+- API-adjacent frontend contract types
 
-Future cleanup:
+Must not own UI rendering.
 
-- move large hard-coded samples into dedicated sample files
+## Partially active or stale frontend surfaces
 
----
+### `src/components/Workspace.tsx`
 
-## `src/components/ContractStateSections.tsx`
+Partially active because it exports `PipelineResponse` and related frontend response types.
 
-Current status:
+It also contains an older alternate workspace UI surface.
 
-- ACTIVE reusable contract display surface
+Remaining cleanup:
 
-Role:
+1. Move `PipelineResponse` and related response types into a dedicated type file, likely `src/types/pipeline.ts`.
+2. Update imports.
+3. Decide whether the old UI surface should be archived, removed, or retained as a developer/debug view.
 
-- Source Metadata summaries
-- Human Review summaries
-- reusable contract-state rendering
+Do not delete this file until type ownership has been moved and imports have been verified.
 
-Rules:
+### `src/components/WorkspaceConsole.tsx`
 
-- owns reusable contract rendering only
-- should not own global placement/layout policy
+Alternate/unconfirmed surface.
 
----
+Remaining cleanup:
 
-# Alternate / Stale Frontend Surfaces
+- confirm imports/usages
+- archive, remove, or label as developer/debug-only
 
-These files exist but are not currently treated as the primary result surface.
+Do not treat it as the active result workspace unless an import path proves it is active.
 
-Do not casually modify them during cleanup.
-
----
-
-## `src/components/Workspace.tsx`
-
-Current status:
-
-- PARTIALLY ACTIVE
-
-Important:
-
-- exports `PipelineResponse` type currently used elsewhere
-- also contains an alternate workspace-style UI surface
-
-Rules:
-
-- preserve type compatibility
-- do not remove casually
-- eventual cleanup should separate type ownership from UI ownership
-
----
-
-## `src/components/WorkspaceConsole.tsx`
-
-Current status:
-
-- ALTERNATE / UNCONFIRMED
-
-Role:
-
-- engine trace console surface
-- alternate workspace visualization
-
-Rules:
-
-- do not treat as active frontend source of truth
-- do not edit unless explicitly scoped
-- likely candidate for archive, quarantine, or later developer/debug tooling
-
----
-
-# API Client Area
-
-## `src/lib/api-client.ts`
-
-Purpose:
-
-- frontend API calls
-- request/response helpers
-- frontend contract types
-
-Rules:
-
-- no UI rendering here
-- preserve API contract clarity
-- backend field additions should remain visible to frontend callers
-
----
-
-# Documentation Area
-
-## `/docs`
-
-Purpose:
-
-- architecture explanation
-- workflow rules
-- cleanup direction
-- onboarding
-- agent guidance
-- frontend inventory
-
-Important principle:
-
-The repo should explain itself.
-
-A contributor should not need hidden chat context to understand the project direction.
-
----
-
-# Current Cleanup Sequence
-
-## Phase C1
+## Current cleanup status
 
 Completed:
 
-- frontend structure rules
-- frontend structure inventory
-- architecture overview
-- repo structure map
+- shared helper extraction from `ReceiptWorkspace.tsx`
+- Origin tab extraction
+- Governance tab extraction
+- Meaning tab extraction
+- Verification tab extraction
+- Issues tab extraction
+- Result actions extraction
+- Support Path panel extraction
+- Source Metadata rendered inside Origin
+- Human Review Handoffs rendered inside Governance
+- `ReceiptWorkspace.tsx` reduced to active workspace shell
 
----
+Remaining:
 
-## Phase C2
+- move frontend response types out of `Workspace.tsx`
+- decide the fate of the old `Workspace.tsx` UI surface
+- decide the fate of `WorkspaceConsole.tsx`
+- move large sample text out of `AnalyzeForm.tsx`
+- keep docs aligned after each cleanup pass
 
-Next:
-
-- extract shared helpers from `ReceiptWorkspace.tsx`
-- create `src/components/receipt-workspace/shared.tsx`
-
-Rules:
-
-- preserve behavior exactly
-- no tab extraction yet
-- no backend changes
-- no contract rendering changes yet
-
----
-
-## Phase C3
-
-Next after shared helper extraction:
-
-- extract `OriginTab.tsx`
-
----
-
-## Phase C4
-
-Next after Origin extraction:
-
-- extract `GovernanceTab.tsx`
-
----
-
-## Phase C5
-
-Only after extraction stabilizes:
-
-- wire `source_metadata` into Origin
-- wire `human_review_handoffs` into Governance
-
----
-
-# Agent Workflow Rules
-
-AI agents are treated like collaborators entering an existing engineering system.
-
-Agents should not wander the repository without structure.
-
-Every scoped task should specify:
-
-- allowed files
-- forbidden files
-- expected ownership boundary
-- expected render behavior
-- verification step
-- cleanup check
-- plain-language commit message
-
-Avoid:
-
-- broad “inspect and fix” prompts
-- large unreviewable rewrites
-- local filesystem drift
-- OneDrive/source confusion
-- vague commits such as `fix` or `updates`
-
----
-
-# Current Architectural Principle
+## Current architectural principle
 
 The repository should visually reflect the same principles as the runtime system:
 
