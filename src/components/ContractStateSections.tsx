@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { HumanReviewHandoff, SourceMetadataContract } from "../lib/api-client";
-import type { PipelineResponse } from "./ReceiptWorkspace";
+import type { PipelineResponse } from "./Workspace";
 
 function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
@@ -193,7 +193,7 @@ function SourceMetadataCard({ source }: { source: SourceMetadataContract }) {
   );
 }
 
-function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
+export function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
   const highestSeverity = getHighestSeverity(handoffs);
   const canProceed = handoffs.every((handoff) => handoff.can_proceed);
   const handoffTypes = uniqueItems(handoffs.map((handoff) => handoff.handoff_type));
@@ -242,7 +242,7 @@ function HumanReviewSummary({ handoffs }: { handoffs: HumanReviewHandoff[] }) {
   );
 }
 
-function SourceMetadataSummary({ sources }: { sources: SourceMetadataContract[] }) {
+export function SourceMetadataSummary({ sources }: { sources: SourceMetadataContract[] }) {
   const sourceNames = uniqueItems(sources.map((source) => source.source_name));
   const sourceSystems = uniqueItems(sources.map((source) => source.source_system));
   const resolutionCounts = countBy(sources.map((source) => source.resolution_state ?? "unknown"));
