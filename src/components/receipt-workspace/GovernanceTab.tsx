@@ -1,3 +1,4 @@
+import { HumanReviewSummary } from "../ContractStateSections";
 import type { PipelineResponse } from "../Workspace";
 import {
   safeArray,
@@ -37,6 +38,7 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
   const issueCount = governance?.issue_count ?? data.output?.governance_issue_count ?? 0;
   const records = normalizeGovernanceRecords(data);
   const activeIssues = safeArray(governance?.activeIssues as GovernanceCheck[] | undefined);
+  const humanReviewHandoffs = safeArray(data.human_review_handoffs);
 
   return (
     <div className="space-y-4">
@@ -45,10 +47,13 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
           <StatusPill label="governance" status={status} />
           <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>{issueCount} issue(s)</span>
           <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{governance?.record_count ?? records.length} checked</span>
+          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{humanReviewHandoffs.length} handoff(s)</span>
         </div>
         {issueCount === 0 && records.length > 0 && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance checked {records.length} source-backed record(s) and found no review issues.</p>}
         {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(governance.principle)}</p>}
       </Section>
+
+      {humanReviewHandoffs.length > 0 && <HumanReviewSummary handoffs={humanReviewHandoffs} />}
 
       {activeIssues.length > 0 && (
         <Section title="Review Items">
