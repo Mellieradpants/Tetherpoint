@@ -1,3 +1,4 @@
+import { SourceMetadataSummary } from "../ContractStateSections";
 import type { PipelineResponse } from "../Workspace";
 import {
   safeArray,
@@ -9,9 +10,11 @@ import {
   SourceQuote,
   hideAtomicReferences,
 } from "./shared";
+
 export function OriginTab({ data }: { data: PipelineResponse }) {
   const origin = data.origin;
   const referencedSources = safeArray(origin?.referenced_sources);
+  const sourceMetadata = safeArray(data.source_metadata);
   const signals = [
     ...safeArray(origin?.origin_identity_signals),
     ...safeArray(origin?.origin_metadata_signals),
@@ -26,8 +29,13 @@ export function OriginTab({ data }: { data: PipelineResponse }) {
           <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             {referencedSources.length} referenced source(s)
           </span>
+          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {sourceMetadata.length} source metadata record(s)
+          </span>
         </div>
       </Section>
+
+      {sourceMetadata.length > 0 && <SourceMetadataSummary sources={sourceMetadata} />}
 
       <Section title="Referenced Sources">
         {referencedSources.length > 0 ? (
