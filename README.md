@@ -34,17 +34,18 @@ Before changing code, read the project orientation docs in this order:
 
 1. `docs/TETHERPOINT_OVERVIEW.md`
 2. `docs/ASSISTANT_BUILD_ANCHOR.md`
-3. `docs/REPO_STRUCTURE_MAP.md`
-4. `docs/FRONTEND_STRUCTURE_RULES.md`
-5. `docs/FRONTEND_STRUCTURE_INVENTORY.md`
-6. `docs/HUMAN_REVIEW_HANDOFF.md`
+3. `docs/AGENT_WORKFLOW.md`
+4. `docs/REPO_STRUCTURE_MAP.md`
+5. `docs/HUMAN_REVIEW_HANDOFF.md`
+6. `backend/README.md`
+7. `backend/openapi.yaml`
 
-These documents explain the architecture, active file ownership, frontend cleanup direction, agent workflow rules, and current source/meaning/governance boundaries.
+These documents explain the architecture, active file ownership, agent workflow rules, and current source/meaning/governance boundaries.
 
-Current frontend cleanup rule:
+Current frontend rule:
 
 ```text
-No new feature work inside large mixed files until ownership boundaries are extracted.
+Feature work should not be added into files that are already carrying unrelated responsibilities. Split ownership first, then add behavior.
 ```
 
 Current commit rule:
@@ -74,6 +75,9 @@ This repository contains a working full-stack prototype:
 - Document-level plain Meaning from a bounded Rule Unit brief
 - OpenAPI contract under `backend/openapi.yaml`
 - Backend tests under `backend/app/tests/`
+- Document-first diagnostic support under `document_first_v2` for structured `document_packet` input
+
+The active frontend workspace has been split into tab and panel components under `src/components/receipt-workspace/`. `ReceiptWorkspace.tsx` should remain a shell for layout, tab state, and routing.
 
 ## What this project is
 
