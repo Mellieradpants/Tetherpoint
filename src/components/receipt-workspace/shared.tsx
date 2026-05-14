@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 
 export type Tone = "good" | "review" | "bad" | "neutral";
 
