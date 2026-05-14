@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { translatePlainMeaning } from "../../lib/api-client";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import { ExtendedMeaningPanel, hasExtendedMeaningReferences } from "./ExtendedMeaningPanel";
 import {
   EmptyState,
