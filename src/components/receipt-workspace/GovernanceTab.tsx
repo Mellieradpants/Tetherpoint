@@ -1,5 +1,5 @@
 import { HumanReviewSummary } from "../ContractStateSections";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import {
   safeArray,
   displayStatus,
