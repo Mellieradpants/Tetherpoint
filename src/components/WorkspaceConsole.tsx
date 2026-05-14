@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { PipelineResponse } from "./Workspace";
+import type { PipelineResponse } from "../types/pipeline";
 
-export type { PipelineResponse } from "./Workspace";
+export type { PipelineResponse } from "../types/pipeline";
 
 type DetailTab = "structure" | "source_text" | "meaning" | "verification" | "governance" | "signals" | "errors";
 type SelectedKind = "rule_unit" | "source_node";
