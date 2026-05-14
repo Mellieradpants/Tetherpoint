@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { HumanReviewHandoff, SourceMetadataContract } from "../lib/api-client";
-import type { PipelineResponse } from "./Workspace";
+import type { PipelineResponse } from "../types/pipeline";
 
 function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
