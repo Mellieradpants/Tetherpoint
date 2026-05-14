@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { AnalyzeForm } from "./components/AnalyzeForm";
-import { ReceiptWorkspace, type PipelineResponse } from "./components/ReceiptWorkspace";
+import { ReceiptWorkspace } from "./components/ReceiptWorkspace";
 import { analyzeDocument } from "./lib/api-client";
+import type { PipelineResponse } from "./types/pipeline";
 
 function HowToUse({ onStart }: { onStart: () => void }) {
   return (
