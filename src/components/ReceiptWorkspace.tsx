@@ -7,9 +7,9 @@ import { ResultActions } from "./receipt-workspace/ResultActions";
 import { StatusPill, safeArray, toneClass } from "./receipt-workspace/shared";
 import { SupportPathPanel } from "./receipt-workspace/SupportPathPanel";
 import { VerificationTab } from "./receipt-workspace/VerificationTab";
-import type { PipelineResponse } from "./Workspace";
+import type { PipelineResponse } from "../types/pipeline";
 
-export type { PipelineResponse } from "./Workspace";
+export type { PipelineResponse } from "../types/pipeline";
 
 type ResultTab = "meaning" | "origin" | "verification" | "governance" | "issues";
 
