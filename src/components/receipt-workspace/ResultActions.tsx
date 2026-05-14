@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import { displayStatus, hideAtomicReferences, safeArray } from "./shared";
 
 function buildResultText(data: PipelineResponse) {
