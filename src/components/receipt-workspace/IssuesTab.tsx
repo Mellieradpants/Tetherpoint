@@ -1,4 +1,4 @@
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import {
   EmptyState,
   Section,
