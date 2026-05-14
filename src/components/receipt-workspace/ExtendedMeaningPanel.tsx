@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { resolveReference, type ResolveReferenceResponse } from "../../lib/api-client";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import { safeArray, Section, StatusPill, DetailRow, SourceQuote } from "./shared";
 
 type RuleUnitReferencePacket = {
