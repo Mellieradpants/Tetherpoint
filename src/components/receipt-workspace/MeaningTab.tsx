@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { translatePlainMeaning } from "../../lib/api-client";
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import { ExtendedMeaningPanel, hasExtendedMeaningReferences } from "./ExtendedMeaningPanel";
 import {
   EmptyState,
@@ -8,6 +8,7 @@ import {
   SourceQuote,
   StatusPill,
   hideAtomicReferences,
+  hasUnresolvedReferencedSources,
   ruleTextById,
   safeArray,
   splitParagraphs,
@@ -43,7 +44,7 @@ const TRANSLATION_LANGUAGES = [
   { code: "rw", label: "Kinyarwanda" },
 ];
 
-function PlainMeaningTranslation({ text }: { text: string }) {
+function PlainMeaningTranslation({ text, hasUnresolvedReferences }: { text: string; hasUnresolvedReferences: boolean }) {
   const [language, setLanguage] = useState(TRANSLATION_LANGUAGES[0].code);
   const [translatedText, setTranslatedText] = useState("");
   const [translationError, setTranslationError] = useState<string | null>(null);
@@ -89,7 +90,7 @@ function PlainMeaningTranslation({ text }: { text: string }) {
         </button>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        Translation runs only on the plain meaning returned by the Meaning step. It does not rerun analysis or change source-backed results.
+        Translation runs only on the plain meaning returned by the Meaning step. It does not rerun analysis or change {hasUnresolvedReferences ? "source references" : "source-backed results"}.
       </p>
       {translationError && <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{translationError}</div>}
       {translatedText && <div className="mt-4"><SourceQuote>{translatedText}</SourceQuote></div>}
@@ -98,7 +99,9 @@ function PlainMeaningTranslation({ text }: { text: string }) {
 }
 
 export function MeaningTab({ data }: { data: PipelineResponse }) {
-  const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "");
+  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
+  const atomicReferenceLabel = hasUnresolvedReferences ? "source reference" : "source-backed result";
+  const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "", atomicReferenceLabel);
   const paragraphs = splitParagraphs(plainMeaning);
   const sourceByRule = ruleTextById(data);
   const externalReferenceNeeded = hasExtendedMeaningReferences(data);
@@ -109,7 +112,9 @@ export function MeaningTab({ data }: { data: PipelineResponse }) {
       {externalReferenceNeeded && (
         <Section title="Reference Needed">
           <p className="text-sm leading-6 text-muted-foreground">
-            This source text depends on outside referenced law or source material. The plain meaning below explains only the text that was supplied.
+            {hasUnresolvedReferences
+              ? "Meaning is limited to supplied source text. Referenced source text has not been retrieved into Tetherpoint."
+              : "This source text depends on outside referenced law or source material. The plain meaning below explains only the text that was supplied."}
           </p>
         </Section>
       )}
@@ -122,9 +127,15 @@ export function MeaningTab({ data }: { data: PipelineResponse }) {
         ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
       </Section>
 
-      {externalReferenceNeeded && plainMeaning && <ExtendedMeaningPanel data={data} plainMeaning={plainMeaning} />}
+      {externalReferenceNeeded && plainMeaning && (
+        hasUnresolvedReferences ? (
+          <Section title="Extended Meaning">
+            <EmptyState>Unavailable until referenced source text is retrieved.</EmptyState>
+          </Section>
+        ) : <ExtendedMeaningPanel data={data} plainMeaning={plainMeaning} />
+      )}
 
-      {plainMeaning && <PlainMeaningTranslation text={plainMeaning} />}
+      {plainMeaning && <PlainMeaningTranslation text={plainMeaning} hasUnresolvedReferences={hasUnresolvedReferences} />}
 
       {meaningDetails.length > 0 && (
         <Section title="Details">
@@ -138,9 +149,9 @@ export function MeaningTab({ data }: { data: PipelineResponse }) {
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label="meaning detail" status={result.status} />
                     </div>
-                    {result.plain_meaning && <p className="mt-3 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning)}</p>}
+                    {result.plain_meaning && <p className="mt-3 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning, atomicReferenceLabel)}</p>}
                     {sourceText && <div className="mt-3"><SourceQuote>{sourceText}</SourceQuote></div>}
-                    {(result.message || result.error) && <div className="mt-3 text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error)}</div>}
+                    {(result.message || result.error) && <div className="mt-3 text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error, atomicReferenceLabel)}</div>}
                   </div>
                 );
               })}

@@ -49,6 +49,8 @@ Owns the React/Vite frontend:
 - input form
 - result workspace
 - tab surfaces
+- frontend response types
+- sample text fixtures
 - frontend API client
 - UI presentation of source, meaning, verification, and governance state
 
@@ -95,9 +97,35 @@ Owns:
 - submit controls
 - sample button behavior
 
-Remaining cleanup:
+Sample text lives outside the form in `src/samples/`.
 
-- move large hard-coded sample text into a dedicated sample file.
+### `src/samples/`
+
+Owns frontend sample text fixtures used by the input form.
+
+Current sample modules:
+
+- `saveActSample.ts`
+- `documentPacketSample.ts`
+
+Rules:
+
+- Keep large sample strings out of interactive form components.
+- Do not change sample content during structural cleanup unless the task explicitly asks for content changes.
+
+### `src/types/pipeline.ts`
+
+Owns frontend response types for the analysis result surface.
+
+Current responsibilities:
+
+- `PipelineResponse`
+- related frontend response interfaces used by active result components
+
+Rules:
+
+- Frontend components should import pipeline response types from this file, not from UI surfaces.
+- Backend schema changes must still be handled through backend models, OpenAPI, frontend types, tests, and docs together.
 
 ### `src/components/ReceiptWorkspace.tsx`
 
@@ -144,6 +172,7 @@ Ownership rules:
 - Meaning owns bounded plain-language output and related meaning tools.
 - Issues owns pipeline and governance issue lists.
 - Support Path owns `document_first_v2` display only.
+- `SupportPathPanel.tsx` remains the document-first display surface; it should not claim the unified pipeline is complete.
 - `shared.tsx` owns small reusable UI primitives and pure helpers only.
 
 ### `src/components/ContractStateSections.tsx`
@@ -177,30 +206,23 @@ Must not own UI rendering.
 
 ## Partially active or stale frontend surfaces
 
-### `src/components/Workspace.tsx`
-
-Partially active because it exports `PipelineResponse` and related frontend response types.
-
-It also contains an older alternate workspace UI surface.
-
-Remaining cleanup:
-
-1. Move `PipelineResponse` and related response types into a dedicated type file, likely `src/types/pipeline.ts`.
-2. Update imports.
-3. Decide whether the old UI surface should be archived, removed, or retained as a developer/debug view.
-
-Do not delete this file until type ownership has been moved and imports have been verified.
-
 ### `src/components/WorkspaceConsole.tsx`
 
 Alternate/unconfirmed surface.
 
-Remaining cleanup:
+Current status:
 
-- confirm imports/usages
-- archive, remove, or label as developer/debug-only
+- not mounted by the active app shell
+- imports pipeline response types from `src/types/pipeline.ts`
+- still needs a product decision: remove, archive, or explicitly label as developer/debug-only
 
 Do not treat it as the active result workspace unless an import path proves it is active.
+
+### Removed surfaces
+
+`src/components/Workspace.tsx` has been removed.
+
+The old file no longer owns frontend response types or an alternate workspace UI surface. Frontend response types now live in `src/types/pipeline.ts`.
 
 ## Current cleanup status
 
@@ -217,13 +239,13 @@ Completed:
 - Source Metadata rendered inside Origin
 - Human Review Handoffs rendered inside Governance
 - `ReceiptWorkspace.tsx` reduced to active workspace shell
+- frontend response types moved to `src/types/pipeline.ts`
+- old `Workspace.tsx` UI surface removed
+- large sample text moved to `src/samples/`
 
 Remaining:
 
-- move frontend response types out of `Workspace.tsx`
-- decide the fate of the old `Workspace.tsx` UI surface
 - decide the fate of `WorkspaceConsole.tsx`
-- move large sample text out of `AnalyzeForm.tsx`
 - keep docs aligned after each cleanup pass
 
 ## Current architectural principle

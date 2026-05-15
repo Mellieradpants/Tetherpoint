@@ -24,6 +24,8 @@ clear boundaries, visible handoffs, no hidden junk drawers
 
 Feature work should not be added into files that are already carrying unrelated responsibilities. Split ownership first, then add behavior.
 
+Do not claim pipeline integration is complete unless the backend, OpenAPI, tests, frontend display, and product behavior have all been explicitly connected and verified for that scope.
+
 ## Active frontend status
 
 `src/components/ReceiptWorkspace.tsx` is the active result workspace mounted by `App.tsx`.
@@ -50,6 +52,14 @@ Current extracted surfaces include:
 - `ResultActions.tsx`
 - `shared.tsx`
 
+`SupportPathPanel.tsx` remains the document-first display surface for `document_first_v2`. It should present document-first support state without implying Meaning, Verification, Governance, or full pipeline integration is complete.
+
+Frontend response types live in `src/types/pipeline.ts`. Active components should import `PipelineResponse` and related frontend response types from there, not from UI components.
+
+Frontend sample text lives in `src/samples/`. Keep large sample strings out of interactive form components.
+
+`src/components/Workspace.tsx` has been removed. It no longer owns response types or an alternate workspace UI surface.
+
 Contract-state rendering rule:
 
 - `source_metadata` belongs in Origin.
@@ -60,11 +70,8 @@ Contract-state rendering rule:
 
 Do these before major new product-direction work:
 
-1. Move `PipelineResponse` and related frontend response types out of `src/components/Workspace.tsx` into a dedicated type file.
-2. Decide whether the old `Workspace.tsx` UI surface is archived, removed, or retained as a developer/debug view after type ownership is moved.
-3. Decide whether `WorkspaceConsole.tsx` is archived, removed, or explicitly labeled developer/debug-only.
-4. Move large hard-coded sample text out of `AnalyzeForm.tsx` into a sample file.
-5. Keep docs aligned with the actual code state after each cleanup pass.
+1. Decide whether `WorkspaceConsole.tsx` is removed, archived, or explicitly labeled developer/debug-only.
+2. Keep docs aligned with the actual code state after each cleanup pass.
 
 ## Task discipline
 
@@ -88,7 +95,7 @@ improve the repo
 Prefer scoped prompts like:
 
 ```text
-Move PipelineResponse types from Workspace.tsx into src/types/pipeline.ts. Do not change rendering behavior.
+Move sample text out of AnalyzeForm.tsx into src/samples. Do not change form behavior.
 ```
 
 ## Commit discipline
@@ -99,8 +106,9 @@ Use plain-language commit messages, such as:
 
 - `Extract Issues tab component`
 - `Move pipeline response types`
-- `Archive unused workspace console`
-- `Move sample text into sample file`
+- `Remove unused workspace surface`
+- `Move sample text out of analyze form`
+- `Update frontend structure docs`
 
 Avoid:
 

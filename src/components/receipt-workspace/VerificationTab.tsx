@@ -1,4 +1,4 @@
-import type { PipelineResponse } from "../Workspace";
+import type { PipelineResponse } from "../../types/pipeline";
 import {
   safeArray,
   displayStatus,
@@ -9,25 +9,32 @@ import {
   SourceQuote,
   hideAtomicReferences,
   ruleTextById,
+  hasUnresolvedReferencedSources,
 } from "./shared"; 
 
 export function VerificationTab({ data }: { data: PipelineResponse }) {
   const sourceByRule = ruleTextById(data);
   const results = safeArray(data.verification?.node_results);
+  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
+  const atomicReferenceLabel = hasUnresolvedReferences ? "source reference" : "source-backed result";
   const visibleResults = results.filter((result) => (
     result.assertion_detected ||
     result.verification_path_available ||
     safeArray(result.expected_record_systems).length > 0
   ));
   const routed = results.filter((result) => safeArray(result.expected_record_systems).length > 0);
+  const checkedLabel = hasUnresolvedReferences ? "0 checked result(s)" : `${results.length} backed result(s)`;
+  const routedLabel = hasUnresolvedReferences
+    ? routed.length > 0 ? `${routed.length} path(s) available / not executed` : "not executed"
+    : `${routed.length} backed result(s)`;
 
   return (
     <div className="space-y-4">
       <Section title="Verification Summary">
         <div className="grid gap-3 sm:grid-cols-3">
           <DetailRow label="status" value={displayStatus(data.verification?.status)} />
-          <DetailRow label="checked" value={`${results.length} backed result(s)`} />
-          <DetailRow label="routed" value={`${routed.length} backed result(s)`} />
+          <DetailRow label="checked" value={checkedLabel} />
+          <DetailRow label="routed" value={routedLabel} />
         </div>
       </Section>
 
@@ -37,7 +44,7 @@ export function VerificationTab({ data }: { data: PipelineResponse }) {
             {visibleResults.map((result, index) => {
               const systems = safeArray(result.expected_record_systems);
               const sourceText = sourceByRule.get(result.rule_unit_id || result.node_id);
-              const notes = hideAtomicReferences(result.verification_notes);
+              const notes = hideAtomicReferences(result.verification_notes, atomicReferenceLabel);
               return (
                 <div key={`verification-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
                   <div className="flex flex-wrap gap-2">
