@@ -8,6 +8,7 @@ import {
   EmptyState,
   SourceQuote,
   hideAtomicReferences,
+  hasUnresolvedReferencedSources,
   toneClass,
 } from "./shared";
 
@@ -37,6 +38,11 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
   const status = governance?.status ?? data.output?.governance_status;
   const issueCount = governance?.issue_count ?? data.output?.governance_issue_count ?? 0;
   const records = normalizeGovernanceRecords(data);
+  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
+  const atomicReferenceLabel = hasUnresolvedReferences ? "source reference" : "source-backed result";
+  const displayStatusValue = hasUnresolvedReferences ? "review_required" : status;
+  const recordsChecked = hasUnresolvedReferences ? 0 : governance?.record_count ?? records.length;
+  const displayRecords = hasUnresolvedReferences ? [] : records;
   const activeIssues = safeArray(governance?.activeIssues as GovernanceCheck[] | undefined);
   const humanReviewHandoffs = safeArray(data.human_review_handoffs);
 
@@ -44,13 +50,17 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
     <div className="space-y-4">
       <Section title="Governance Summary">
         <div className="flex flex-wrap gap-2">
-          <StatusPill label="governance" status={status} />
-          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 ? "review" : "good")}`}>{issueCount} issue(s)</span>
-          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{governance?.record_count ?? records.length} checked</span>
+          <StatusPill label="governance" status={displayStatusValue} />
+          {hasUnresolvedReferences && (
+            <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass("review")}`}>unresolved dependencies</span>
+          )}
+          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${toneClass(issueCount > 0 || hasUnresolvedReferences ? "review" : "good")}`}>{issueCount} issue(s)</span>
+          <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{recordsChecked} checked</span>
           <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{humanReviewHandoffs.length} handoff(s)</span>
         </div>
-        {issueCount === 0 && records.length > 0 && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance checked {records.length} source-backed record(s) and found no review issues.</p>}
-        {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(governance.principle)}</p>}
+        {hasUnresolvedReferences && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance review is required because referenced source text has not been retrieved.</p>}
+        {!hasUnresolvedReferences && issueCount === 0 && records.length > 0 && <p className="mt-4 text-sm leading-6 text-muted-foreground">Governance checked {records.length} source-backed record(s) and found no review issues.</p>}
+        {governance?.principle && <p className="mt-4 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(governance.principle, atomicReferenceLabel)}</p>}
       </Section>
 
       {humanReviewHandoffs.length > 0 && <HumanReviewSummary handoffs={humanReviewHandoffs} />}
@@ -62,7 +72,7 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
               <div key={`${issue.checkName}-${index}`} className="rounded-lg border border-gold/40 bg-gold/10 p-3">
                 <div className="text-sm font-semibold text-foreground">{issue.checkName || "Governance check"}</div>
                 <div className="mt-1 text-xs uppercase tracking-widest text-gold-muted">{displayStatus(issue.status)}</div>
-                {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(issue.issue)}</p>}
+                {issue.issue && <p className="mt-2 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(issue.issue, atomicReferenceLabel)}</p>}
                 {safeArray(issue.missingFields).length > 0 && <p className="mt-2 text-sm leading-6 text-muted-foreground">Missing: {safeArray(issue.missingFields).join(", ")}</p>}
               </div>
             ))}
@@ -71,11 +81,11 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
       )}
 
       <Section title="Records Checked">
-        {records.length > 0 ? (
+        {displayRecords.length > 0 ? (
           <details className="rounded-lg border border-border/50 bg-background/30 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-foreground">View source-backed records used for the governance check</summary>
             <div className="mt-3 space-y-3">
-              {records.map((record, index) => {
+              {displayRecords.map((record, index) => {
                 const issues = safeArray(record.activeIssues);
                 return (
                   <div key={`governance-record-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
@@ -95,7 +105,7 @@ export function GovernanceTab({ data }: { data: PipelineResponse }) {
               })}
             </div>
           </details>
-        ) : <EmptyState>No governance records were available to check.</EmptyState>}
+        ) : hasUnresolvedReferences ? <EmptyState>0 governance records checked because referenced source text has not been retrieved.</EmptyState> : <EmptyState>No governance records were available to check.</EmptyState>}
       </Section>
     </div>
   );

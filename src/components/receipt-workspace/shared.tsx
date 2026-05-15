@@ -3,6 +3,15 @@ import type { PipelineResponse } from "../../types/pipeline";
 
 export type Tone = "good" | "review" | "bad" | "neutral";
 
+type RuleUnitReferencePacket = {
+  retrievalStatus?: string | null;
+  sourceText?: string | null;
+};
+
+type RuleUnitWithReferences = {
+  referenced_sources?: RuleUnitReferencePacket[] | null;
+};
+
 export function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
@@ -18,12 +27,20 @@ export function rawStatus(value: string | null | undefined): string {
   return value?.toLowerCase() ?? "";
 }
 
-export function hideAtomicReferences(value: string | null | undefined): string {
+export function hasUnresolvedReferencedSources(data: PipelineResponse): boolean {
+  const units = safeArray(data.rule_units?.rule_units as RuleUnitWithReferences[] | undefined);
+
+  return units.some((unit) => safeArray(unit.referenced_sources).some((source) => (
+    rawStatus(source.retrievalStatus) === "not_attempted" || !source.sourceText?.trim()
+  )));
+}
+
+export function hideAtomicReferences(value: string | null | undefined, replacement = "source-backed result"): string {
   if (!value) return "";
 
   return value
     .replace(/\s*Supporting nodes?:\s*node-\d+(?:,\s*node-\d+)*\.?/gi, "")
-    .replace(/node-\d+/gi, "source-backed result")
+    .replace(/node-\d+/gi, replacement)
     .replace(/source_node_ids?/gi, "source backing")
     .trim();
 }

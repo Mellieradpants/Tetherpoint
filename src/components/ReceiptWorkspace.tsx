@@ -4,7 +4,7 @@ import { IssuesTab } from "./receipt-workspace/IssuesTab";
 import { MeaningTab } from "./receipt-workspace/MeaningTab";
 import { OriginTab } from "./receipt-workspace/OriginTab";
 import { ResultActions } from "./receipt-workspace/ResultActions";
-import { StatusPill, safeArray, toneClass } from "./receipt-workspace/shared";
+import { StatusPill, hasUnresolvedReferencedSources, safeArray, toneClass } from "./receipt-workspace/shared";
 import { SupportPathPanel } from "./receipt-workspace/SupportPathPanel";
 import { VerificationTab } from "./receipt-workspace/VerificationTab";
 import type { PipelineResponse } from "../types/pipeline";
@@ -36,12 +36,14 @@ function TabButton({ tab, active, onClick, issueCount = 0 }: { tab: ResultTab; a
 
 export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
   const [activeTab, setActiveTab] = useState<ResultTab>("meaning");
+  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const issueCount = safeArray(data.errors).length + (data.governance?.issue_count ?? data.output?.governance_issue_count ?? 0);
   const tabs = useMemo<ResultTab[]>(
     () => issueCount > 0 ? ["meaning", "origin", "verification", "governance", "issues"] : ["meaning", "origin", "verification", "governance"],
     [issueCount]
   );
   const hasFatalError = safeArray(data.errors).some((error) => error.fatal);
+  const governanceStatus = hasUnresolvedReferences ? "review_required" : data.governance?.status ?? data.output?.governance_status;
 
   return (
     <div className="h-full overflow-y-auto bg-background">
@@ -50,13 +52,13 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">Analysis result</div>
-              <h2 className="mt-2 text-2xl font-semibold text-foreground">Source-backed review</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-foreground">{hasUnresolvedReferences ? "Source review" : "Source-backed review"}</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Review the plain meaning first, then check the source origin, verification route, and governance status before relying on the result.</p>
             </div>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 <StatusPill label="meaning" status={data.meaning?.status} />
-                <StatusPill label="governance" status={data.governance?.status ?? data.output?.governance_status} />
+                <StatusPill label="governance" status={governanceStatus} />
               </div>
               <ResultActions data={data} />
             </div>
