@@ -1,3 +1,5 @@
+import type { IncomingMessage } from "node:http";
+
 export const runtime = "nodejs";
 
 type AnalyzeOptions = {
@@ -11,11 +13,18 @@ type AnalyzeBody = {
   content_type: string;
   options: AnalyzeOptions;
   document_packet?: unknown;
+  user_selected_state?: string | null;
 };
 
 type SecurityCheckResult = {
   reject?: { status: number; message: string };
   meaningAllowed: boolean;
+};
+
+type JsonResponse = {
+  status: (statusCode: number) => JsonResponse;
+  setHeader: (name: string, value: string) => void;
+  send: (body: string) => void;
 };
 
 const MAX_CONTENT_LENGTH = 500_000;
@@ -28,8 +37,7 @@ const generalBuckets = new Map<string, number[]>();
 const meaningBuckets = new Map<string, number[]>();
 
 function getBackendConfig() {
-  const apiBaseUrl =
-    process.env.ANALYZE_API_BASE_URL ?? "https://anchored-flow-stack.onrender.com";
+  const apiBaseUrl = process.env.ANALYZE_API_BASE_URL ?? "https://anchored-flow-stack.onrender.com";
   const analyzeSecretRaw = process.env.ANALYZE_SECRET;
   const analyzeSecret =
     typeof analyzeSecretRaw === "string" && analyzeSecretRaw.trim().length > 0
@@ -42,7 +50,7 @@ function getBackendConfig() {
   };
 }
 
-function sendJson(res: any, status: number, payload: Record<string, unknown>) {
+function sendJson(res: JsonResponse, status: number, payload: Record<string, unknown>) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
   res.send(JSON.stringify(payload));
 }
@@ -95,7 +103,7 @@ function enforceAnalyzeSecurity(input: {
 
   if (contentLength > MAX_CONTENT_LENGTH) {
     console.warn(
-      `[security] Rejected oversized request from ${clientIp}: ${contentLength} bytes (max ${MAX_CONTENT_LENGTH})`
+      `[security] Rejected oversized request from ${clientIp}: ${contentLength} bytes (max ${MAX_CONTENT_LENGTH})`,
     );
     return {
       reject: {
@@ -108,7 +116,7 @@ function enforceAnalyzeSecurity(input: {
 
   if (!VALID_CONTENT_TYPES.has(input.content_type)) {
     console.warn(
-      `[security] Rejected invalid content_type "${input.content_type}" from ${clientIp}`
+      `[security] Rejected invalid content_type "${input.content_type}" from ${clientIp}`,
     );
     return {
       reject: {
@@ -130,10 +138,7 @@ function enforceAnalyzeSecurity(input: {
     }
   }
 
-  const rateLimitError = checkRateLimit(
-    clientIp,
-    input.options.run_meaning && meaningAllowed
-  );
+  const rateLimitError = checkRateLimit(clientIp, input.options.run_meaning && meaningAllowed);
   if (rateLimitError) {
     console.warn(`[security] Rate limited ${clientIp}: ${rateLimitError}`);
     return {
@@ -143,13 +148,13 @@ function enforceAnalyzeSecurity(input: {
   }
 
   console.info(
-    `[security] analyze request ip=${clientIp} size=${contentLength} meaning_requested=${input.options.run_meaning} meaning_allowed=${input.options.run_meaning ? meaningAllowed : "n/a"} content_type=${input.content_type}`
+    `[security] analyze request ip=${clientIp} size=${contentLength} meaning_requested=${input.options.run_meaning} meaning_allowed=${input.options.run_meaning ? meaningAllowed : "n/a"} content_type=${input.content_type}`,
   );
 
   return { meaningAllowed };
 }
 
-async function readRawBody(req: any): Promise<string> {
+async function readRawBody(req: IncomingMessage): Promise<string> {
   return await new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
@@ -187,14 +192,17 @@ function parseAnalyzeBody(rawBody: string): AnalyzeBody {
 
   return {
     content: typeof record.content === "string" ? record.content : "",
-    content_type:
-      typeof record.content_type === "string" ? record.content_type : "",
+    content_type: typeof record.content_type === "string" ? record.content_type : "",
     options: {
       run_meaning: Boolean(rawOptions.run_meaning),
       run_origin: Boolean(rawOptions.run_origin),
       run_verification: Boolean(rawOptions.run_verification),
     },
     document_packet: record.document_packet,
+    user_selected_state:
+      typeof record.user_selected_state === "string" || record.user_selected_state === null
+        ? record.user_selected_state
+        : undefined,
   };
 }
 
@@ -209,10 +217,14 @@ function buildBackendAnalyzeBody(body: AnalyzeBody): Record<string, unknown> {
     backendBody.document_packet = body.document_packet;
   }
 
+  if (body.user_selected_state !== undefined) {
+    backendBody.user_selected_state = body.user_selected_state;
+  }
+
   return backendBody;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: IncomingMessage, res: JsonResponse) {
   if (req.method !== "POST") {
     sendJson(res, 405, { message: "Method not allowed" });
     return;
@@ -225,8 +237,7 @@ export default async function handler(req: any, res: any) {
     body = parseAnalyzeBody(rawBody);
   } catch (error) {
     sendJson(res, 400, {
-      message:
-        error instanceof Error ? error.message : "Invalid JSON request body.",
+      message: error instanceof Error ? error.message : "Invalid JSON request body.",
     });
     return;
   }
@@ -234,7 +245,7 @@ export default async function handler(req: any, res: any) {
   const clientIpHeader = req.headers["x-forwarded-for"];
   const clientIp = Array.isArray(clientIpHeader)
     ? clientIpHeader[0]
-    : clientIpHeader?.split(",")[0].trim() ?? "unknown";
+    : (clientIpHeader?.split(",")[0].trim() ?? "unknown");
 
   try {
     const security = enforceAnalyzeSecurity({

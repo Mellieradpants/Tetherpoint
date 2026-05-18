@@ -115,6 +115,7 @@ components:
         content: { type: string, minLength: 1, maxLength: 500000 }
         content_type: { $ref: "#/components/schemas/ContentType" }
         options: { $ref: "#/components/schemas/AnalyzeOptions" }
+        user_selected_state: { type: ["string", "null"] }
         document_packet:
           oneOf:
             - $ref: "#/components/schemas/CanonicalDocumentPacket"
@@ -711,6 +712,13 @@ components:
         error: { type: string }
         fatal: { type: boolean, default: false }
 
+    JurisdictionContext:
+      type: object
+      properties:
+        user_selected_state: { type: ["string", "null"] }
+        document_detected_state: { type: ["string", "null"] }
+        jurisdiction_status: { type: string, enum: [matched, missing, unclear, conflict, needs_review], default: missing }
+
     PipelineResponse:
       type: object
       required: [input, structure, selection, rule_units, governance_gate, meaning, origin, verification, governance, output]
@@ -728,6 +736,7 @@ components:
         errors: { type: array, items: { $ref: "#/components/schemas/PipelineError" }, default: [] }
         source_metadata: { type: array, items: { $ref: "#/components/schemas/SourceMetadataContract" }, default: [] }
         human_review_handoffs: { type: array, items: { $ref: "#/components/schemas/HumanReviewHandoff" }, default: [] }
+        jurisdiction_context: { $ref: "#/components/schemas/JurisdictionContext" }
         document_first_v2: { $ref: "#/components/schemas/DocumentFirstV2Result" }
 
     ValidationError:

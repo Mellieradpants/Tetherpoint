@@ -32,6 +32,16 @@ class AnalyzeRequest(BaseModel):
     content_type: ContentType
     options: AnalyzeOptions = Field(default_factory=AnalyzeOptions)
     document_packet: Optional[CanonicalDocumentPacket] = None
+    user_selected_state: Optional[str] = None
+
+
+JurisdictionStatus = Literal["matched", "missing", "unclear", "conflict", "needs_review"]
+
+
+class JurisdictionContext(BaseModel):
+    user_selected_state: Optional[str] = None
+    document_detected_state: Optional[str] = None
+    jurisdiction_status: JurisdictionStatus = "missing"
 
 
 class InputResult(BaseModel):
@@ -448,6 +458,7 @@ class PipelineResponse(BaseModel):
     errors: list[PipelineError] = Field(default_factory=list)
     source_metadata: list[SourceMetadataContract] = Field(default_factory=list)
     human_review_handoffs: list[HumanReviewHandoff] = Field(default_factory=list)
+    jurisdiction_context: JurisdictionContext = Field(default_factory=JurisdictionContext)
     document_first_v2: DocumentFirstV2Result = Field(
         default_factory=lambda: DocumentFirstV2Result(status="skipped")
     )

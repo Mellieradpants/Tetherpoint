@@ -17,7 +17,9 @@ function HowToUse({ onStart }: { onStart: () => void }) {
               Tetherpoint turns source text into a traceable result you can inspect.
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-              Paste a document, run the analysis, then review the four result views: plain meaning, origin, verification, and governance. Each view focuses on what is backed by the submitted source and what still needs review.
+              Paste a document, run the analysis, then review the four result views: plain meaning,
+              origin, verification, and governance. Each view focuses on what is backed by the
+              submitted source and what still needs review.
             </p>
             <button
               type="button"
@@ -42,13 +44,17 @@ function HowToUse({ onStart }: { onStart: () => void }) {
               <div>
                 <div className="text-sm font-semibold text-foreground">2. Run the analysis</div>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Tetherpoint parses the source, groups supported rule units, and runs meaning, origin, verification, and governance checks.
+                  Tetherpoint parses the source, groups supported rule units, and runs meaning,
+                  origin, verification, and governance checks.
                 </p>
               </div>
               <div>
-                <div className="text-sm font-semibold text-foreground">3. Review the backed result</div>
+                <div className="text-sm font-semibold text-foreground">
+                  3. Review the backed result
+                </div>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Read the plain meaning first, then use the other tabs to see source identity, verification routes, and governance review status.
+                  Read the plain meaning first, then use the other tabs to see source identity,
+                  verification routes, and governance review status.
                 </p>
               </div>
             </div>
@@ -69,7 +75,8 @@ function App() {
   const handleSubmit = async (
     content: string,
     contentType: string,
-    options: Record<string, boolean>
+    options: Record<string, boolean>,
+    userSelectedState: string | null,
   ) => {
     setLoading(true);
     setError(null);
@@ -84,6 +91,7 @@ function App() {
           run_origin: Boolean(options.run_origin),
           run_verification: Boolean(options.run_verification),
         },
+        user_selected_state: userSelectedState,
       });
 
       setResult(data as PipelineResponse);
@@ -166,15 +174,20 @@ function App() {
                 </div>
               </div>
             </div>
-          ) : !loading && (
-            <div className="flex-1 flex items-center justify-center px-4">
-              <div className="max-w-md text-center">
-                <div className="text-lg font-semibold text-primary mb-1">Ready for source text</div>
-                <div className="text-xs leading-6 text-muted-foreground">
-                  Paste content above and run the analysis to review plain meaning, origin, verification, and governance.
+          ) : (
+            !loading && (
+              <div className="flex-1 flex items-center justify-center px-4">
+                <div className="max-w-md text-center">
+                  <div className="text-lg font-semibold text-primary mb-1">
+                    Ready for source text
+                  </div>
+                  <div className="text-xs leading-6 text-muted-foreground">
+                    Paste content above and run the analysis to review plain meaning, origin,
+                    verification, and governance.
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
         </>
       )}

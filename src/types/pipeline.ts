@@ -4,7 +4,14 @@ export interface StructureNode {
   node_id: string;
   section_id: string;
   parent_id: string | null;
-  role: "PRIMARY_RULE" | "EVIDENCE" | "CONDITION" | "EXCEPTION" | "CONSEQUENCE" | "DEFINITION" | "BOILERPLATE";
+  role:
+    | "PRIMARY_RULE"
+    | "EVIDENCE"
+    | "CONDITION"
+    | "EXCEPTION"
+    | "CONSEQUENCE"
+    | "DEFINITION"
+    | "BOILERPLATE";
   depth: number;
   source_span_start: number | null;
   source_span_end: number | null;
@@ -230,4 +237,9 @@ export interface PipelineResponse {
   errors: Array<{ layer: string; error: string; fatal?: boolean }>;
   source_metadata?: SourceMetadataContract[];
   human_review_handoffs?: HumanReviewHandoff[];
+  jurisdiction_context?: {
+    user_selected_state: string | null;
+    document_detected_state: string | null;
+    jurisdiction_status: "matched" | "missing" | "unclear" | "conflict" | "needs_review";
+  };
 }

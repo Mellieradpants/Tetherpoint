@@ -4,25 +4,89 @@ import { DOCUMENT_PACKET_SAMPLE_TEXT } from "../samples/documentPacketSample";
 import { SAVE_ACT_SAMPLE_TEXT } from "../samples/saveActSample";
 
 const CONTENT_TYPES = ["text", "html", "xml", "json"] as const;
+const STATE_OPTIONS = [
+  ["", "I don't know"],
+  ["AL", "Alabama"],
+  ["AK", "Alaska"],
+  ["AZ", "Arizona"],
+  ["AR", "Arkansas"],
+  ["CA", "California"],
+  ["CO", "Colorado"],
+  ["CT", "Connecticut"],
+  ["DE", "Delaware"],
+  ["FL", "Florida"],
+  ["GA", "Georgia"],
+  ["HI", "Hawaii"],
+  ["ID", "Idaho"],
+  ["IL", "Illinois"],
+  ["IN", "Indiana"],
+  ["IA", "Iowa"],
+  ["KS", "Kansas"],
+  ["KY", "Kentucky"],
+  ["LA", "Louisiana"],
+  ["ME", "Maine"],
+  ["MD", "Maryland"],
+  ["MA", "Massachusetts"],
+  ["MI", "Michigan"],
+  ["MN", "Minnesota"],
+  ["MS", "Mississippi"],
+  ["MO", "Missouri"],
+  ["MT", "Montana"],
+  ["NE", "Nebraska"],
+  ["NV", "Nevada"],
+  ["NH", "New Hampshire"],
+  ["NJ", "New Jersey"],
+  ["NM", "New Mexico"],
+  ["NY", "New York"],
+  ["NC", "North Carolina"],
+  ["ND", "North Dakota"],
+  ["OH", "Ohio"],
+  ["OK", "Oklahoma"],
+  ["OR", "Oregon"],
+  ["PA", "Pennsylvania"],
+  ["RI", "Rhode Island"],
+  ["SC", "South Carolina"],
+  ["SD", "South Dakota"],
+  ["TN", "Tennessee"],
+  ["TX", "Texas"],
+  ["UT", "Utah"],
+  ["VT", "Vermont"],
+  ["VA", "Virginia"],
+  ["WA", "Washington"],
+  ["WV", "West Virginia"],
+  ["WI", "Wisconsin"],
+  ["WY", "Wyoming"],
+] as const;
 
 interface AnalyzeFormProps {
-  onSubmit: (content: string, contentType: string, options: Record<string, boolean>) => void;
+  onSubmit: (
+    content: string,
+    contentType: string,
+    options: Record<string, boolean>,
+    userSelectedState: string | null,
+  ) => void;
   loading: boolean;
 }
 
 export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
   const [content, setContent] = useState("");
   const [contentType, setContentType] = useState<string>("text");
+  const [userSelectedState, setUserSelectedState] = useState("");
   const [pdfStatus, setPdfStatus] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(content, contentType, {
-      run_meaning: true,
-      run_origin: true,
-      run_verification: true,
-    });
+    onSubmit(
+      content,
+      contentType,
+      {
+        run_meaning: true,
+        run_origin: true,
+        run_verification: true,
+      },
+      userSelectedState || null,
+    );
   };
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +134,22 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
           ))}
         </div>
       </div>
+
+      <label className="block text-xs font-medium text-muted-foreground">
+        Jurisdiction context
+        <select
+          value={userSelectedState}
+          onChange={(event) => setUserSelectedState(event.target.value)}
+          disabled={loading}
+          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          {STATE_OPTIONS.map(([value, label]) => (
+            <option key={label} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <textarea
         value={content}
