@@ -15,6 +15,7 @@ interface AnalyzeRequest {
   language?: string;
   options: AnalyzeOptions;
   document_packet?: unknown;
+  user_selected_state?: string | null;
 }
 
 interface TranslatePlainMeaningRequest {
@@ -161,6 +162,10 @@ function buildAnalyzeBody(request: AnalyzeRequest): Record<string, unknown> {
     body.document_packet = request.document_packet;
   }
 
+  if (request.user_selected_state !== undefined) {
+    body.user_selected_state = request.user_selected_state;
+  }
+
   if (request.content_type === "json") {
     try {
       const parsed = JSON.parse(request.content);
@@ -168,12 +173,20 @@ function buildAnalyzeBody(request: AnalyzeRequest): Record<string, unknown> {
         const envelope = parsed as Record<string, unknown>;
         return {
           content: typeof envelope.content === "string" ? envelope.content : request.content,
-          content_type: typeof envelope.content_type === "string" ? envelope.content_type : request.content_type,
+          content_type:
+            typeof envelope.content_type === "string"
+              ? envelope.content_type
+              : request.content_type,
           options:
             envelope.options && typeof envelope.options === "object"
               ? envelope.options
               : request.options,
           document_packet: envelope.document_packet,
+          user_selected_state:
+            typeof envelope.user_selected_state === "string" ||
+            envelope.user_selected_state === null
+              ? envelope.user_selected_state
+              : request.user_selected_state,
         };
       }
     } catch {
@@ -235,7 +248,10 @@ export async function resolveReference(request: ResolveReferenceRequest) {
   });
 
   if (!response.ok) {
-    const { message } = await readErrorMessage(response, `Extended meaning failed (${response.status})`);
+    const { message } = await readErrorMessage(
+      response,
+      `Extended meaning failed (${response.status})`,
+    );
     throw new Error(message);
   }
 

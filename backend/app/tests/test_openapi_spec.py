@@ -22,6 +22,7 @@ from app.schemas.models import (
     GovernanceResult,
     HumanReviewHandoff,
     InputResult,
+    JurisdictionContext,
     MeaningBrief,
     MeaningNodeResult,
     MeaningResult,
@@ -131,6 +132,7 @@ SCHEMA_MODEL_MAP = {
     "OutputResult": OutputResult,
     "SourceMetadataContract": SourceMetadataContract,
     "HumanReviewHandoff": HumanReviewHandoff,
+    "JurisdictionContext": JurisdictionContext,
     "PipelineError": PipelineError,
     "PipelineResponse": PipelineResponse,
 }

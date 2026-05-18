@@ -18,6 +18,7 @@ from app.schemas.models import (
     GovernanceResult,
     HumanReviewHandoff,
     InputResult,
+    JurisdictionContext,
     MeaningResult,
     OriginResult,
     OutputResult,
@@ -260,6 +261,33 @@ def _build_human_review_handoffs(
     return handoffs
 
 
+def _normalized_state(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().upper()
+    return normalized or None
+
+
+def _build_jurisdiction_context(request: AnalyzeRequest) -> JurisdictionContext:
+    user_selected_state = _normalized_state(request.user_selected_state)
+    document_detected_state = None
+
+    if user_selected_state is None:
+        status = "missing"
+    elif document_detected_state is None:
+        status = "needs_review"
+    elif user_selected_state == document_detected_state:
+        status = "matched"
+    else:
+        status = "conflict"
+
+    return JurisdictionContext(
+        user_selected_state=user_selected_state,
+        document_detected_state=document_detected_state,
+        jurisdiction_status=status,
+    )
+
+
 def _empty_legacy_response(request: AnalyzeRequest, document_first_v2: DocumentFirstV2Result) -> PipelineResponse:
     input_result = InputResult(
         raw_content=request.content,
@@ -308,6 +336,7 @@ def _empty_legacy_response(request: AnalyzeRequest, document_first_v2: DocumentF
         verification=verification_result,
         governance=governance_result,
         output=output_result,
+        jurisdiction_context=_build_jurisdiction_context(request),
         document_first_v2=document_first_v2,
     )
 
@@ -472,4 +501,5 @@ def run_pipeline(request: AnalyzeRequest) -> PipelineResponse:
             governance_gate_result,
             governance_result,
         ),
+        jurisdiction_context=_build_jurisdiction_context(request),
     )

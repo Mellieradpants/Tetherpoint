@@ -50,6 +50,7 @@ def _analyze_with_packet(packet):
             "content": "structured document packet",
             "content_type": "text",
             "options": {"run_meaning": True, "run_origin": True, "run_verification": True},
+            "user_selected_state": "CA",
             "document_packet": packet,
         },
         headers=AUTH_HEADERS,
@@ -110,6 +111,36 @@ def test_document_packet_path_preserves_source_text_and_anchors_through_candidat
     assert candidate["source_anchor"]["anchor_id"] == "pdf-page-1-block-p1-b1"
     assert set(candidate["signal_types"]) >= {"obligation", "timing", "evidence_requirement"}
     assert set(candidate["anchor_texts"]) >= {"shall", "within 30 days", "proof"}
+
+
+def test_document_packet_path_returns_jurisdiction_context():
+    response = _analyze_with_packet(_document_packet())
+
+    assert response.status_code == 200
+    context = response.json()["jurisdiction_context"]
+    assert context == {
+        "user_selected_state": "CA",
+        "document_detected_state": None,
+        "jurisdiction_status": "needs_review",
+    }
+
+
+def test_missing_user_selected_state_returns_missing_jurisdiction_context():
+    response = client.post(
+        "/analyze",
+        json={
+            "content": "The agency shall send notice within 30 days.",
+            "content_type": "text",
+            "options": {"run_meaning": False, "run_origin": True, "run_verification": True},
+        },
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 200
+    context = response.json()["jurisdiction_context"]
+    assert context["user_selected_state"] is None
+    assert context["document_detected_state"] is None
+    assert context["jurisdiction_status"] == "missing"
 
 
 def test_invalid_document_packet_returns_validation_error():
