@@ -182,11 +182,7 @@ function buildAnalyzeBody(request: AnalyzeRequest): Record<string, unknown> {
               ? envelope.options
               : request.options,
           document_packet: envelope.document_packet,
-          user_selected_state:
-            typeof envelope.user_selected_state === "string" ||
-            envelope.user_selected_state === null
-              ? envelope.user_selected_state
-              : request.user_selected_state,
+          user_selected_state: request.user_selected_state,
         };
       }
     } catch {
