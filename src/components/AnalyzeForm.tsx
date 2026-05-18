@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pdfFileToDocumentPacket } from "../lib/pdf-document-packet";
 import { DOCUMENT_PACKET_SAMPLE_TEXT } from "../samples/documentPacketSample";
 import { SAVE_ACT_SAMPLE_TEXT } from "../samples/saveActSample";
 
@@ -12,6 +13,8 @@ interface AnalyzeFormProps {
 export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
   const [content, setContent] = useState("");
   const [contentType, setContentType] = useState<string>("text");
+  const [pdfStatus, setPdfStatus] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,10 +25,34 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
     });
   };
 
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setPdfStatus(`Extracting text from ${file.name}...`);
+    setPdfError(null);
+
+    try {
+      const packet = await pdfFileToDocumentPacket(file);
+      setContent(JSON.stringify(packet, null, 2));
+      setContentType("json");
+      setPdfStatus(
+        `PDF packet ready: ${packet.pages.length} page${packet.pages.length === 1 ? "" : "s"} extracted from ${file.name}.`,
+      );
+    } catch (error) {
+      setPdfStatus(null);
+      setPdfError(error instanceof Error ? error.message : "Could not extract text from this PDF.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Type</span>
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+          Type
+        </span>
         <div className="flex gap-0.5 rounded-md bg-surface p-0.5">
           {CONTENT_TYPES.map((ct) => (
             <button
@@ -52,6 +79,28 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
         rows={6}
       />
 
+      <div className="rounded-md border border-border bg-surface/60 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="rounded-md bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent">
+            Upload PDF
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handlePdfUpload}
+              disabled={loading}
+              className="sr-only"
+            />
+          </label>
+          <div className="text-xs leading-5 text-muted-foreground">
+            Text-based PDFs only. Layout reconstruction is basic; tables, columns, headers, footers,
+            and footnotes may have imperfect reading order. Long PDFs may exceed the existing API
+            character limit.
+          </div>
+        </div>
+        {pdfStatus && <div className="mt-2 text-xs text-primary">{pdfStatus}</div>}
+        {pdfError && <div className="mt-2 text-xs text-destructive">{pdfError}</div>}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"
@@ -62,14 +111,24 @@ export function AnalyzeForm({ onSubmit, loading }: AnalyzeFormProps) {
         </button>
         <button
           type="button"
-          onClick={() => { setContent(SAVE_ACT_SAMPLE_TEXT); setContentType("text"); }}
+          onClick={() => {
+            setContent(SAVE_ACT_SAMPLE_TEXT);
+            setContentType("text");
+            setPdfStatus(null);
+            setPdfError(null);
+          }}
           className="rounded-md bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
         >
           Load Sample
         </button>
         <button
           type="button"
-          onClick={() => { setContent(DOCUMENT_PACKET_SAMPLE_TEXT); setContentType("json"); }}
+          onClick={() => {
+            setContent(DOCUMENT_PACKET_SAMPLE_TEXT);
+            setContentType("json");
+            setPdfStatus(null);
+            setPdfError(null);
+          }}
           className="rounded-md bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
         >
           Load Packet Sample

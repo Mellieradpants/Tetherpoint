@@ -60,6 +60,63 @@ class TestStructureLayer:
         primary_nodes = [node for node in struct.nodes if node.role == "PRIMARY_RULE"]
         assert len(primary_nodes) == 2
 
+    def test_document_packet_json_extracts_only_pdf_block_text_with_packet_anchors(self):
+        packet = {
+            "document_id": "pdf-test-document",
+            "source_type": "pdf",
+            "source_name": "sample.pdf",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "blocks": [
+                        {
+                            "block_id": "page-0001-block-0001",
+                            "block_type": "text",
+                            "text": "An applicant shall provide documentary proof of United States citizenship.",
+                            "source_anchor": {
+                                "document_id": "pdf-test-document",
+                                "page_number": 1,
+                                "block_id": "page-0001-block-0001",
+                            },
+                        }
+                    ],
+                },
+                {
+                    "page_number": 2,
+                    "blocks": [
+                        {
+                            "block_id": "page-0002-block-0001",
+                            "block_type": "text",
+                            "text": "The State must retain the registration record.",
+                            "source_anchor": {
+                                "document_id": "pdf-test-document",
+                                "page_number": 2,
+                                "block_id": "page-0002-block-0001",
+                            },
+                        }
+                    ],
+                },
+            ],
+        }
+        inp = process_input(json.dumps(packet), ContentType.json)
+        struct = process_structure(inp)
+
+        source_text = " ".join(node.source_text for node in struct.nodes)
+        anchors = [node.source_anchor for node in struct.nodes]
+
+        assert "documentary proof" in source_text
+        assert "registration record" in source_text
+        assert "sample.pdf" not in source_text
+        assert "pdf-test-document" not in source_text
+        assert any(
+            "document_packet:pdf-test-document:page:1:block:page-0001-block-0001" in anchor
+            for anchor in anchors
+        )
+        assert any(
+            "document_packet:pdf-test-document:page:2:block:page-0002-block-0001" in anchor
+            for anchor in anchors
+        )
+
 
 class TestSelectionLayer:
     def test_blocked_node_excluded(self):

@@ -1052,8 +1052,85 @@ def _extract_sections_json(content: str) -> list[dict[str, str]]:
     except json.JSONDecodeError:
         return []
 
+    if _is_document_packet(data):
+        return _extract_sections_document_packet(data)
+
     results: list[dict[str, str]] = []
     _walk_json(data, "$", results)
+    return results
+
+
+def _is_document_packet(data: object) -> bool:
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("document_id"), str)
+        and data.get("source_type") == "pdf"
+        and isinstance(data.get("source_name"), str)
+        and isinstance(data.get("pages"), list)
+    )
+
+
+def _source_anchor_from_packet_block(
+    document_id: str,
+    page_number: object,
+    block_id: str,
+    source_anchor: object,
+) -> str:
+    anchor_document_id = document_id
+    anchor_page_number = page_number
+    anchor_block_id = block_id
+
+    if isinstance(source_anchor, dict):
+        if isinstance(source_anchor.get("document_id"), str):
+            anchor_document_id = source_anchor["document_id"]
+        if isinstance(source_anchor.get("page_number"), int):
+            anchor_page_number = source_anchor["page_number"]
+        if isinstance(source_anchor.get("block_id"), str):
+            anchor_block_id = source_anchor["block_id"]
+
+    return f"document_packet:{anchor_document_id}:page:{anchor_page_number}:block:{anchor_block_id}"
+
+
+def _extract_sections_document_packet(data: object) -> list[dict[str, str]]:
+    if not isinstance(data, dict):
+        return []
+
+    document_id = data["document_id"]
+    if not isinstance(document_id, str):
+        return []
+
+    results: list[dict[str, str]] = []
+    pages = data.get("pages", [])
+    if not isinstance(pages, list):
+        return results
+
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        page_number = page.get("page_number")
+        blocks = page.get("blocks", [])
+        if not isinstance(blocks, list):
+            continue
+
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            text = block.get("text")
+            block_id = block.get("block_id")
+            if not isinstance(text, str) or not text.strip() or not isinstance(block_id, str):
+                continue
+            results.append(
+                {
+                    "text": text,
+                    "anchor": _source_anchor_from_packet_block(
+                        document_id,
+                        page_number,
+                        block_id,
+                        block.get("source_anchor"),
+                    ),
+                }
+            )
+
     return results
 
 
