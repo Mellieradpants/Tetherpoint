@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PipelineResponse, RuleUnitReferencedSource } from "../../types/pipeline";
+import type {
+  GovernanceCheckResult,
+  MeaningNodeResult,
+  PipelineResponse,
+  RuleUnitReferencedSource,
+  VerificationNode,
+} from "../../types/pipeline";
+import { PlainMeaningTranslation } from "./MeaningTab";
 import {
   DetailRow,
   EmptyState,
@@ -63,6 +70,13 @@ type NavigatorItem = {
   nodeId?: string | null;
   references: NavigatorReference[];
   support: string[];
+  sourceNodeIds: string[];
+};
+
+type SelectedLayerContext = {
+  meaning?: MeaningNodeResult;
+  verification?: VerificationNode;
+  governanceIssues: GovernanceCheckResult[];
 };
 
 function fromRuleReference(reference: RuleUnitReferencedSource): NavigatorReference {
@@ -77,6 +91,23 @@ function fromRuleReference(reference: RuleUnitReferencedSource): NavigatorRefere
 
 function present(value: string | null | undefined): value is string {
   return Boolean(value?.trim());
+}
+
+function normalizedText(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
+}
+
+function sameSourceText(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalizedLeft = normalizedText(left);
+  const normalizedRight = normalizedText(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
+function includesSelectedId(ids: string[], candidate: string | null | undefined): boolean {
+  return Boolean(candidate && ids.includes(candidate));
 }
 
 function excerptLabel(value: string | null | undefined, fallback: string): string {
@@ -102,6 +133,17 @@ function sourceNameLabel(data: PipelineResponse): string {
   ].find((signal) => signal.value?.trim());
 
   return candidate?.document_id || originSignal?.value || "Submitted document";
+}
+
+function sourceDocumentText(data: PipelineResponse): string {
+  if (data.input?.raw_content?.trim()) return data.input.raw_content;
+
+  const nodeText = safeArray(data.structure?.nodes)
+    .map((node) => node.source_text || node.normalized_text)
+    .filter(present)
+    .join("\n\n");
+
+  return nodeText;
 }
 
 function buildNavigatorItems(data: PipelineResponse): NavigatorItem[] {
@@ -135,6 +177,7 @@ function buildNavigatorItems(data: PipelineResponse): NavigatorItem[] {
         nodeId: candidate.structural_node_id,
         references: [],
         support,
+        sourceNodeIds: candidate.structural_node_id ? [candidate.structural_node_id] : [],
       };
     });
   }
@@ -156,7 +199,46 @@ function buildNavigatorItems(data: PipelineResponse): NavigatorItem[] {
         unit.meaning_eligible ? "Meaning available" : "Meaning needs review",
         unit.verification_eligible ? "Verification path available" : "Verification not available",
       ],
+      sourceNodeIds: [
+        unit.primary_node_id,
+        ...safeArray(unit.source_node_ids),
+        ...safeArray(unit.fragment_node_ids),
+      ].filter(present),
     }));
+}
+
+function resolveSelectedLayers(
+  data: PipelineResponse,
+  selected: NavigatorItem,
+): SelectedLayerContext {
+  const selectedIds = [selected.ruleUnitId, selected.nodeId, ...selected.sourceNodeIds].filter(
+    present,
+  );
+
+  const meaning = safeArray(data.meaning?.node_results).find(
+    (result) =>
+      includesSelectedId(selectedIds, result.node_id) ||
+      sameSourceText(result.source_text, selected.sourceText),
+  );
+  const verification = safeArray(data.verification?.node_results).find(
+    (result) =>
+      includesSelectedId(selectedIds, result.rule_unit_id) ||
+      includesSelectedId(selectedIds, result.node_id),
+  );
+  const governanceIssues = safeArray(data.governance?.activeIssues).filter((issue) => {
+    const issueText = [
+      issue.checkName,
+      issue.status,
+      issue.issue,
+      ...safeArray(issue.missingFields),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return selectedIds.some((id) => issueText.includes(id.toLowerCase()));
+  });
+
+  return { meaning, verification, governanceIssues };
 }
 
 function referenceStatus(reference: NavigatorReference, hasUnresolvedReferences: boolean): string {
@@ -170,23 +252,64 @@ function referenceStatus(reference: NavigatorReference, hasUnresolvedReferences:
   return displayStatus(reference.retrievalStatus || "detected");
 }
 
-function SelectedMeaning({ data, selected }: { data: PipelineResponse; selected: NavigatorItem }) {
+function hasSelectedUnresolvedReferences(selected: NavigatorItem): boolean {
+  return selected.references.some(
+    (reference) =>
+      rawStatus(reference.retrievalStatus) === "not_attempted" || !reference.sourceText?.trim(),
+  );
+}
+
+function selectedMeaningText(data: PipelineResponse, layers: SelectedLayerContext): string {
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const atomicReferenceLabel = hasUnresolvedReferences
     ? "source reference"
     : "source-backed result";
-  const nodeMeaning = safeArray(data.meaning?.node_results).find(
-    (result) => result.node_id === selected.ruleUnitId || result.node_id === selected.nodeId,
-  );
-  const meaningText =
-    nodeMeaning?.plain_meaning ||
-    (selected.kind === "candidate" ? "" : data.meaning?.overall_plain_meaning) ||
-    data.meaning?.message ||
-    "";
-  const paragraphs = splitParagraphs(hideAtomicReferences(meaningText, atomicReferenceLabel));
+  return hideAtomicReferences(layers.meaning?.plain_meaning || "", atomicReferenceLabel);
+}
+
+function SelectedMeaning({
+  data,
+  selected,
+  layers,
+}: {
+  data: PipelineResponse;
+  selected: NavigatorItem;
+  layers: SelectedLayerContext;
+}) {
+  const meaningText = selectedMeaningText(data, layers);
+  const paragraphs = splitParagraphs(meaningText);
+
+  if (!layers.meaning) {
+    return (
+      <EmptyState>
+        Meaning skipped for this selected passage or not attached yet. See Technical Trace for
+        backend details.
+      </EmptyState>
+    );
+  }
+
+  if (layers.meaning.error || layers.meaning.message) {
+    const statusMessage = layers.meaning.error || layers.meaning.message;
+    return (
+      <div className="space-y-3">
+        {paragraphs.length > 0 ? (
+          <div className="space-y-3 text-sm leading-6 text-foreground">
+            {paragraphs.map((paragraph, index) => (
+              <p key={`selected-meaning-${index}`}>{paragraph}</p>
+            ))}
+          </div>
+        ) : (
+          <EmptyState>No plain meaning is attached to this selected passage yet.</EmptyState>
+        )}
+        <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
+          {statusMessage}
+        </div>
+      </div>
+    );
+  }
 
   if (paragraphs.length === 0)
-    return <EmptyState>No plain meaning is attached to this selection yet.</EmptyState>;
+    return <EmptyState>No plain meaning is attached to this selected passage yet.</EmptyState>;
 
   return (
     <div className="space-y-3 text-sm leading-6 text-foreground">
@@ -197,17 +320,17 @@ function SelectedMeaning({ data, selected }: { data: PipelineResponse; selected:
   );
 }
 
-function StatusPanel({ data, selected }: { data: PipelineResponse; selected: NavigatorItem }) {
-  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
-  const governanceStatus = hasUnresolvedReferences
-    ? "review_required"
-    : (data.governance?.status ?? data.output?.governance_status);
-  const verificationResult = safeArray(data.verification?.node_results).find(
-    (result) =>
-      result.rule_unit_id === selected.ruleUnitId ||
-      result.node_id === selected.ruleUnitId ||
-      result.node_id === selected.nodeId,
-  );
+function StatusPanel({
+  data,
+  selected,
+  layers,
+}: {
+  data: PipelineResponse;
+  selected: NavigatorItem;
+  layers: SelectedLayerContext;
+}) {
+  const hasUnresolvedReferences = hasSelectedUnresolvedReferences(selected);
+  const selectedGovernanceStatus = layers.governanceIssues.length ? "needs_review" : "not_attached";
 
   return (
     <div className="space-y-3">
@@ -216,11 +339,11 @@ function StatusPanel({ data, selected }: { data: PipelineResponse; selected: Nav
           label={selected.kind === "candidate" ? "candidate" : "rule unit"}
           status={selected.status}
         />
-        <StatusPill label="meaning" status={data.meaning?.status} />
-        {verificationResult?.verification_path_available && (
+        <StatusPill label="meaning" status={layers.meaning?.status || "not_attached"} />
+        {layers.verification?.verification_path_available && (
           <StatusPill label="path" status="available" />
         )}
-        <StatusPill label="governance" status={governanceStatus} />
+        <StatusPill label="governance" status={selectedGovernanceStatus} />
       </div>
 
       {hasUnresolvedReferences && (
@@ -230,22 +353,41 @@ function StatusPanel({ data, selected }: { data: PipelineResponse; selected: Nav
         </div>
       )}
 
-      {verificationResult && (
+      {layers.governanceIssues.length > 0 && (
         <div className="space-y-2">
-          {verificationResult.assertion_type && (
-            <DetailRow label="assertion" value={displayStatus(verificationResult.assertion_type)} />
-          )}
-          {safeArray(verificationResult.expected_record_systems).length > 0 && (
+          {layers.governanceIssues.map((issue, index) => (
             <DetailRow
-              label="record route"
-              value={safeArray(verificationResult.expected_record_systems).join(", ")}
+              key={`selected-governance-${index}`}
+              label={issue.checkName || "governance issue"}
+              value={issue.issue || displayStatus(issue.status)}
+            />
+          ))}
+        </div>
+      )}
+
+      {layers.governanceIssues.length === 0 && (
+        <EmptyState>No governance flags are attached to this selected passage yet.</EmptyState>
+      )}
+
+      {layers.verification && (
+        <div className="space-y-2">
+          {layers.verification.assertion_type && (
+            <DetailRow
+              label="assertion"
+              value={displayStatus(layers.verification.assertion_type)}
             />
           )}
-          {verificationResult.verification_notes && (
+          {safeArray(layers.verification.expected_record_systems).length > 0 && (
+            <DetailRow
+              label="record route"
+              value={safeArray(layers.verification.expected_record_systems).join(", ")}
+            />
+          )}
+          {layers.verification.verification_notes && (
             <DetailRow
               label="verification note"
               value={hideAtomicReferences(
-                verificationResult.verification_notes,
+                layers.verification.verification_notes,
                 hasUnresolvedReferences ? "source reference" : "source-backed result",
               )}
             />
@@ -265,6 +407,7 @@ function WholeDocumentOverview({ data, itemCount }: { data: PipelineResponse; it
   const unresolvedCount =
     safeArray(data.origin?.referenced_sources).length +
     safeArray(data.governance?.activeIssues).length;
+  const sourceText = sourceDocumentText(data);
 
   return (
     <section className="rounded-xl border border-border/60 bg-surface p-4">
@@ -314,21 +457,24 @@ function WholeDocumentOverview({ data, itemCount }: { data: PipelineResponse; it
           checks are added.
         </div>
       </div>
+
+      {sourceText && (
+        <details className="mt-4 rounded-lg border border-border/60 bg-background/30 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">
+            View submitted source document
+          </summary>
+          <div className="mt-3 max-h-96 overflow-auto">
+            <SourceQuote>{sourceText}</SourceQuote>
+          </div>
+        </details>
+      )}
     </section>
   );
 }
 
-function ReferenceList({ data, selected }: { data: PipelineResponse; selected: NavigatorItem }) {
-  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
-  const references =
-    selected.references.length > 0
-      ? selected.references
-      : safeArray(data.origin?.referenced_sources).map((source) => ({
-          name: source.name,
-          referenceType: source.reference_type,
-          detectedText: source.matched_text,
-          retrievalStatus: hasUnresolvedReferences ? "not_attempted" : source.status,
-        }));
+function ReferenceList({ selected }: { selected: NavigatorItem }) {
+  const hasUnresolvedReferences = hasSelectedUnresolvedReferences(selected);
+  const references = selected.references;
 
   if (references.length === 0)
     return <EmptyState>No referenced sources are attached to this selection.</EmptyState>;
@@ -399,6 +545,9 @@ export function DocumentNavigator({ data }: { data: PipelineResponse }) {
     );
   }
 
+  const layers = resolveSelectedLayers(data, selected);
+  const meaningText = selectedMeaningText(data, layers);
+
   return (
     <section className="space-y-4">
       <WholeDocumentOverview data={data} itemCount={items.length} />
@@ -462,10 +611,28 @@ export function DocumentNavigator({ data }: { data: PipelineResponse }) {
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Plain Meaning
                 </div>
-                <SelectedMeaning data={data} selected={selected} />
+                <SelectedMeaning data={data} selected={selected} layers={layers} />
               </div>
 
-              <StatusPanel data={data} selected={selected} />
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Translation
+                </div>
+                {meaningText ? (
+                  <PlainMeaningTranslation
+                    text={meaningText}
+                    hasUnresolvedReferences={hasSelectedUnresolvedReferences(selected)}
+                    embedded
+                  />
+                ) : (
+                  <EmptyState>
+                    Translation is available after plain meaning is attached to this selected
+                    passage.
+                  </EmptyState>
+                )}
+              </div>
+
+              <StatusPanel data={data} selected={selected} layers={layers} />
 
               {supportItems.length > 0 && (
                 <div>
@@ -489,7 +656,7 @@ export function DocumentNavigator({ data }: { data: PipelineResponse }) {
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   References
                 </div>
-                <ReferenceList data={data} selected={selected} />
+                <ReferenceList selected={selected} />
               </div>
             </div>
           </div>
