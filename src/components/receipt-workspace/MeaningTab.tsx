@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { translatePlainMeaning } from "../../lib/api-client";
 import type { PipelineResponse } from "../../types/pipeline";
+import { ANSWER_LANGUAGE_OPTIONS } from "./answer-language";
 import { ExtendedMeaningPanel, hasExtendedMeaningReferences } from "./ExtendedMeaningPanel";
 import {
   EmptyState,
@@ -14,49 +15,33 @@ import {
   splitParagraphs,
 } from "./shared";
 
-const TRANSLATION_LANGUAGES = [
-  { code: "es", label: "Spanish" },
-  { code: "ht", label: "Haitian Creole" },
-  { code: "pt", label: "Portuguese" },
-  { code: "fr", label: "French" },
-  { code: "ar", label: "Arabic" },
-  { code: "fa", label: "Persian / Farsi" },
-  { code: "prs", label: "Dari" },
-  { code: "ps", label: "Pashto" },
-  { code: "ur", label: "Urdu" },
-  { code: "hi", label: "Hindi" },
-  { code: "pa", label: "Punjabi" },
-  { code: "bn", label: "Bengali" },
-  { code: "zh", label: "Chinese (Simplified)" },
-  { code: "yue", label: "Cantonese" },
-  { code: "vi", label: "Vietnamese" },
-  { code: "ko", label: "Korean" },
-  { code: "tl", label: "Tagalog" },
-  { code: "my", label: "Burmese" },
-  { code: "ne", label: "Nepali" },
-  { code: "ru", label: "Russian" },
-  { code: "uk", label: "Ukrainian" },
-  { code: "tr", label: "Turkish" },
-  { code: "so", label: "Somali" },
-  { code: "am", label: "Amharic" },
-  { code: "ti", label: "Tigrinya" },
-  { code: "sw", label: "Swahili" },
-  { code: "rw", label: "Kinyarwanda" },
-];
-
 export function PlainMeaningTranslation({
   text,
   hasUnresolvedReferences,
   embedded = false,
+  language,
+  onLanguageChange,
+  showLanguageControl = true,
 }: {
   text: string;
   hasUnresolvedReferences: boolean;
   embedded?: boolean;
+  language?: string;
+  onLanguageChange?: (language: string) => void;
+  showLanguageControl?: boolean;
 }) {
-  const [language, setLanguage] = useState(TRANSLATION_LANGUAGES[0].code);
+  const [localLanguage, setLocalLanguage] = useState(ANSWER_LANGUAGE_OPTIONS[0].code);
   const [translatedText, setTranslatedText] = useState("");
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
+  const selectedLanguage = language ?? localLanguage;
+
+  const setSelectedLanguage = (value: string) => {
+    onLanguageChange?.(value);
+    if (language === undefined) setLocalLanguage(value);
+    setTranslatedText("");
+    setTranslationError(null);
+  };
 
   const translate = async () => {
     setTranslating(true);
@@ -64,7 +49,7 @@ export function PlainMeaningTranslation({
     setTranslatedText("");
 
     try {
-      const result = await translatePlainMeaning({ text, language });
+      const result = await translatePlainMeaning({ text, language: selectedLanguage });
       setTranslatedText(result.translated_text);
     } catch (error) {
       setTranslationError(error instanceof Error ? error.message : "Translation failed.");
@@ -76,29 +61,31 @@ export function PlainMeaningTranslation({
   const content = (
     <>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="min-w-48 flex-1 text-sm font-medium text-foreground">
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Target language
-          </span>
-          <select
-            value={language}
-            onChange={(event) => setLanguage(event.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            {TRANSLATION_LANGUAGES.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showLanguageControl && (
+          <label className="min-w-48 flex-1 text-sm font-medium text-foreground">
+            <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Target language
+            </span>
+            <select
+              value={selectedLanguage}
+              onChange={(event) => setSelectedLanguage(event.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              {ANSWER_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           onClick={translate}
           disabled={translating || !text.trim()}
           className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
-          {translating ? "Translating..." : "Translate after meaning"}
+          {translating ? "Translating..." : "Apply answer language"}
         </button>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
@@ -124,7 +111,13 @@ export function PlainMeaningTranslation({
   return <Section title="Translate Plain Meaning">{content}</Section>;
 }
 
-export function MeaningTab({ data }: { data: PipelineResponse }) {
+export function MeaningTab({
+  data,
+  answerLanguage,
+}: {
+  data: PipelineResponse;
+  answerLanguage?: string;
+}) {
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const atomicReferenceLabel = hasUnresolvedReferences
     ? "source reference"
@@ -176,6 +169,8 @@ export function MeaningTab({ data }: { data: PipelineResponse }) {
         <PlainMeaningTranslation
           text={plainMeaning}
           hasUnresolvedReferences={hasUnresolvedReferences}
+          language={answerLanguage}
+          showLanguageControl={!answerLanguage}
         />
       )}
 

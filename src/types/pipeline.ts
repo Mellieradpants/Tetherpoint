@@ -192,6 +192,73 @@ export interface VerificationRouteSummary {
   evidence: string[];
 }
 
+export interface DocumentFirstSourceAnchor {
+  anchor_id?: string | null;
+  source_type?: string | null;
+  document_id?: string | null;
+  page_number?: number | null;
+  block_id?: string | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  bbox?: number[] | null;
+  source_path?: string | null;
+}
+
+export interface DocumentFirstStructureNode {
+  document_id?: string | null;
+  structural_node_id: string;
+  parent_id?: string | null;
+  page_number?: number | null;
+  block_id?: string | null;
+  block_type?: string | null;
+  structural_type?: string | null;
+  order?: number | null;
+  depth?: number | null;
+  source_text?: string | null;
+  normalized_text?: string | null;
+  source_anchor?: DocumentFirstSourceAnchor | null;
+}
+
+export interface DocumentFirstRuleUnitCandidate {
+  candidate_id?: string | null;
+  document_id?: string | null;
+  structural_node_id?: string | null;
+  source_anchor?: DocumentFirstSourceAnchor | null;
+  source_text?: string | null;
+  selected_signal_ids?: string[] | null;
+  signal_types?: string[] | null;
+  anchor_texts?: string[] | null;
+  assembly_status?: string | null;
+  assembly_notes?: string[] | null;
+}
+
+export interface DocumentFirstV2Result {
+  status?: "executed" | "skipped" | "error" | string | null;
+  document_structure?: {
+    document_id?: string | null;
+    nodes?: DocumentFirstStructureNode[] | null;
+  } | null;
+  semantic_structure?: {
+    document_id?: string | null;
+    signals?: unknown[] | null;
+    signal_count?: number | null;
+  } | null;
+  selection_v2?: {
+    document_id?: string | null;
+    selected_signals?: unknown[] | null;
+    excluded_signals?: unknown[] | null;
+    selected_count?: number | null;
+    excluded_count?: number | null;
+  } | null;
+  rule_unit_candidates?: {
+    document_id?: string | null;
+    candidates?: DocumentFirstRuleUnitCandidate[] | null;
+    candidate_count?: number | null;
+    assembly_log?: string[] | null;
+  } | null;
+  error?: string | null;
+}
+
 export interface PipelineResponse {
   input: {
     raw_content: string;
@@ -242,4 +309,5 @@ export interface PipelineResponse {
     document_detected_state: string | null;
     jurisdiction_status: "matched" | "missing" | "unclear" | "conflict" | "needs_review";
   };
+  document_first_v2?: DocumentFirstV2Result;
 }

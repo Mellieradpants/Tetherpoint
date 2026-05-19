@@ -1,7 +1,7 @@
 export type DocumentNavigatorZoneId =
   | "whole_document_overview"
-  | "document_map"
-  | "selected_passage"
+  | "document_navigation"
+  | "source_document_viewer"
   | "attached_layers_panel"
   | "technical_trace";
 
@@ -29,17 +29,32 @@ export const DOCUMENT_NAVIGATOR_ZONES: Record<DocumentNavigatorZoneId, DocumentN
       "unresolved references/checks",
     ],
   },
-  document_map: {
-    id: "document_map",
-    label: "Document Map",
+  document_navigation: {
+    id: "document_navigation",
+    label: "Document Navigation",
     purpose: "Lets the user move through the mapped document.",
-    owns: ["sections/rules/passages", "readable labels", "status indicators", "selection behavior"],
+    owns: [
+      "document overview",
+      "pages",
+      "sections/passages",
+      "document search",
+      "jurisdiction summary",
+      "processing/source mapping status",
+      "selection behavior",
+    ],
   },
-  selected_passage: {
-    id: "selected_passage",
-    label: "Selected Passage",
-    purpose: "Shows the exact source material selected by the user.",
-    owns: ["selected source text", "passage location", "page/section/block anchor"],
+  source_document_viewer: {
+    id: "source_document_viewer",
+    label: "Source Document Viewer",
+    purpose: "Keeps the submitted or extracted source document as the main product surface.",
+    owns: [
+      "full submitted/extracted document",
+      "page/block grouped source text",
+      "selectable passages",
+      "active selection highlight",
+      "page/block/section anchors",
+      "original source text unchanged",
+    ],
   },
   attached_layers_panel: {
     id: "attached_layers_panel",
