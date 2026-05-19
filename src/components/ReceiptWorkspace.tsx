@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { GovernanceTab } from "./receipt-workspace/GovernanceTab";
 import { IssuesTab } from "./receipt-workspace/IssuesTab";
+import { ANSWER_LANGUAGE_OPTIONS } from "./receipt-workspace/answer-language";
 import { MeaningTab } from "./receipt-workspace/MeaningTab";
 import { OriginTab } from "./receipt-workspace/OriginTab";
 import { ResultActions } from "./receipt-workspace/ResultActions";
@@ -56,6 +57,7 @@ function TabButton({
 
 export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
   const [activeTab, setActiveTab] = useState<ResultTab>("meaning");
+  const [answerLanguage, setAnswerLanguage] = useState("en");
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const issueCount =
     safeArray(data.errors).length +
@@ -88,6 +90,22 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
               </p>
             </div>
             <div className="space-y-3">
+              <label className="block min-w-56 text-sm font-medium text-foreground">
+                <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Answer language
+                </span>
+                <select
+                  value={answerLanguage}
+                  onChange={(event) => setAnswerLanguage(event.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {ANSWER_LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 <StatusPill label="meaning" status={data.meaning?.status} />
                 <StatusPill label="governance" status={governanceStatus} />
@@ -106,7 +124,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
           </section>
         )}
 
-        <DocumentNavigator data={data} />
+        <DocumentNavigator data={data} answerLanguage={answerLanguage} />
 
         <details className="rounded-xl border border-border/60 bg-surface/60 p-3">
           <summary className="cursor-pointer px-1 text-sm font-semibold text-foreground">
@@ -129,7 +147,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
               ))}
             </nav>
 
-            {activeTab === "meaning" && <MeaningTab data={data} />}
+            {activeTab === "meaning" && <MeaningTab data={data} answerLanguage={answerLanguage} />}
             {activeTab === "origin" && <OriginTab data={data} />}
             {activeTab === "verification" && <VerificationTab data={data} />}
             {activeTab === "governance" && <GovernanceTab data={data} />}
