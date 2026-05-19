@@ -76,17 +76,17 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
 
   return (
     <div className="h-full overflow-y-auto bg-background">
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 pb-12">
-        <section className="rounded-xl border border-border/60 bg-surface p-4">
+      <div className="mx-auto max-w-[92rem] space-y-4 px-4 py-4 pb-12">
+        <section className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-                Result
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+                Document workspace
               </div>
               <h2 className="mt-2 text-2xl font-semibold text-foreground">Document Navigator</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Select a document item to keep the source text, plain meaning, support, references,
-                and status in view together.
+                Keep the document in the center. Select a page or section to see attached meaning,
+                source support, status, and review notes beside it.
               </p>
             </div>
             <div className="space-y-3">
@@ -117,7 +117,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
 
         {safeArray(data.errors).length > 0 && (
           <section
-            className={`rounded-xl border p-4 text-sm leading-6 ${toneClass(hasFatalError ? "bad" : "review")}`}
+            className={`rounded-lg border p-4 text-sm leading-6 ${toneClass(hasFatalError ? "bad" : "review")}`}
           >
             The analysis returned {data.errors.length} pipeline issue(s). Open the technical trace
             for details.
@@ -126,9 +126,12 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
 
         <DocumentNavigator data={data} answerLanguage={answerLanguage} />
 
-        <details className="rounded-xl border border-border/60 bg-surface/60 p-3">
+        <details className="rounded-lg border border-border/70 bg-surface/70 p-3 text-sm shadow-sm">
           <summary className="cursor-pointer px-1 text-sm font-semibold text-foreground">
             {DOCUMENT_NAVIGATOR_ZONES.technical_trace.label}
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              Raw IDs, route details, and diagnostic output
+            </span>
           </summary>
           <div className="mt-4 space-y-4">
             <SupportPathPanel data={data} />

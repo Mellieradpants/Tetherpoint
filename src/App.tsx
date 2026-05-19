@@ -6,55 +6,55 @@ import type { PipelineResponse } from "./types/pipeline";
 
 function HowToUse({ onStart }: { onStart: () => void }) {
   return (
-    <main className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center px-4 py-10">
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <section>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-gold-muted">
-              Source-backed analysis
+    <main className="flex-1 overflow-y-auto bg-background">
+      <div className="mx-auto flex min-h-full max-w-6xl flex-col justify-center px-4 py-10">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center">
+          <section className="max-w-3xl">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-primary">
+              Tetherpoint Document Navigator
             </div>
-            <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight text-foreground md:text-5xl">
-              Tetherpoint turns source text into a traceable result you can inspect.
+            <h2 className="mt-4 text-4xl font-semibold leading-tight text-foreground md:text-5xl">
+              Read the document first. See helpful context beside the part you select.
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-              Paste a document, run the analysis, then review the four result views: plain meaning,
-              origin, verification, and governance. Each view focuses on what is backed by the
-              submitted source and what still needs review.
+              Upload or paste a document. Tetherpoint keeps the source text visible, maps the
+              document into sections, and shows helpful information beside the part you select.
+            </p>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
+              It helps you see what a section says, what it may depend on, what source support is
+              attached, and what still needs review.
             </p>
             <button
               type="button"
               onClick={onStart}
-              className="mt-7 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              className="mt-7 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
-              Start using Tetherpoint
+              Open navigator
             </button>
           </section>
 
-          <section className="rounded-xl border border-border/60 bg-surface p-5">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-              How to use this tool
+          <section className="rounded-lg border border-border/70 bg-surface p-5 shadow-sm">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+              How it works
             </div>
             <div className="mt-4 space-y-4">
               <div>
-                <div className="text-sm font-semibold text-foreground">1. Paste source content</div>
+                <div className="text-sm font-semibold text-foreground">1. Add a document</div>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Use text, HTML, XML, or JSON from the document you want reviewed.
+                  Paste text, load the document sample, or upload a text-based PDF.
                 </p>
               </div>
               <div>
-                <div className="text-sm font-semibold text-foreground">2. Run the analysis</div>
+                <div className="text-sm font-semibold text-foreground">2. Select a section</div>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Tetherpoint parses the source, groups supported rule units, and runs meaning,
-                  origin, verification, and governance checks.
+                  The document stays in the center so you can move through pages and passages.
                 </p>
               </div>
               <div>
-                <div className="text-sm font-semibold text-foreground">
-                  3. Review the backed result
-                </div>
+                <div className="text-sm font-semibold text-foreground">3. Review attached help</div>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Read the plain meaning first, then use the other tabs to see source identity,
-                  verification routes, and governance review status.
+                  The side panel shows meaning, source support, references, jurisdiction, status,
+                  and review notes when they are available.
                 </p>
               </div>
             </div>
@@ -111,11 +111,11 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background md:h-screen">
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface shrink-0">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-semibold text-primary tracking-tight">Tetherpoint</h1>
           <span className="text-[10px] text-muted-foreground uppercase tracking-widest hidden sm:inline">
-            Source-Backed Analysis
+            Document Navigator
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -127,18 +127,18 @@ function App() {
                 setError(null);
                 setShowInput(true);
               }}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              New Analysis
+              New document
             </button>
           )}
           {result && (
             <button
               type="button"
               onClick={() => setShowInput((value) => !value)}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              {showInput ? "Hide Input" : "Show Input"}
+              {showInput ? "Hide document input" : "Show document input"}
             </button>
           )}
         </div>
@@ -150,11 +150,11 @@ function App() {
         <>
           {showInput && (
             <div
-              className={`border-b border-border bg-surface/50 ${
+              className={`border-b border-border bg-surface/80 ${
                 result ? "max-h-[40vh] overflow-y-auto" : ""
               }`}
             >
-              <div className="mx-auto max-w-3xl px-4 py-4">
+              <div className="mx-auto max-w-4xl px-4 py-4">
                 <AnalyzeForm onSubmit={handleSubmit} loading={loading} />
               </div>
             </div>
@@ -179,11 +179,10 @@ function App() {
               <div className="flex-1 flex items-center justify-center px-4">
                 <div className="max-w-md text-center">
                   <div className="text-lg font-semibold text-primary mb-1">
-                    Ready for source text
+                    Ready for a document
                   </div>
                   <div className="text-xs leading-6 text-muted-foreground">
-                    Paste content above and run the analysis to review plain meaning, origin,
-                    verification, and governance.
+                    Paste text, load the document sample, or upload a PDF to open the navigator.
                   </div>
                 </div>
               </div>
