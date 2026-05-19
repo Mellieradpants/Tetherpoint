@@ -44,7 +44,15 @@ const TRANSLATION_LANGUAGES = [
   { code: "rw", label: "Kinyarwanda" },
 ];
 
-function PlainMeaningTranslation({ text, hasUnresolvedReferences }: { text: string; hasUnresolvedReferences: boolean }) {
+export function PlainMeaningTranslation({
+  text,
+  hasUnresolvedReferences,
+  embedded = false,
+}: {
+  text: string;
+  hasUnresolvedReferences: boolean;
+  embedded?: boolean;
+}) {
   const [language, setLanguage] = useState(TRANSLATION_LANGUAGES[0].code);
   const [translatedText, setTranslatedText] = useState("");
   const [translationError, setTranslationError] = useState<string | null>(null);
@@ -65,18 +73,22 @@ function PlainMeaningTranslation({ text, hasUnresolvedReferences }: { text: stri
     }
   };
 
-  return (
-    <Section title="Translate Plain Meaning">
+  const content = (
+    <>
       <div className="flex flex-wrap items-end gap-3">
         <label className="min-w-48 flex-1 text-sm font-medium text-foreground">
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Target language</span>
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Target language
+          </span>
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             {TRANSLATION_LANGUAGES.map((option) => (
-              <option key={option.code} value={option.code}>{option.label}</option>
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
             ))}
           </select>
         </label>
@@ -90,18 +102,37 @@ function PlainMeaningTranslation({ text, hasUnresolvedReferences }: { text: stri
         </button>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        Translation runs only on the plain meaning returned by the Meaning step. It does not rerun analysis or change {hasUnresolvedReferences ? "source references" : "source-backed results"}.
+        Translation runs only on the plain meaning returned by the Meaning step. It does not rerun
+        analysis or change {hasUnresolvedReferences ? "source references" : "source-backed results"}
+        .
       </p>
-      {translationError && <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{translationError}</div>}
-      {translatedText && <div className="mt-4"><SourceQuote>{translatedText}</SourceQuote></div>}
-    </Section>
+      {translationError && (
+        <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {translationError}
+        </div>
+      )}
+      {translatedText && (
+        <div className="mt-4">
+          <SourceQuote>{translatedText}</SourceQuote>
+        </div>
+      )}
+    </>
   );
+
+  if (embedded) return content;
+
+  return <Section title="Translate Plain Meaning">{content}</Section>;
 }
 
 export function MeaningTab({ data }: { data: PipelineResponse }) {
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
-  const atomicReferenceLabel = hasUnresolvedReferences ? "source reference" : "source-backed result";
-  const plainMeaning = hideAtomicReferences(data.meaning?.overall_plain_meaning || data.meaning?.message || "", atomicReferenceLabel);
+  const atomicReferenceLabel = hasUnresolvedReferences
+    ? "source reference"
+    : "source-backed result";
+  const plainMeaning = hideAtomicReferences(
+    data.meaning?.overall_plain_meaning || data.meaning?.message || "",
+    atomicReferenceLabel,
+  );
   const paragraphs = splitParagraphs(plainMeaning);
   const sourceByRule = ruleTextById(data);
   const externalReferenceNeeded = hasExtendedMeaningReferences(data);
@@ -122,36 +153,64 @@ export function MeaningTab({ data }: { data: PipelineResponse }) {
       <Section title="Plain Meaning">
         {paragraphs.length > 0 ? (
           <div className="space-y-3 text-base leading-7 text-foreground">
-            {paragraphs.map((paragraph, index) => <p key={`meaning-${index}`}>{paragraph}</p>)}
+            {paragraphs.map((paragraph, index) => (
+              <p key={`meaning-${index}`}>{paragraph}</p>
+            ))}
           </div>
-        ) : <EmptyState>No plain meaning was returned for this analysis.</EmptyState>}
+        ) : (
+          <EmptyState>No plain meaning was returned for this analysis.</EmptyState>
+        )}
       </Section>
 
-      {externalReferenceNeeded && plainMeaning && (
-        hasUnresolvedReferences ? (
+      {externalReferenceNeeded &&
+        plainMeaning &&
+        (hasUnresolvedReferences ? (
           <Section title="Extended Meaning">
             <EmptyState>Unavailable until referenced source text is retrieved.</EmptyState>
           </Section>
-        ) : <ExtendedMeaningPanel data={data} plainMeaning={plainMeaning} />
-      )}
+        ) : (
+          <ExtendedMeaningPanel data={data} plainMeaning={plainMeaning} />
+        ))}
 
-      {plainMeaning && <PlainMeaningTranslation text={plainMeaning} hasUnresolvedReferences={hasUnresolvedReferences} />}
+      {plainMeaning && (
+        <PlainMeaningTranslation
+          text={plainMeaning}
+          hasUnresolvedReferences={hasUnresolvedReferences}
+        />
+      )}
 
       {meaningDetails.length > 0 && (
         <Section title="Details">
           <details className="rounded-lg border border-border/50 bg-background/30 p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-foreground">View source text used for this result</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">
+              View source text used for this result
+            </summary>
             <div className="mt-3 space-y-3">
               {meaningDetails.map((result, index) => {
                 const sourceText = sourceByRule.get(result.node_id) || result.source_text;
                 return (
-                  <div key={`meaning-source-${index}`} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                  <div
+                    key={`meaning-source-${index}`}
+                    className="rounded-lg border border-border/50 bg-background/40 p-3"
+                  >
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label="meaning detail" status={result.status} />
                     </div>
-                    {result.plain_meaning && <p className="mt-3 text-sm leading-6 text-muted-foreground">{hideAtomicReferences(result.plain_meaning, atomicReferenceLabel)}</p>}
-                    {sourceText && <div className="mt-3"><SourceQuote>{sourceText}</SourceQuote></div>}
-                    {(result.message || result.error) && <div className="mt-3 text-sm leading-6 text-gold-muted">{hideAtomicReferences(result.message || result.error, atomicReferenceLabel)}</div>}
+                    {result.plain_meaning && (
+                      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                        {hideAtomicReferences(result.plain_meaning, atomicReferenceLabel)}
+                      </p>
+                    )}
+                    {sourceText && (
+                      <div className="mt-3">
+                        <SourceQuote>{sourceText}</SourceQuote>
+                      </div>
+                    )}
+                    {(result.message || result.error) && (
+                      <div className="mt-3 text-sm leading-6 text-gold-muted">
+                        {hideAtomicReferences(result.message || result.error, atomicReferenceLabel)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
