@@ -145,9 +145,9 @@ function sourceMappingStatus(data: PipelineResponse): string {
   if (data.document_first_v2?.status === "executed") {
     return candidates.length ? `${candidates.length} attached passage(s)` : "document mapped";
   }
-  if (safeArray(data.rule_units?.rule_units).length) return "legacy rule units";
-  if (safeArray(data.structure?.nodes).length) return "legacy structure nodes";
-  return "source text fallback";
+  if (safeArray(data.rule_units?.rule_units).length) return "mapped sections";
+  if (safeArray(data.structure?.nodes).length) return "mapped text";
+  return "source text";
 }
 
 function candidateByNodeId(candidates: DocumentFirstRuleUnitCandidate[]) {
@@ -217,8 +217,8 @@ function ruleUnitBlock(unit: RuleUnit, index: number): NavigatorBlock {
     id: `rule-${unit.rule_unit_id || index}`,
     kind: "rule_unit",
     label: excerptLabel(unit.primary_text || unit.source_text_combined, `Rule ${index + 1}`),
-    navLabel: `Rule ${index + 1}`,
-    sublabel: unit.section_id ? `Section ${unit.section_id}` : "Rule unit",
+    navLabel: `Section ${index + 1}`,
+    sublabel: unit.section_id ? `Section ${unit.section_id}` : "Mapped passage",
     sourceText: text,
     sectionId: unit.section_id,
     status: unit.review_status || unit.assembly_status,
@@ -391,8 +391,8 @@ function WholeDocumentOverview({ data, itemCount }: { data: PipelineResponse; it
     : (data.governance?.status ?? data.output?.governance_status);
 
   return (
-    <section className="rounded-xl border border-border/60 bg-surface p-4">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+    <section className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm">
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
         {DOCUMENT_NAVIGATOR_ZONES.whole_document_overview.label}
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -431,8 +431,8 @@ function SelectedMeaning({
   if (!layers.meaning) {
     return (
       <EmptyState>
-        Meaning is not attached to this selected passage yet. Technical Trace keeps the raw backend
-        details.
+        Meaning is not attached to this selected passage yet. Technical Trace keeps the raw
+        processing details.
       </EmptyState>
     );
   }
@@ -583,10 +583,10 @@ function SourceDocumentViewer({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-surface p-4 lg:min-h-[36rem]">
+    <div className="rounded-lg border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
             {DOCUMENT_NAVIGATOR_ZONES.source_document_viewer.label}
           </div>
           <div className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -596,10 +596,13 @@ function SourceDocumentViewer({
         {selected.sublabel && <StatusPill label="active" status={selected.sublabel} />}
       </div>
 
-      <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-md bg-surface-raised/70 p-4 pr-2">
         {pages.map((page) => (
-          <section key={page.label} className="space-y-3">
-            <div className="sticky top-0 z-10 border-b border-border/60 bg-surface/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          <section
+            key={page.label}
+            className="mx-auto max-w-3xl space-y-3 rounded-md border border-border/80 bg-white px-5 py-5 shadow-sm"
+          >
+            <div className="sticky top-0 z-10 border-b border-border/60 bg-white/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
               {page.label}
             </div>
             <div className="space-y-3">
@@ -611,23 +614,23 @@ function SourceDocumentViewer({
                     type="button"
                     onClick={() => onSelect(block.id)}
                     aria-pressed={active}
-                    className={`w-full rounded-lg border p-4 text-left transition-colors ${
+                    className={`w-full rounded-md border p-4 text-left transition-colors ${
                       active
-                        ? "border-gold/60 bg-gold/10 shadow-[0_0_0_1px_rgba(214,176,81,0.2)]"
-                        : "border-border/50 bg-background/25 hover:border-border"
+                        ? "border-primary/60 bg-accent/55 shadow-[0_0_0_2px_rgba(43,129,157,0.14)]"
+                        : "border-transparent bg-white hover:border-border hover:bg-surface-raised/45"
                     }`}
                   >
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                         {block.sublabel}
                       </span>
                       {block.sectionId && (
-                        <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                           Section {block.sectionId}
                         </span>
                       )}
                     </div>
-                    <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-foreground">
+                    <div className="whitespace-pre-wrap break-words font-serif text-[15px] leading-8 text-foreground">
                       {block.sourceText}
                     </div>
                   </button>
@@ -668,8 +671,8 @@ function DocumentNavigation({
   const jurisdiction = data.jurisdiction_context;
 
   return (
-    <aside className="rounded-xl border border-border/60 bg-surface p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+    <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
         {DOCUMENT_NAVIGATOR_ZONES.document_navigation.label}
       </div>
 
@@ -707,8 +710,8 @@ function DocumentNavigation({
                 aria-pressed={active}
                 className={`w-full rounded-lg border p-3 text-left transition-colors ${
                   active
-                    ? "border-gold/50 bg-gold/10"
-                    : "border-border/50 bg-background/30 hover:border-border"
+                    ? "border-primary/45 bg-accent/60"
+                    : "border-border/60 bg-surface-raised/60 hover:border-border"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -750,8 +753,8 @@ function AttachedLayersInspector({
   const jurisdiction = data.jurisdiction_context;
 
   return (
-    <aside className="rounded-xl border border-border/60 bg-surface p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
+    <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
         {DOCUMENT_NAVIGATOR_ZONES.attached_layers_panel.label}
       </div>
 
@@ -856,7 +859,7 @@ function AttachedLayersInspector({
           </div>
         )}
 
-        <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("neutral")}`}>
+        <div className={`rounded-md border p-3 text-sm leading-6 ${toneClass("neutral")}`}>
           Possible next checks can be generated in {answerLanguageLabel(answerLanguage)} from the
           selected passage and its attached status. They are not legal advice.
         </div>
@@ -903,7 +906,7 @@ export function DocumentNavigator({
     <section className="space-y-4">
       <WholeDocumentOverview data={data} itemCount={blocks.length} />
 
-      <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)_23rem]">
+      <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1.55fr)_21rem]">
         <DocumentNavigation
           data={data}
           blocks={blocks}
