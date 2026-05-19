@@ -330,11 +330,7 @@ function StatusPanel({
   layers: SelectedLayerContext;
 }) {
   const hasUnresolvedReferences = hasSelectedUnresolvedReferences(selected);
-  const governanceStatus = layers.governanceIssues.length
-    ? "needs_review"
-    : hasUnresolvedReferences
-      ? "review_required"
-      : (data.governance?.status ?? data.output?.governance_status);
+  const selectedGovernanceStatus = layers.governanceIssues.length ? "needs_review" : "not_attached";
 
   return (
     <div className="space-y-3">
@@ -347,7 +343,7 @@ function StatusPanel({
         {layers.verification?.verification_path_available && (
           <StatusPill label="path" status="available" />
         )}
-        <StatusPill label="governance" status={governanceStatus} />
+        <StatusPill label="governance" status={selectedGovernanceStatus} />
       </div>
 
       {hasUnresolvedReferences && (
@@ -367,6 +363,10 @@ function StatusPanel({
             />
           ))}
         </div>
+      )}
+
+      {layers.governanceIssues.length === 0 && (
+        <EmptyState>No governance flags are attached to this selected passage yet.</EmptyState>
       )}
 
       {layers.verification && (
