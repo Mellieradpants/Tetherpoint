@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
   DocumentFirstRuleUnitCandidate,
   DocumentFirstSourceAnchor,
@@ -6,8 +6,11 @@ import type {
   MeaningNodeResult,
   PipelineResponse,
   RuleUnit,
+  RuleUnitReferencedSource,
   StructureNode,
+  VerificationNode,
 } from "../../types/pipeline";
+import { ANSWER_LANGUAGE_OPTIONS } from "./answer-language";
 import {
   EmptyState,
   hasUnresolvedReferencedSources,
@@ -18,13 +21,10 @@ import {
 
 type NavigatorBlock = {
   id: string;
-  kind: "document_block" | "candidate" | "rule_unit" | "structure_node" | "raw_document";
   label: string;
-  navLabel: string;
-  sublabel: string;
+  sectionLabel: string;
   sourceText: string;
   pageNumber?: number | null;
-  blockId?: string | null;
   sectionId?: string | null;
   ruleUnitId?: string | null;
   nodeId?: string | null;
@@ -32,11 +32,13 @@ type NavigatorBlock = {
   order: number;
 };
 
-type TranslatedBlock = {
+type MeaningPacket = {
   block: NavigatorBlock;
   meaning?: MeaningNodeResult;
+  verification?: VerificationNode;
   text: string;
   missingInformation: string[];
+  references: RuleUnitReferencedSource[];
 };
 
 function present(value: string | null | undefined): value is string {
@@ -47,54 +49,33 @@ function normalizedText(value: string | null | undefined): string {
   return value?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
 }
 
-function sameSourceText(
-  left: string | null | undefined,
-  right: string | null | undefined,
-): boolean {
-  const normalizedLeft = normalizedText(left);
-  const normalizedRight = normalizedText(right);
-  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
-}
-
-function includesSelectedId(ids: string[], candidate: string | null | undefined): boolean {
-  return Boolean(candidate && ids.includes(candidate));
+function sameSourceText(left: string | null | undefined, right: string | null | undefined): boolean {
+  const a = normalizedText(left);
+  const b = normalizedText(right);
+  return Boolean(a && b && a === b);
 }
 
 function excerptLabel(value: string | null | undefined, fallback: string): string {
   const text = value?.replace(/\s+/g, " ").trim();
   if (!text) return fallback;
-  return text.length > 92 ? `${text.slice(0, 89)}...` : text;
+  return text.length > 112 ? `${text.slice(0, 109)}...` : text;
 }
 
 function sourceNameLabel(data: PipelineResponse): string {
-  const candidate = safeArray(data.document_first_v2?.rule_unit_candidates?.candidates).find(
-    (item) => item.document_id?.trim(),
-  );
-  const structureNode = safeArray(data.document_first_v2?.document_structure?.nodes).find((node) =>
-    node.document_id?.trim(),
-  );
+  const candidate = safeArray(data.document_first_v2?.rule_unit_candidates?.candidates).find((item) => item.document_id?.trim());
+  const structureNode = safeArray(data.document_first_v2?.document_structure?.nodes).find((node) => node.document_id?.trim());
   const originSignal = [
     ...safeArray(data.origin?.origin_identity_signals),
     ...safeArray(data.origin?.origin_metadata_signals),
   ].find((signal) => signal.value?.trim());
 
-  return (
-    candidate?.document_id ||
-    structureNode?.document_id ||
-    originSignal?.value ||
-    "Submitted document"
-  );
+  return candidate?.document_id || structureNode?.document_id || originSignal?.value || "Submitted document";
 }
 
 function anchorLabel(anchor: DocumentFirstSourceAnchor | null | undefined): string {
-  return (
-    [
-      anchor?.page_number ? `Page ${anchor.page_number}` : "",
-      anchor?.block_id ? `Block ${anchor.block_id}` : "",
-    ]
-      .filter(present)
-      .join(" / ") || "Document passage"
-  );
+  return [anchor?.page_number ? `Page ${anchor.page_number}` : "", anchor?.block_id ? `Block ${anchor.block_id}` : ""]
+    .filter(present)
+    .join(" / ") || "Document passage";
 }
 
 function candidateByNodeId(candidates: DocumentFirstRuleUnitCandidate[]) {
@@ -113,29 +94,21 @@ function documentFirstBlocks(data: PipelineResponse): NavigatorBlock[] {
   return nodes
     .filter((node: DocumentFirstStructureNode) => {
       const text = node.source_text || node.normalized_text || "";
-      return (
-        Boolean(text.trim()) &&
-        node.structural_type !== "document" &&
-        node.structural_type !== "page"
-      );
+      return Boolean(text.trim()) && node.structural_type !== "document" && node.structural_type !== "page";
     })
     .map((node: DocumentFirstStructureNode, index: number) => {
       const candidate = candidatesByNodeId.get(node.structural_node_id);
       const anchor = node.source_anchor || candidate?.source_anchor;
       const text = node.source_text || node.normalized_text || "";
-      const blockId = node.block_id || anchor?.block_id;
-      const pageNumber = node.page_number ?? anchor?.page_number;
-      const blockType = node.block_type || node.structural_type || "passage";
+      const sectionId = node.block_id || anchor?.block_id || String(index + 1);
 
       return {
         id: node.structural_node_id,
-        kind: candidate ? "candidate" : "document_block",
-        label: excerptLabel(text, `Passage ${index + 1}`),
-        navLabel: `${blockType.replaceAll("_", " ")} ${index + 1}`,
-        sublabel: anchorLabel(anchor),
+        label: excerptLabel(text, `Section ${index + 1}`),
+        sectionLabel: `Section ${sectionId}`,
         sourceText: text,
-        pageNumber,
-        blockId,
+        pageNumber: node.page_number ?? anchor?.page_number,
+        sectionId,
         nodeId: node.structural_node_id,
         sourceNodeIds: [node.structural_node_id],
         order: node.order ?? index + 1,
@@ -145,21 +118,17 @@ function documentFirstBlocks(data: PipelineResponse): NavigatorBlock[] {
 
 function ruleUnitBlock(unit: RuleUnit, index: number): NavigatorBlock {
   const text = unit.source_text_combined || unit.primary_text || "";
+  const sectionId = unit.section_id || String(index + 1);
+
   return {
     id: `rule-${unit.rule_unit_id || index}`,
-    kind: "rule_unit",
-    label: excerptLabel(unit.primary_text || unit.source_text_combined, `Passage ${index + 1}`),
-    navLabel: `Passage ${index + 1}`,
-    sublabel: unit.section_id ? `Section ${unit.section_id}` : "Mapped passage",
+    label: excerptLabel(text, `Section ${index + 1}`),
+    sectionLabel: `Section ${sectionId}`,
     sourceText: text,
-    sectionId: unit.section_id,
+    sectionId,
     ruleUnitId: unit.rule_unit_id,
     nodeId: unit.primary_node_id,
-    sourceNodeIds: [
-      unit.primary_node_id,
-      ...safeArray(unit.source_node_ids),
-      ...safeArray(unit.fragment_node_ids),
-    ].filter(present),
+    sourceNodeIds: [unit.primary_node_id, ...safeArray(unit.source_node_ids), ...safeArray(unit.fragment_node_ids)].filter(present),
     order: index + 1,
   };
 }
@@ -167,449 +136,264 @@ function ruleUnitBlock(unit: RuleUnit, index: number): NavigatorBlock {
 function legacyStructureBlocks(data: PipelineResponse): NavigatorBlock[] {
   return safeArray(data.structure?.nodes)
     .filter((node: StructureNode) => (node.source_text || node.normalized_text || "").trim())
-    .map((node: StructureNode, index: number) => ({
-      id: `structure-${node.node_id || index}`,
-      kind: "structure_node",
-      label: excerptLabel(node.source_text || node.normalized_text, `Passage ${index + 1}`),
-      navLabel: `Passage ${index + 1}`,
-      sublabel: node.section_id ? `Section ${node.section_id}` : "Document passage",
-      sourceText: node.source_text || node.normalized_text || "",
-      sectionId: node.section_id,
-      nodeId: node.node_id,
-      sourceNodeIds: [node.node_id].filter(present),
-      order: index + 1,
-    }));
+    .map((node: StructureNode, index: number) => {
+      const sectionId = node.section_id || String(index + 1);
+      return {
+        id: `structure-${node.node_id || index}`,
+        label: excerptLabel(node.source_text || node.normalized_text, `Section ${index + 1}`),
+        sectionLabel: `Section ${sectionId}`,
+        sourceText: node.source_text || node.normalized_text || "",
+        sectionId,
+        nodeId: node.node_id,
+        sourceNodeIds: [node.node_id].filter(present),
+        order: index + 1,
+      };
+    });
 }
 
 function rawDocumentBlock(data: PipelineResponse): NavigatorBlock[] {
   const text = data.input?.raw_content || "";
   if (!text.trim()) return [];
-
-  return [
-    {
-      id: "raw-document",
-      kind: "raw_document",
-      label: "Submitted document",
-      navLabel: "Document",
-      sublabel: "Original source",
-      sourceText: text,
-      sourceNodeIds: [],
-      order: 1,
-    },
-  ];
+  return [{ id: "raw-document", label: "Submitted document", sectionLabel: "Document", sourceText: text, sourceNodeIds: [], order: 1 }];
 }
 
 function buildDocumentBlocks(data: PipelineResponse): NavigatorBlock[] {
   const documentFirst = documentFirstBlocks(data);
   if (documentFirst.length > 0) return documentFirst;
-
-  const rules = safeArray(data.rule_units?.rule_units)
-    .filter((unit: RuleUnit) => (unit.source_text_combined || unit.primary_text || "").trim())
-    .map(ruleUnitBlock);
+  const rules = safeArray(data.rule_units?.rule_units).filter((unit: RuleUnit) => (unit.source_text_combined || unit.primary_text || "").trim()).map(ruleUnitBlock);
   if (rules.length > 0) return rules;
-
   const structure = legacyStructureBlocks(data);
   if (structure.length > 0) return structure;
-
   return rawDocumentBlock(data);
 }
 
-function pageKey(block: NavigatorBlock): string {
-  return block.pageNumber ? `page-${block.pageNumber}` : "document";
-}
-
-function pageLabel(block: NavigatorBlock): string {
-  return block.pageNumber ? `Page ${block.pageNumber}` : "Document";
-}
-
-function groupBlocksByPage(blocks: NavigatorBlock[]) {
-  const groups = new Map<string, { label: string; blocks: NavigatorBlock[] }>();
-
-  blocks.forEach((block) => {
-    const key = pageKey(block);
-    if (!groups.has(key)) groups.set(key, { label: pageLabel(block), blocks: [] });
-    groups.get(key)?.blocks.push(block);
-  });
-
-  return Array.from(groups.values()).map((group) => ({
-    ...group,
-    blocks: group.blocks.sort((left, right) => left.order - right.order),
-  }));
-}
-
-function selectedIds(block: NavigatorBlock): string[] {
+function blockIds(block: NavigatorBlock): string[] {
   return [block.ruleUnitId, block.nodeId, ...block.sourceNodeIds].filter(present);
 }
 
 function meaningForBlock(data: PipelineResponse, block: NavigatorBlock): MeaningNodeResult | undefined {
-  const ids = selectedIds(block);
+  const ids = blockIds(block);
+  return safeArray(data.meaning?.node_results).find((result) => ids.includes(result.node_id) || sameSourceText(result.source_text, block.sourceText));
+}
 
-  return safeArray(data.meaning?.node_results).find(
-    (result) =>
-      includesSelectedId(ids, result.node_id) || sameSourceText(result.source_text, block.sourceText),
+function verificationForBlock(data: PipelineResponse, block: NavigatorBlock): VerificationNode | undefined {
+  const ids = blockIds(block);
+  return safeArray(data.verification?.node_results).find(
+    (result) => ids.includes(result.node_id) || (result.rule_unit_id ? ids.includes(result.rule_unit_id) : false) || safeArray(result.source_node_ids).some((id) => ids.includes(id)),
   );
 }
 
-function meaningText(data: PipelineResponse, block: NavigatorBlock): string {
+function ruleUnitMatchesBlock(unit: RuleUnit, block: NavigatorBlock): boolean {
+  const ids = blockIds(block);
+  const unitIds = [unit.rule_unit_id, unit.primary_node_id, ...safeArray(unit.source_node_ids), ...safeArray(unit.fragment_node_ids)].filter(present);
+  const blockText = normalizedText(block.sourceText);
+  const unitText = normalizedText(unit.source_text_combined || unit.primary_text || "");
+  return unitIds.some((id) => ids.includes(id)) || Boolean(blockText && unitText && (unitText.includes(blockText) || blockText.includes(unitText)));
+}
+
+function referencePacketsForBlock(data: PipelineResponse, block: NavigatorBlock): RuleUnitReferencedSource[] {
+  const packets: RuleUnitReferencedSource[] = [];
+  const seen = new Set<string>();
+  safeArray(data.rule_units?.rule_units)
+    .filter((unit) => ruleUnitMatchesBlock(unit, block))
+    .forEach((unit) => {
+      safeArray(unit.referenced_sources).forEach((packet) => {
+        const key = `${packet.name}|${packet.matchedText}|${packet.officialSourceUrl || ""}`.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        packets.push(packet);
+      });
+    });
+  return packets;
+}
+
+function packetForBlock(data: PipelineResponse, block: NavigatorBlock): MeaningPacket {
   const meaning = meaningForBlock(data, block);
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
-  const atomicReferenceLabel = hasUnresolvedReferences
-    ? "source reference"
-    : "source-backed result";
-  return hideAtomicReferences(meaning?.plain_meaning || "", atomicReferenceLabel);
+  const referenceLabel = hasUnresolvedReferences ? "source reference" : "source-backed result";
+  return {
+    block,
+    meaning,
+    verification: verificationForBlock(data, block),
+    text: hideAtomicReferences(meaning?.plain_meaning || "", referenceLabel),
+    missingInformation: safeArray(meaning?.missing_information),
+    references: referencePacketsForBlock(data, block),
+  };
 }
 
-function buildTranslatedBlocks(data: PipelineResponse, blocks: NavigatorBlock[]): TranslatedBlock[] {
-  return blocks.map((block) => {
-    const meaning = meaningForBlock(data, block);
-    return {
-      block,
-      meaning,
-      text: meaningText(data, block),
-      missingInformation: safeArray(meaning?.missing_information),
-    };
-  });
+function languageLabel(language: string): string {
+  return ANSWER_LANGUAGE_OPTIONS.find((option) => option.code === language)?.label || "English";
 }
 
-function DocumentIntro({ data, itemCount }: { data: PipelineResponse; itemCount: number }) {
-  return (
-    <section className="rounded-xl border border-border/70 bg-surface p-5 shadow-sm">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-primary">
-            Meaning Diff Document Navigator
-          </div>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-            Translate the meaning
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Read the original document beside a plain-language meaning version. The source text stays
-            unchanged; the translated side explains what the selected wording means.
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm leading-6 text-muted-foreground lg:min-w-64">
-          <div className="font-semibold text-foreground">{sourceNameLabel(data)}</div>
-          <div>{itemCount} passage{itemCount === 1 ? "" : "s"} available</div>
-        </div>
-      </div>
-    </section>
-  );
+function handleSelectableKeyDown(event: KeyboardEvent<HTMLElement>, onSelect: () => void) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onSelect();
 }
 
-function DocumentMap({
-  blocks,
-  selected,
-  query,
-  onQueryChange,
-  onSelect,
-}: {
-  blocks: NavigatorBlock[];
-  selected: NavigatorBlock;
-  query: string;
-  onQueryChange: (value: string) => void;
-  onSelect: (id: string) => void;
-}) {
-  const normalizedQuery = normalizedText(query);
-  const visibleBlocks = normalizedQuery
-    ? blocks.filter((block) =>
-        normalizedText(`${block.label} ${block.sublabel} ${block.sourceText}`).includes(
-          normalizedQuery,
-        ),
-      )
-    : blocks;
-
-  return (
-    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-sm">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-            Document map
-          </div>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Choose a passage to keep the original wording and plain meaning aligned.
-          </p>
-        </div>
-        <label className="block text-sm font-medium text-foreground">
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Search document
-          </span>
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search source text"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-      </div>
-
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-        {visibleBlocks.map((block, index) => {
-          const active = block.id === selected.id;
-          return (
-            <button
-              key={block.id}
-              type="button"
-              onClick={() => onSelect(block.id)}
-              aria-pressed={active}
-              className={`min-w-52 rounded-lg border p-3 text-left transition-colors ${
-                active
-                  ? "border-primary/50 bg-accent/65"
-                  : "border-border/60 bg-surface-raised/60 hover:border-border"
-              }`}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {block.navLabel || `Passage ${index + 1}`}
-              </div>
-              <div className="mt-2 text-sm font-medium leading-5 text-foreground">
-                {block.label}
-              </div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">{block.sublabel}</div>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function OriginalDocument({
-  pages,
-  selected,
-  onSelect,
-}: {
-  pages: Array<{ label: string; blocks: NavigatorBlock[] }>;
-  selected: NavigatorBlock;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
-      <div className="mb-4">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-          Original document
-        </div>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Exact document wording. Select any passage to align the meaning document.
-        </p>
-      </div>
-
-      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-lg bg-surface-raised/70 p-4 pr-2">
-        {pages.map((page) => (
-          <section
-            key={page.label}
-            className="mx-auto max-w-3xl space-y-3 rounded-md border border-border/80 bg-white px-5 py-5 shadow-sm"
-          >
-            <div className="sticky top-0 z-10 border-b border-border/60 bg-white/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-              {page.label}
-            </div>
-            <div className="space-y-3">
-              {page.blocks.map((block) => {
-                const active = block.id === selected.id;
-                return (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => onSelect(block.id)}
-                    aria-pressed={active}
-                    className={`w-full rounded-md border p-4 text-left transition-colors ${
-                      active
-                        ? "border-primary/60 bg-accent/55 shadow-[0_0_0_2px_rgba(43,129,157,0.14)]"
-                        : "border-transparent bg-white hover:border-border hover:bg-surface-raised/45"
-                    }`}
-                  >
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        {block.sublabel}
-                      </span>
-                      {block.sectionId && (
-                        <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                          Section {block.sectionId}
-                        </span>
-                      )}
-                    </div>
-                    <div className="whitespace-pre-wrap break-words font-serif text-[15px] leading-8 text-foreground">
-                      {block.sourceText}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MeaningPassage({
-  translated,
-  active,
-  onSelect,
-}: {
-  translated: TranslatedBlock;
-  active: boolean;
-  onSelect: (id: string) => void;
-}) {
-  const paragraphs = splitParagraphs(translated.text);
-  const statusMessage = translated.meaning?.error || translated.meaning?.message || "";
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(translated.block.id)}
-      aria-pressed={active}
-      className={`w-full rounded-md border p-4 text-left transition-colors ${
-        active
-          ? "border-primary/60 bg-accent/50 shadow-[0_0_0_2px_rgba(43,129,157,0.14)]"
-          : "border-border/60 bg-white hover:border-border hover:bg-surface-raised/45"
-      }`}
-    >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          {translated.block.sublabel}
-        </span>
-        {translated.block.sectionId && (
-          <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Section {translated.block.sectionId}
-          </span>
-        )}
-      </div>
-
-      {paragraphs.length > 0 ? (
-        <div className="space-y-3 text-sm leading-7 text-foreground">
-          {paragraphs.map((paragraph, index) => (
-            <p key={`${translated.block.id}-meaning-${index}`}>{paragraph}</p>
-          ))}
-        </div>
-      ) : (
-        <EmptyState>No plain meaning is attached to this passage yet.</EmptyState>
-      )}
-
-      {statusMessage && (
-        <p className="mt-3 text-xs leading-5 text-muted-foreground">{statusMessage}</p>
-      )}
-
-      {translated.missingInformation.length > 0 && (
-        <div className="mt-3 rounded-md border border-border/60 bg-surface-raised/60 p-3 text-xs leading-5 text-muted-foreground">
-          Missing context: {translated.missingInformation.join(", ")}
-        </div>
-      )}
-    </button>
-  );
-}
-
-function TranslatedMeaningDocument({
-  translatedBlocks,
-  selected,
-  onSelect,
-}: {
-  translatedBlocks: TranslatedBlock[];
-  selected: NavigatorBlock;
-  onSelect: (id: string) => void;
-}) {
-  const groups = new Map<string, { label: string; blocks: TranslatedBlock[] }>();
-
-  translatedBlocks.forEach((translated) => {
-    const key = pageKey(translated.block);
-    if (!groups.has(key)) groups.set(key, { label: pageLabel(translated.block), blocks: [] });
-    groups.get(key)?.blocks.push(translated);
-  });
-
-  const pages = Array.from(groups.values()).map((group) => ({
-    ...group,
-    blocks: group.blocks.sort((left, right) => left.block.order - right.block.order),
-  }));
-
-  return (
-    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
-      <div className="mb-4">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-          Translated meaning document
-        </div>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Plain-language meaning for the same passages, kept beside the original.
-        </p>
-      </div>
-
-      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-lg bg-surface-raised/70 p-4 pr-2">
-        {pages.map((page) => (
-          <section
-            key={page.label}
-            className="mx-auto max-w-3xl space-y-3 rounded-md border border-border/80 bg-white px-5 py-5 shadow-sm"
-          >
-            <div className="sticky top-0 z-10 border-b border-border/60 bg-white/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-              {page.label}
-            </div>
-            <div className="space-y-3">
-              {page.blocks.map((translated) => (
-                <MeaningPassage
-                  key={translated.block.id}
-                  translated={translated}
-                  active={translated.block.id === selected.id}
-                  onSelect={onSelect}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function DocumentNavigator({
+function NavigatorHeader({
   data,
   answerLanguage,
+  onAnswerLanguageChange,
 }: {
   data: PipelineResponse;
   answerLanguage: string;
+  onAnswerLanguageChange: (language: string) => void;
 }) {
+  const jurisdiction = data.jurisdiction_context?.user_selected_state || "I don't know";
+  const sourceType = data.document_first_v2?.status === "executed" ? "Document packet" : data.input?.content_type || "source text";
+
+  return (
+    <section className="sticky top-0 z-30 rounded-b-[2rem] border-b border-border/70 bg-white/95 px-5 py-4 shadow-xl backdrop-blur">
+      <div className="mx-auto max-w-5xl">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Meaning Diff</div>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">meaning-navigator</h2>
+          </div>
+          <select
+            value={answerLanguage}
+            onChange={(event) => onAnswerLanguageChange(event.target.value)}
+            aria-label="Answer language"
+            className="rounded-full border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {ANSWER_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 text-xs text-muted-foreground">
+          <span className="shrink-0 rounded-full border border-border/70 bg-surface px-3 py-1">{sourceType}</span>
+          <span className="shrink-0 rounded-full border border-border/70 bg-surface px-3 py-1">{sourceNameLabel(data)}</span>
+          <span className="shrink-0 rounded-full border border-border/70 bg-surface px-3 py-1">Jurisdiction: {jurisdiction}</span>
+          <span className="shrink-0 rounded-full border border-border/70 bg-surface px-3 py-1">Language: {languageLabel(answerLanguage)}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SectionCard({ block, active, onSelect }: { block: NavigatorBlock; active: boolean; onSelect: (id: string) => void }) {
+  const title = block.sectionId ? `Section ${block.sectionId}` : block.sectionLabel;
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(block.id)}
+      onKeyDown={(event) => handleSelectableKeyDown(event, () => onSelect(block.id))}
+      aria-pressed={active}
+      className={`cursor-pointer rounded-2xl border bg-[#f7f2ea] px-6 py-7 shadow-sm transition-all ${active ? "border-[#9a6b35] shadow-[0_0_0_2px_rgba(154,107,53,0.08)]" : "border-transparent hover:border-[#c99a5a]/60"}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="font-mono text-sm font-semibold uppercase tracking-[0.22em] text-[#9a6b35]">{title}</div>
+        <div className="text-[#9a6b35]">*</div>
+      </div>
+      <div className="mt-5 whitespace-pre-wrap break-words font-serif text-[1.65rem] leading-[1.85] text-[#3d3934] md:text-[2rem]">{block.sourceText}</div>
+    </article>
+  );
+}
+
+function DocumentReader({
+  blocks,
+  selectedId,
+  onSelect,
+  query,
+  onQueryChange,
+}: {
+  blocks: NavigatorBlock[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+}) {
+  const visibleBlocks = normalizedText(query)
+    ? blocks.filter((block) => normalizedText(`${block.label} ${block.sectionLabel} ${block.sourceText}`).includes(normalizedText(query)))
+    : blocks;
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8 pb-32">
+      <div className="mb-6 rounded-2xl border border-border/70 bg-white/70 p-4 shadow-sm backdrop-blur">
+        <label className="block text-sm font-medium text-foreground">
+          <span className="mb-2 block font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Search document</span>
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search source text" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring" />
+        </label>
+      </div>
+      <div className="space-y-6">
+        {visibleBlocks.map((block) => <SectionCard key={block.id} block={block} active={block.id === selectedId} onSelect={onSelect} />)}
+      </div>
+    </main>
+  );
+}
+
+function InlineSources({ references }: { references: RuleUnitReferencedSource[] }) {
+  if (references.length === 0) return null;
+  const linked = references.filter((source) => source.officialSourceUrl?.trim());
+  const unlinked = references.filter((source) => !source.officialSourceUrl?.trim());
+  return (
+    <p className="mt-5 text-base leading-7 text-[#6b6258]">
+      {linked.length > 0 && <span>This can be verified here: {linked.map((source, index) => <span key={`${source.name}-${index}`}>{index > 0 && ", "}<a href={source.officialSourceUrl || undefined} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="font-semibold text-[#2f6f4e] underline decoration-dotted underline-offset-4">{source.name}</a></span>)}.</span>}
+      {unlinked.length > 0 && <span className={linked.length > 0 ? "ml-1" : ""}>Official link not mapped yet for {unlinked.map((source) => source.name).join(", ")}.</span>}
+    </p>
+  );
+}
+
+function MeaningDrawer({ packet, answerLanguage, onClose }: { packet: MeaningPacket; answerLanguage: string; onClose: () => void }) {
+  const paragraphs = splitParagraphs(packet.text);
+  const statusMessage = packet.meaning?.error || packet.meaning?.message || "";
+  const routes = safeArray(packet.verification?.expected_record_systems);
+  const verifyNote = packet.verification?.verification_notes;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end bg-black/30 backdrop-blur-[1px]">
+      <section className="max-h-[78vh] w-full overflow-y-auto rounded-t-[2rem] bg-[#fbfaf8] shadow-2xl">
+        <div className="sticky top-0 z-10 border-b border-[#e6ded5] bg-[#fbfaf8]/95 px-6 py-4 backdrop-blur">
+          <div className="mx-auto mb-4 h-2 w-24 rounded-full bg-[#d8d0c6]" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="font-mono text-base font-semibold uppercase tracking-[0.22em] text-[#b87b3c]">{packet.block.sectionLabel}</div>
+            <button type="button" onClick={onClose} className="rounded-full bg-[#eee9e3] px-4 py-2 text-xl font-semibold text-[#8a8178] transition-colors hover:bg-[#e4ddd5]" aria-label="Close meaning drawer">x</button>
+          </div>
+        </div>
+        <div className="mx-auto max-w-4xl space-y-8 px-6 py-8">
+          <section className="rounded-2xl border border-[#e0bf7e] bg-white px-6 py-7 shadow-sm">
+            <div className="mb-5 font-mono text-base font-semibold uppercase tracking-[0.22em] text-[#b87b3c]">Plain meaning</div>
+            {paragraphs.length > 0 ? <div className="space-y-4 font-serif text-[1.65rem] leading-[1.8] text-[#2f2c28] md:text-[2rem]">{paragraphs.map((paragraph, index) => <p key={`${packet.block.id}-meaning-${index}`}>{paragraph}</p>)}</div> : <EmptyState>No plain meaning is attached to this passage yet.</EmptyState>}
+            <InlineSources references={packet.references} />
+            <p className="mt-5 text-sm leading-6 text-[#8a8178]">Display language: {languageLabel(answerLanguage)}.</p>
+          </section>
+          {statusMessage && <div className="rounded-xl border border-[#e0bf7e] bg-[#fff8e7] p-4 text-sm leading-6 text-[#7a5b2a]">{statusMessage}</div>}
+          {packet.missingInformation.length > 0 && <div className="rounded-xl border border-[#e0bf7e] bg-[#fff8e7] p-4 text-sm leading-6 text-[#7a5b2a]">Missing context: {packet.missingInformation.join(", ")}</div>}
+          <div className="font-mono text-sm uppercase tracking-[0.24em] text-[#b5aca2]">Traceability stack</div>
+          <div className="border-t border-[#dfd8cf] pt-6">
+            <div className="font-mono text-lg font-semibold uppercase tracking-[0.22em] text-[#5572a8]">Origin</div>
+            <div className="mt-4 grid gap-3 text-base leading-7 md:grid-cols-[9rem_1fr]"><div className="font-mono uppercase tracking-[0.18em] text-[#a49a90]">Source</div><div className="text-[#3d3934]">{packet.block.sectionLabel}</div><div className="font-mono uppercase tracking-[0.18em] text-[#a49a90]">Anchor</div><div className="text-[#3d3934]">{packet.block.pageNumber ? `Page ${packet.block.pageNumber}` : "Selected passage"}</div></div>
+          </div>
+          <div className="border-t border-[#d8e4dc] pt-6">
+            <div className="font-mono text-lg font-semibold uppercase tracking-[0.22em] text-[#2f6f4e]">Verification</div>
+            <div className="mt-4 grid gap-3 text-base leading-7 md:grid-cols-[9rem_1fr]"><div className="font-mono uppercase tracking-[0.18em] text-[#a49a90]">Status</div><div className="text-[#3d3934]">{packet.verification?.verification_path_available ? "Available" : packet.references.length ? "Source path detected" : "Not mapped yet"}</div>{routes.length > 0 && <><div className="font-mono uppercase tracking-[0.18em] text-[#a49a90]">Route</div><div className="text-[#3d3934]">{routes.join(", ")}</div></>}{verifyNote && <><div className="font-mono uppercase tracking-[0.18em] text-[#a49a90]">Note</div><div className="text-[#3d3934]">{verifyNote}</div></>}</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function DocumentNavigator({ data, answerLanguage, onAnswerLanguageChange }: { data: PipelineResponse; answerLanguage: string; onAnswerLanguageChange: (language: string) => void }) {
   const blocks = useMemo(() => buildDocumentBlocks(data), [data]);
-  const pages = useMemo(() => groupBlocksByPage(blocks), [blocks]);
-  const translatedBlocks = useMemo(() => buildTranslatedBlocks(data, blocks), [data, blocks]);
-  const [selectedId, setSelectedId] = useState(blocks[0]?.id || "");
+  const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    if (!blocks.some((block) => block.id === selectedId)) setSelectedId(blocks[0]?.id || "");
+    if (selectedId && !blocks.some((block) => block.id === selectedId)) setSelectedId("");
   }, [blocks, selectedId]);
 
-  const selected = blocks.find((block) => block.id === selectedId) || blocks[0];
-  void answerLanguage;
-
-  if (!selected) {
-    return (
-      <section className="space-y-4">
-        <DocumentIntro data={data} itemCount={0} />
-        <section className="rounded-xl border border-border/60 bg-surface p-4">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-            Original document
-          </div>
-          <EmptyState>No source document text was returned.</EmptyState>
-        </section>
-      </section>
-    );
-  }
+  const selected = blocks.find((block) => block.id === selectedId);
+  const packet = selected ? packetForBlock(data, selected) : null;
 
   return (
-    <section className="space-y-4">
-      <DocumentIntro data={data} itemCount={blocks.length} />
-      <DocumentMap
-        blocks={blocks}
-        selected={selected}
-        query={query}
-        onQueryChange={setQuery}
-        onSelect={setSelectedId}
-      />
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <OriginalDocument pages={pages} selected={selected} onSelect={setSelectedId} />
-        <TranslatedMeaningDocument
-          translatedBlocks={translatedBlocks}
-          selected={selected}
-          onSelect={setSelectedId}
-        />
-      </div>
+    <section className="min-h-full bg-[#f7f2ea]">
+      <NavigatorHeader data={data} answerLanguage={answerLanguage} onAnswerLanguageChange={onAnswerLanguageChange} />
+      {blocks.length > 0 ? <DocumentReader blocks={blocks} selectedId={selectedId} onSelect={setSelectedId} query={query} onQueryChange={setQuery} /> : <div className="mx-auto max-w-5xl px-4 py-8"><section className="rounded-2xl border border-border/60 bg-white p-6"><EmptyState>No source document text was returned.</EmptyState></section></div>}
+      {packet && <MeaningDrawer packet={packet} answerLanguage={answerLanguage} onClose={() => setSelectedId("")} />}
     </section>
   );
 }
