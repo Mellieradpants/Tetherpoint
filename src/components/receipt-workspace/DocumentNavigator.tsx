@@ -60,6 +60,8 @@ type SelectedLayerContext = {
   governanceIssues: GovernanceCheckResult[];
 };
 
+type InspectorTab = "meaning" | "source" | "references" | "status";
+
 function present(value: string | null | undefined): value is string {
   return Boolean(value?.trim());
 }
@@ -383,6 +385,49 @@ function answerLanguageLabel(language: string): string {
   return ANSWER_LANGUAGE_OPTIONS.find((option) => option.code === language)?.label || "English";
 }
 
+function selectedPageLabel(selected: NavigatorBlock): string {
+  return selected.pageNumber ? `Page ${selected.pageNumber}` : "Document";
+}
+
+function blockElementId(id: string): string {
+  return `document-block-${id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function localLawStatus(data: PipelineResponse, selected: NavigatorBlock): string {
+  const jurisdiction = data.jurisdiction_context;
+  const references = selected.references.map((reference) =>
+    `${reference.name} ${reference.referenceType || ""}`.toLowerCase(),
+  );
+  const hasLocalReference = references.some(
+    (reference) =>
+      reference.includes("state") ||
+      reference.includes("local") ||
+      reference.includes("municipal") ||
+      reference.includes("ordinance"),
+  );
+
+  if (hasLocalReference && hasSelectedUnresolvedReferences(selected)) return "needs_review";
+  if (!jurisdiction?.user_selected_state && !jurisdiction?.document_detected_state)
+    return "not_checked";
+  if (
+    ["conflict", "unclear", "needs_review", "missing"].includes(jurisdiction.jurisdiction_status)
+  ) {
+    return "needs_review";
+  }
+  return "not_checked";
+}
+
+function localLawMessage(data: PipelineResponse): string {
+  const jurisdiction = data.jurisdiction_context;
+  const state = jurisdiction?.user_selected_state || jurisdiction?.document_detected_state;
+
+  if (!state) {
+    return "Choose a jurisdiction to focus state and local-law review for this selected section.";
+  }
+
+  return `Focus local-law review on ${state}. State and local sources are shown as review items when the analysis returns them; this is not a legal check.`;
+}
+
 function WholeDocumentOverview({ data, itemCount }: { data: PipelineResponse; itemCount: number }) {
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const jurisdiction = data.jurisdiction_context;
@@ -582,63 +627,109 @@ function SourceDocumentViewer({
   selected: NavigatorBlock;
   onSelect: (id: string) => void;
 }) {
+  const selectedPage = selected.pageNumber ?? pages[0]?.blocks[0]?.pageNumber ?? 1;
+  const pageCount = pages.length || 1;
+
+  useEffect(() => {
+    document.getElementById(blockElementId(selected.id))?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
+  }, [selected.id]);
+
   return (
-    <div className="rounded-lg border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-            {DOCUMENT_NAVIGATOR_ZONES.source_document_viewer.label}
-          </div>
-          <div className="mt-1 text-sm leading-6 text-muted-foreground">
-            Original source text is shown unchanged. Select a block to inspect attached layers.
-          </div>
+    <div className="overflow-hidden rounded-lg border border-border/70 bg-surface shadow-md lg:min-h-[44rem]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-surface px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+          <span className="font-semibold">Page</span>
+          <span className="rounded-md border border-border bg-surface-raised px-3 py-1.5 font-semibold">
+            {selectedPage}
+          </span>
+          <span className="text-muted-foreground">of {pageCount}</span>
         </div>
-        {selected.sublabel && <StatusPill label="active" status={selected.sublabel} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md border border-border bg-surface-raised px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+            Fit Width
+          </span>
+          {selected.sublabel && <StatusPill label="active" status={selected.sublabel} />}
+        </div>
       </div>
 
-      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-md bg-surface-raised/70 p-4 pr-2">
-        {pages.map((page) => (
-          <section
-            key={page.label}
-            className="mx-auto max-w-3xl space-y-3 rounded-md border border-border/80 bg-white px-5 py-5 shadow-sm"
-          >
-            <div className="sticky top-0 z-10 border-b border-border/60 bg-white/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-              {page.label}
-            </div>
-            <div className="space-y-3">
-              {page.blocks.map((block) => {
-                const active = block.id === selected.id;
-                return (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => onSelect(block.id)}
-                    aria-pressed={active}
-                    className={`w-full rounded-md border p-4 text-left transition-colors ${
-                      active
-                        ? "border-primary/60 bg-accent/55 shadow-[0_0_0_2px_rgba(43,129,157,0.14)]"
-                        : "border-transparent bg-white hover:border-border hover:bg-surface-raised/45"
-                    }`}
-                  >
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        {block.sublabel}
-                      </span>
-                      {block.sectionId && (
+      <div className="bg-surface-raised/70 px-4 py-3 text-sm leading-6 text-muted-foreground">
+        Original source text is shown unchanged. Select a block to inspect meaning, source support,
+        jurisdiction, local-law focus, and status.
+      </div>
+
+      <div className="max-h-[68vh] space-y-6 overflow-y-auto bg-surface-raised/70 p-4 pr-2">
+        {pages.map((page) => {
+          const pageActive = page.blocks.some((block) => block.id === selected.id);
+
+          return (
+            <section
+              key={page.label}
+              className={`mx-auto max-w-3xl space-y-4 rounded-md border bg-white px-8 py-7 shadow-sm ${
+                pageActive ? "border-primary/40" : "border-border/80"
+              }`}
+            >
+              <div className="border-b border-border/60 pb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                {page.label}
+              </div>
+              <div className="space-y-4">
+                {page.blocks.map((block) => {
+                  const active = block.id === selected.id;
+                  return (
+                    <button
+                      key={block.id}
+                      id={blockElementId(block.id)}
+                      type="button"
+                      onClick={() => onSelect(block.id)}
+                      aria-pressed={active}
+                      className={`w-full rounded-md border p-4 text-left transition-colors ${
+                        active
+                          ? "border-gold/70 bg-gold/20 shadow-[0_0_0_2px_rgba(216,168,71,0.18)]"
+                          : "border-transparent bg-white hover:border-border hover:bg-surface-raised/45"
+                      }`}
+                    >
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                          Section {block.sectionId}
+                          {block.sublabel}
                         </span>
-                      )}
-                    </div>
-                    <div className="whitespace-pre-wrap break-words font-serif text-[15px] leading-8 text-foreground">
-                      {block.sourceText}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+                        {block.sectionId && (
+                          <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            Section {block.sectionId}
+                          </span>
+                        )}
+                      </div>
+                      <div className="whitespace-pre-wrap break-words font-serif text-[17px] leading-9 text-foreground">
+                        {block.sourceText}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-3 overflow-x-auto border-t border-border/70 bg-surface px-4 py-3">
+        {pages.map((page, index) => {
+          const firstBlock = page.blocks[0];
+          const active = page.blocks.some((block) => block.id === selected.id);
+          return (
+            <button
+              key={`thumb-${page.label}`}
+              type="button"
+              onClick={() => firstBlock && onSelect(firstBlock.id)}
+              className={`h-20 w-16 shrink-0 rounded-md border bg-white p-2 text-center text-[10px] shadow-sm transition-colors ${
+                active ? "border-primary text-primary" : "border-border text-muted-foreground"
+              }`}
+            >
+              <div className="mx-auto mb-2 h-10 w-8 rounded-sm bg-surface-raised" />
+              {index + 1}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -672,11 +763,31 @@ function DocumentNavigation({
 
   return (
     <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-        {DOCUMENT_NAVIGATOR_ZONES.document_navigation.label}
-      </div>
+      <div className="mb-4 text-sm font-semibold text-muted-foreground">Navigation</div>
 
       <div className="space-y-3">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-foreground hover:bg-surface-raised"
+        >
+          Document Overview
+          <span className="text-xs text-primary">Ready</span>
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-foreground hover:bg-surface-raised"
+        >
+          Pages
+          <span className="text-xs text-muted-foreground">{pages}</span>
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-semibold text-foreground hover:bg-surface-raised"
+        >
+          Sections
+          <span className="text-xs text-muted-foreground">{blocks.length}</span>
+        </button>
+
         <div className="grid grid-cols-2 gap-2">
           <DetailRow label="pages" value={pages} />
           <DetailRow label="blocks" value={blocks.length} />
@@ -699,38 +810,52 @@ function DocumentNavigation({
           />
         </label>
 
-        <div className="space-y-2">
-          {visibleBlocks.map((block, index) => {
-            const active = block.id === selected.id;
-            return (
-              <button
-                key={block.id}
-                type="button"
-                onClick={() => onSelect(block.id)}
-                aria-pressed={active}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                  active
-                    ? "border-primary/45 bg-accent/60"
-                    : "border-border/60 bg-surface-raised/60 hover:border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    {block.navLabel || `Block ${index + 1}`}
-                  </span>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {displayStatus(block.status)}
-                  </span>
-                </div>
-                <div className="mt-2 break-words text-sm font-semibold leading-5 text-foreground">
-                  {block.label}
-                </div>
-                <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                  {block.sublabel}
-                </div>
-              </button>
-            );
-          })}
+        <div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Document Outline
+          </div>
+          <div className="space-y-2">
+            {visibleBlocks.map((block, index) => {
+              const active = block.id === selected.id;
+              return (
+                <button
+                  key={block.id}
+                  type="button"
+                  onClick={() => onSelect(block.id)}
+                  aria-pressed={active}
+                  className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                    active
+                      ? "border-primary/45 bg-accent/60"
+                      : "border-border/60 bg-surface-raised/60 hover:border-border"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      {block.navLabel || `Block ${index + 1}`}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {displayStatus(block.status)}
+                    </span>
+                  </div>
+                  <div className="mt-2 break-words text-sm font-semibold leading-5 text-foreground">
+                    {block.label}
+                  </div>
+                  <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                    {block.sublabel}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border/70 bg-surface-raised/70 p-3">
+          <div className="mb-2 text-sm font-semibold text-foreground">Document Status</div>
+          <div className="space-y-2 text-xs leading-5 text-muted-foreground">
+            <div>All returned pages processed</div>
+            <div>Text layer: Extracted</div>
+            <div>Source mapping: {sourceMappingStatus(data)}</div>
+          </div>
         </div>
       </div>
     </aside>
@@ -751,97 +876,186 @@ function AttachedLayersInspector({
   const meaningText = selectedMeaningText(data, layers);
   const supportItems = selected.support.filter(present).slice(0, 6);
   const jurisdiction = data.jurisdiction_context;
+  const [activeTab, setActiveTab] = useState<InspectorTab>("meaning");
+  const referenceCount = selected.references.length;
+  const localStatus = localLawStatus(data, selected);
+  const selectedLocation = [
+    selectedPageLabel(selected),
+    selected.blockId ? `Block ${selected.blockId}` : "",
+    selected.sectionId ? `Section ${selected.sectionId}` : "",
+  ]
+    .filter(present)
+    .join(" / ");
 
   return (
-    <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-        {DOCUMENT_NAVIGATOR_ZONES.attached_layers_panel.label}
+    <aside className="overflow-hidden rounded-lg border border-border/70 bg-surface shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+      <div className="grid grid-cols-4 border-b border-border/70 bg-surface">
+        {(["meaning", "source", "references", "status"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            aria-pressed={activeTab === tab}
+            className={`border-b-2 px-2 py-3 text-xs font-semibold capitalize transition-colors ${
+              activeTab === tab
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab}
+            {tab === "references" && referenceCount > 0 ? ` (${referenceCount})` : ""}
+          </button>
+        ))}
       </div>
 
-      <div className="space-y-5">
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Status
-          </div>
-          <StatusPanel data={data} selected={selected} layers={layers} />
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Meaning
-          </div>
-          <SelectedMeaning data={data} layers={layers} />
-          {meaningText && (
-            <div className="mt-3">
-              <PlainMeaningTranslation
-                text={meaningText}
-                hasUnresolvedReferences={hasSelectedUnresolvedReferences(selected)}
-                language={answerLanguage}
-                showLanguageControl={false}
-                embedded
-              />
+      <div className="space-y-5 p-4">
+        {activeTab === "meaning" && (
+          <>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Plain Meaning</div>
+              <SelectedMeaning data={data} layers={layers} />
+              {meaningText && (
+                <div className="mt-3">
+                  <PlainMeaningTranslation
+                    text={meaningText}
+                    hasUnresolvedReferences={hasSelectedUnresolvedReferences(selected)}
+                    language={answerLanguage}
+                    showLanguageControl={false}
+                    embedded
+                  />
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Source
-          </div>
-          <SourceQuote>{selected.sourceText}</SourceQuote>
-        </div>
+            <div className="rounded-lg border border-primary/20 bg-accent/45 p-3">
+              <div className="mb-2 text-sm font-semibold text-foreground">
+                What this means for you
+              </div>
+              <ul className="space-y-2 text-sm leading-6 text-foreground">
+                <li>Read this selected section together with its source details.</li>
+                <li>Check local-law status before relying on any requirement or deadline.</li>
+              </ul>
+            </div>
 
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            References
-          </div>
-          <ReferenceList selected={selected} />
-        </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">
+                What the document says
+              </div>
+              <SourceQuote>{selected.sourceText}</SourceQuote>
+            </div>
+          </>
+        )}
 
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Jurisdiction
-          </div>
-          <div className="space-y-2">
-            <DetailRow
-              label="selected context"
-              value={jurisdiction?.user_selected_state || "I don't know"}
-            />
-            <DetailRow
-              label="detected context"
-              value={jurisdiction?.document_detected_state || "Not returned"}
-            />
-            <DetailRow
-              label="status"
-              value={
-                jurisdiction?.jurisdiction_status
-                  ? displayStatus(jurisdiction.jurisdiction_status)
-                  : "Not returned"
-              }
-            />
-          </div>
-        </div>
+        {activeTab === "source" && (
+          <>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Source Details</div>
+              <div className="space-y-2">
+                <DetailRow label="document" value={sourceNameLabel(data)} />
+                <DetailRow label="location" value={selectedLocation || selected.sublabel} />
+                <DetailRow label="block" value={selected.blockId || "Not returned"} />
+                <DetailRow label="section" value={selected.sectionId || "Not returned"} />
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Original Source Text</div>
+              <SourceQuote>{selected.sourceText}</SourceQuote>
+            </div>
+          </>
+        )}
 
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Governance
-          </div>
-          {layers.governanceIssues.length > 0 ? (
-            <div className="space-y-2">
-              {layers.governanceIssues.map((issue, index) => (
+        {activeTab === "references" && (
+          <>
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">References Detected</span>
+                <span className="rounded-full bg-surface-raised px-2 py-1 text-xs font-semibold text-muted-foreground">
+                  {referenceCount}
+                </span>
+              </div>
+              <ReferenceList selected={selected} />
+            </div>
+
+            <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
+              State, local, and municipal sources are surfaced here when the analysis returns them.
+              If they are not returned, treat local-law review as not checked.
+            </div>
+          </>
+        )}
+
+        {activeTab === "status" && (
+          <>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Status</div>
+              <StatusPanel data={data} selected={selected} layers={layers} />
+            </div>
+
+            <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-foreground">State & local law focus</span>
+                <StatusPill label="local law" status={localStatus} />
+              </div>
+              <p>{localLawMessage(data)}</p>
+              <p className="mt-2">
+                Possible next check: ask whether this selected section is affected by state or local
+                law for the chosen jurisdiction.
+              </p>
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Jurisdiction</div>
+              <div className="space-y-2">
                 <DetailRow
-                  key={`selected-governance-${index}`}
-                  label={issue.checkName || "governance issue"}
-                  value={issue.issue || displayStatus(issue.status)}
+                  label="selected context"
+                  value={jurisdiction?.user_selected_state || "I don't know"}
                 />
-              ))}
+                <DetailRow
+                  label="detected context"
+                  value={jurisdiction?.document_detected_state || "Not returned"}
+                />
+                <DetailRow
+                  label="status"
+                  value={
+                    jurisdiction?.jurisdiction_status
+                      ? displayStatus(jurisdiction.jurisdiction_status)
+                      : "Not returned"
+                  }
+                />
+              </div>
             </div>
-          ) : (
-            <EmptyState>No governance flags are attached to this selected passage yet.</EmptyState>
-          )}
-        </div>
 
-        {supportItems.length > 0 && (
+            <div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Governance</div>
+              {layers.governanceIssues.length > 0 ? (
+                <div className="space-y-2">
+                  {layers.governanceIssues.map((issue, index) => (
+                    <DetailRow
+                      key={`selected-governance-${index}`}
+                      label={issue.checkName || "governance issue"}
+                      value={issue.issue || displayStatus(issue.status)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState>
+                  No governance flags are attached to this selected passage yet.
+                </EmptyState>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab !== "status" && (
+          <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">State & local law focus</span>
+              <StatusPill label="local law" status={localStatus} />
+            </div>
+            <p>{localLawMessage(data)}</p>
+          </div>
+        )}
+
+        {supportItems.length > 0 && activeTab !== "source" && (
           <div>
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Source support

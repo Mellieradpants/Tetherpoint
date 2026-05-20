@@ -22,6 +22,7 @@ export function displayStatus(value: string | null | undefined): string {
   if (value === "needs_review") return "Needs review";
   if (value === "not_attached") return "Not attached";
   if (value === "not_attempted") return "Not checked";
+  if (value === "not_checked") return "Not checked";
   if (value === "document packet") return "Document";
   if (value === "executed") return "Mapped";
   if (value === "skipped") return "Not attached";
@@ -69,8 +70,8 @@ export function toneForStatus(status: string | null | undefined): Tone {
   }
 
   if (
-    ["needs_review", "review", "repaired", "missing", "skipped", "warning"].some((token) =>
-      value.includes(token),
+    ["needs_review", "review", "repaired", "missing", "skipped", "warning", "not_checked"].some(
+      (token) => value.includes(token),
     )
   ) {
     return "review";
