@@ -29,6 +29,7 @@ function ExternalIcon() {
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false));
+
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const handler = (event: MediaQueryListEvent) => setIsMobile(event.matches);
@@ -36,11 +37,13 @@ function useIsMobile() {
     setIsMobile(mq.matches);
     return () => mq.removeEventListener("change", handler);
   }, []);
+
   return isMobile;
 }
 
 function CollapsiblePanel({ title, accent, children, defaultOpen = false }: { title: string; accent: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+
   return (
     <div style={{ borderTop: `2px solid ${accent}25`, marginTop: 12 }}>
       <button
@@ -83,7 +86,9 @@ function MeaningContent({ active, onClose, isMobile, answerLanguage }: { active:
     let alive = true;
     setTranslatedMeaning("");
     setTranslationState("idle");
+
     if (answerLanguage === "en" || !active.meaning.trim()) return;
+
     setTranslationState("loading");
     translatePlainMeaning({ text: active.meaning, language: answerLanguage })
       .then((result) => {
@@ -95,6 +100,7 @@ function MeaningContent({ active, onClose, isMobile, answerLanguage }: { active:
         if (!alive) return;
         setTranslationState("error");
       });
+
     return () => { alive = false; };
   }, [active.id, active.meaning, answerLanguage]);
 
@@ -164,22 +170,10 @@ function buildResultText(sections: DocSection[], active: DocSection | undefined)
   return target.map((section) => [section.label, "", "Original:", section.raw, "", "Plain meaning:", section.meaning, "", "Source:", section.origin.source, section.origin.url || "", "", "Verification:", section.verification.crossRef, section.verification.note].filter(Boolean).join("\n")).join("\n\n---\n\n");
 }
 
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 export function MeaningNavigatorView({ sections, title, jurisdiction, answerLanguage, onAnswerLanguageChange }: { sections: DocSection[]; title: string; jurisdiction: string; answerLanguage: string; onAnswerLanguageChange: (language: string) => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState("Copy result");
+  const [copyStatus, setCopyStatus] = useState("Copy export");
   const isMobile = useIsMobile();
   const active = sections.find((section) => section.id === selected);
   const resultText = buildResultText(sections, active);
@@ -187,7 +181,7 @@ export function MeaningNavigatorView({ sections, title, jurisdiction, answerLang
   const copyResult = async () => {
     await navigator.clipboard.writeText(resultText);
     setCopyStatus("Copied");
-    window.setTimeout(() => setCopyStatus("Copy result"), 1600);
+    window.setTimeout(() => setCopyStatus("Copy export"), 1600);
   };
 
   return (
@@ -205,7 +199,6 @@ export function MeaningNavigatorView({ sections, title, jurisdiction, answerLang
             {ANSWER_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
           </select>
           <button type="button" onClick={copyResult} style={{ background: "#e8f4ec", border: "1px solid #b7ddc4", borderRadius: 4, padding: "4px 7px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: "#2d6a4f", letterSpacing: "0.05em", cursor: "pointer" }}>{copyStatus}</button>
-          {!isMobile && <button type="button" onClick={() => downloadText("meaning-result.txt", resultText)} style={{ background: "#fdf3e7", border: "1px solid #e8c99a", borderRadius: 4, padding: "4px 7px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: "#7b4b00", letterSpacing: "0.05em", cursor: "pointer" }}>Export</button>}
         </div>
       </header>
       {!selected && <div style={{ background: "#ede8e3", borderBottom: "1px solid #d4c9bc", padding: "7px 20px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#a09080", letterSpacing: "0.07em", textTransform: "uppercase", flexShrink: 0 }}>{isMobile ? "Tap a section to reveal its meaning" : "↓ Select a section to reveal its meaning"}</div>}
