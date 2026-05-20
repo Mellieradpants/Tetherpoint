@@ -277,7 +277,7 @@ function DocumentIntro({ data, itemCount }: { data: PipelineResponse; itemCount:
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-primary">
-            Meaning Buddy
+            Meaning Diff Document Navigator
           </div>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
             Translate the meaning
