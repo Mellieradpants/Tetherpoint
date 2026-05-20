@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
 import { GovernanceTab } from "./receipt-workspace/GovernanceTab";
 import { IssuesTab } from "./receipt-workspace/IssuesTab";
-import { ANSWER_LANGUAGE_OPTIONS } from "./receipt-workspace/answer-language";
 import { MeaningTab } from "./receipt-workspace/MeaningTab";
 import { OriginTab } from "./receipt-workspace/OriginTab";
 import { ResultActions } from "./receipt-workspace/ResultActions";
 import { DocumentNavigator } from "./receipt-workspace/DocumentNavigator";
 import {
-  StatusPill,
   hasUnresolvedReferencedSources,
   safeArray,
   toneClass,
@@ -77,44 +75,6 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
   return (
     <div className="h-full overflow-y-auto bg-background">
       <div className="mx-auto max-w-[92rem] space-y-4 px-4 py-4 pb-12">
-        <section className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-                Document workspace
-              </div>
-              <h2 className="mt-2 text-2xl font-semibold text-foreground">Document Navigator</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Keep the document in the center. Select a page or section to see attached meaning,
-                source support, status, and review notes beside it.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <label className="block min-w-56 text-sm font-medium text-foreground">
-                <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Answer language
-                </span>
-                <select
-                  value={answerLanguage}
-                  onChange={(event) => setAnswerLanguage(event.target.value)}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {ANSWER_LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                <StatusPill label="meaning" status={data.meaning?.status} />
-                <StatusPill label="governance" status={governanceStatus} />
-              </div>
-              <ResultActions data={data} />
-            </div>
-          </div>
-        </section>
-
         {safeArray(data.errors).length > 0 && (
           <section
             className={`rounded-lg border p-4 text-sm leading-6 ${toneClass(hasFatalError ? "bad" : "review")}`}
@@ -124,7 +84,11 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
           </section>
         )}
 
-        <DocumentNavigator data={data} answerLanguage={answerLanguage} />
+        <DocumentNavigator
+          data={data}
+          answerLanguage={answerLanguage}
+          onAnswerLanguageChange={setAnswerLanguage}
+        />
 
         <details className="rounded-lg border border-border/70 bg-surface/70 p-3 text-sm shadow-sm">
           <summary className="cursor-pointer px-1 text-sm font-semibold text-foreground">
@@ -157,6 +121,11 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
             {activeTab === "issues" && <IssuesTab data={data} />}
           </div>
         </details>
+
+        <div className="flex justify-end">
+          <ResultActions data={data} />
+        </div>
+        <span className="sr-only">Governance status: {governanceStatus}</span>
       </div>
     </div>
   );
