@@ -77,7 +77,7 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
     : (data.governance?.status ?? data.output?.governance_status);
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
+    <div className="bg-background md:h-full md:overflow-y-auto">
       <div className="mx-auto max-w-[96rem] space-y-4 px-4 py-4 pb-12">
         <section className="rounded-lg border border-border/70 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
