@@ -3,37 +3,18 @@ import type {
   DocumentFirstRuleUnitCandidate,
   DocumentFirstSourceAnchor,
   DocumentFirstStructureNode,
-  GovernanceCheckResult,
   MeaningNodeResult,
   PipelineResponse,
   RuleUnit,
-  RuleUnitReferencedSource,
-  VerificationNode,
+  StructureNode,
 } from "../../types/pipeline";
-import { ANSWER_LANGUAGE_OPTIONS } from "./answer-language";
-import { PlainMeaningTranslation } from "./MeaningTab";
 import {
-  DetailRow,
   EmptyState,
-  SourceQuote,
-  StatusPill,
-  displayStatus,
   hasUnresolvedReferencedSources,
   hideAtomicReferences,
-  rawStatus,
   safeArray,
   splitParagraphs,
-  toneClass,
 } from "./shared";
-import { DOCUMENT_NAVIGATOR_ZONES } from "./document-navigator-shell-contract";
-
-type NavigatorReference = {
-  name: string;
-  referenceType?: string | null;
-  detectedText?: string | null;
-  retrievalStatus?: string | null;
-  sourceText?: string | null;
-};
 
 type NavigatorBlock = {
   id: string;
@@ -45,19 +26,17 @@ type NavigatorBlock = {
   pageNumber?: number | null;
   blockId?: string | null;
   sectionId?: string | null;
-  status?: string | null;
   ruleUnitId?: string | null;
   nodeId?: string | null;
-  references: NavigatorReference[];
-  support: string[];
   sourceNodeIds: string[];
   order: number;
 };
 
-type SelectedLayerContext = {
+type TranslatedBlock = {
+  block: NavigatorBlock;
   meaning?: MeaningNodeResult;
-  verification?: VerificationNode;
-  governanceIssues: GovernanceCheckResult[];
+  text: string;
+  missingInformation: string[];
 };
 
 function present(value: string | null | undefined): value is string {
@@ -87,21 +66,6 @@ function excerptLabel(value: string | null | undefined, fallback: string): strin
   return text.length > 92 ? `${text.slice(0, 89)}...` : text;
 }
 
-function fromRuleReference(reference: RuleUnitReferencedSource): NavigatorReference {
-  return {
-    name: reference.name,
-    referenceType: reference.referenceType,
-    detectedText: reference.matchedText,
-    retrievalStatus: reference.retrievalStatus,
-    sourceText: reference.sourceText,
-  };
-}
-
-function sourceTypeLabel(data: PipelineResponse): string {
-  if (data.document_first_v2?.status === "executed") return "document packet";
-  return data.input?.content_type || "source text";
-}
-
 function sourceNameLabel(data: PipelineResponse): string {
   const candidate = safeArray(data.document_first_v2?.rule_unit_candidates?.candidates).find(
     (item) => item.document_id?.trim(),
@@ -129,25 +93,8 @@ function anchorLabel(anchor: DocumentFirstSourceAnchor | null | undefined): stri
       anchor?.block_id ? `Block ${anchor.block_id}` : "",
     ]
       .filter(present)
-      .join(" / ") || "Document block"
+      .join(" / ") || "Document passage"
   );
-}
-
-function statusForDocumentFirst(data: PipelineResponse): string {
-  const supportPath = data.document_first_v2;
-  if (!supportPath) return "not returned";
-  if (supportPath.status === "executed") return "mapped";
-  return supportPath.status || "not returned";
-}
-
-function sourceMappingStatus(data: PipelineResponse): string {
-  const candidates = safeArray(data.document_first_v2?.rule_unit_candidates?.candidates);
-  if (data.document_first_v2?.status === "executed") {
-    return candidates.length ? `${candidates.length} attached passage(s)` : "document mapped";
-  }
-  if (safeArray(data.rule_units?.rule_units).length) return "mapped sections";
-  if (safeArray(data.structure?.nodes).length) return "mapped text";
-  return "source text";
 }
 
 function candidateByNodeId(candidates: DocumentFirstRuleUnitCandidate[]) {
@@ -158,25 +105,13 @@ function candidateByNodeId(candidates: DocumentFirstRuleUnitCandidate[]) {
   return map;
 }
 
-function candidateSupport(
-  candidate: DocumentFirstRuleUnitCandidate | null | undefined,
-  anchor: DocumentFirstSourceAnchor | null | undefined,
-): string[] {
-  if (!candidate) return [];
-  return [
-    ...safeArray(candidate.signal_types),
-    ...safeArray(candidate.assembly_notes),
-    anchor?.block_id ? `Block ${anchor.block_id}` : "",
-  ].filter(present);
-}
-
 function documentFirstBlocks(data: PipelineResponse): NavigatorBlock[] {
   const nodes = safeArray(data.document_first_v2?.document_structure?.nodes);
   const candidates = safeArray(data.document_first_v2?.rule_unit_candidates?.candidates);
   const candidatesByNodeId = candidateByNodeId(candidates);
 
   return nodes
-    .filter((node) => {
+    .filter((node: DocumentFirstStructureNode) => {
       const text = node.source_text || node.normalized_text || "";
       return (
         Boolean(text.trim()) &&
@@ -184,27 +119,24 @@ function documentFirstBlocks(data: PipelineResponse): NavigatorBlock[] {
         node.structural_type !== "page"
       );
     })
-    .map((node, index) => {
+    .map((node: DocumentFirstStructureNode, index: number) => {
       const candidate = candidatesByNodeId.get(node.structural_node_id);
       const anchor = node.source_anchor || candidate?.source_anchor;
       const text = node.source_text || node.normalized_text || "";
       const blockId = node.block_id || anchor?.block_id;
       const pageNumber = node.page_number ?? anchor?.page_number;
-      const blockType = node.block_type || node.structural_type || "block";
+      const blockType = node.block_type || node.structural_type || "passage";
 
       return {
         id: node.structural_node_id,
         kind: candidate ? "candidate" : "document_block",
-        label: excerptLabel(text, `Document block ${index + 1}`),
-        navLabel: `${displayStatus(blockType)} ${index + 1}`,
+        label: excerptLabel(text, `Passage ${index + 1}`),
+        navLabel: `${blockType.replaceAll("_", " ")} ${index + 1}`,
         sublabel: anchorLabel(anchor),
         sourceText: text,
         pageNumber,
         blockId,
-        status: candidate?.assembly_status || data.document_first_v2?.status,
         nodeId: node.structural_node_id,
-        references: [],
-        support: candidateSupport(candidate, anchor),
         sourceNodeIds: [node.structural_node_id],
         order: node.order ?? index + 1,
       };
@@ -216,20 +148,13 @@ function ruleUnitBlock(unit: RuleUnit, index: number): NavigatorBlock {
   return {
     id: `rule-${unit.rule_unit_id || index}`,
     kind: "rule_unit",
-    label: excerptLabel(unit.primary_text || unit.source_text_combined, `Rule ${index + 1}`),
-    navLabel: `Section ${index + 1}`,
+    label: excerptLabel(unit.primary_text || unit.source_text_combined, `Passage ${index + 1}`),
+    navLabel: `Passage ${index + 1}`,
     sublabel: unit.section_id ? `Section ${unit.section_id}` : "Mapped passage",
     sourceText: text,
     sectionId: unit.section_id,
-    status: unit.review_status || unit.assembly_status,
     ruleUnitId: unit.rule_unit_id,
     nodeId: unit.primary_node_id,
-    references: safeArray(unit.referenced_sources).map(fromRuleReference),
-    support: [
-      ...safeArray(unit.assembly_issues),
-      unit.meaning_eligible ? "Meaning available" : "Meaning needs review",
-      unit.verification_eligible ? "Verification path available" : "Verification not available",
-    ],
     sourceNodeIds: [
       unit.primary_node_id,
       ...safeArray(unit.source_node_ids),
@@ -241,19 +166,16 @@ function ruleUnitBlock(unit: RuleUnit, index: number): NavigatorBlock {
 
 function legacyStructureBlocks(data: PipelineResponse): NavigatorBlock[] {
   return safeArray(data.structure?.nodes)
-    .filter((node) => (node.source_text || node.normalized_text || "").trim())
-    .map((node, index) => ({
+    .filter((node: StructureNode) => (node.source_text || node.normalized_text || "").trim())
+    .map((node: StructureNode, index: number) => ({
       id: `structure-${node.node_id || index}`,
       kind: "structure_node",
-      label: excerptLabel(node.source_text || node.normalized_text, `Section ${index + 1}`),
-      navLabel: `Section ${index + 1}`,
-      sublabel: node.section_id ? `Section ${node.section_id}` : "Structure node",
+      label: excerptLabel(node.source_text || node.normalized_text, `Passage ${index + 1}`),
+      navLabel: `Passage ${index + 1}`,
+      sublabel: node.section_id ? `Section ${node.section_id}` : "Document passage",
       sourceText: node.source_text || node.normalized_text || "",
       sectionId: node.section_id,
-      status: node.validation_status,
       nodeId: node.node_id,
-      references: [],
-      support: safeArray(node.validation_errors),
       sourceNodeIds: [node.node_id].filter(present),
       order: index + 1,
     }));
@@ -267,13 +189,10 @@ function rawDocumentBlock(data: PipelineResponse): NavigatorBlock[] {
     {
       id: "raw-document",
       kind: "raw_document",
-      label: "Submitted source document",
+      label: "Submitted document",
       navLabel: "Document",
-      sublabel: "Raw source",
+      sublabel: "Original source",
       sourceText: text,
-      status: data.input?.parse_status,
-      references: [],
-      support: safeArray(data.input?.parse_errors),
       sourceNodeIds: [],
       order: 1,
     },
@@ -285,7 +204,7 @@ function buildDocumentBlocks(data: PipelineResponse): NavigatorBlock[] {
   if (documentFirst.length > 0) return documentFirst;
 
   const rules = safeArray(data.rule_units?.rule_units)
-    .filter((unit) => (unit.source_text_combined || unit.primary_text || "").trim())
+    .filter((unit: RuleUnit) => (unit.source_text_combined || unit.primary_text || "").trim())
     .map(ruleUnitBlock);
   if (rules.length > 0) return rules;
 
@@ -318,262 +237,143 @@ function groupBlocksByPage(blocks: NavigatorBlock[]) {
   }));
 }
 
-function resolveSelectedLayers(
-  data: PipelineResponse,
-  selected: NavigatorBlock,
-): SelectedLayerContext {
-  const selectedIds = [selected.ruleUnitId, selected.nodeId, ...selected.sourceNodeIds].filter(
-    present,
-  );
+function selectedIds(block: NavigatorBlock): string[] {
+  return [block.ruleUnitId, block.nodeId, ...block.sourceNodeIds].filter(present);
+}
 
-  const meaning = safeArray(data.meaning?.node_results).find(
+function meaningForBlock(data: PipelineResponse, block: NavigatorBlock): MeaningNodeResult | undefined {
+  const ids = selectedIds(block);
+
+  return safeArray(data.meaning?.node_results).find(
     (result) =>
-      includesSelectedId(selectedIds, result.node_id) ||
-      sameSourceText(result.source_text, selected.sourceText),
-  );
-  const verification = safeArray(data.verification?.node_results).find(
-    (result) =>
-      includesSelectedId(selectedIds, result.rule_unit_id) ||
-      includesSelectedId(selectedIds, result.node_id) ||
-      safeArray(result.source_node_ids).some((id) => selectedIds.includes(id)),
-  );
-  const governanceIssues = safeArray(data.governance?.activeIssues).filter((issue) => {
-    const issueText = [
-      issue.checkName,
-      issue.status,
-      issue.issue,
-      ...safeArray(issue.missingFields),
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    return selectedIds.some((id) => issueText.includes(id.toLowerCase()));
-  });
-
-  return { meaning, verification, governanceIssues };
-}
-
-function referenceStatus(reference: NavigatorReference, hasUnresolvedReferences: boolean): string {
-  if (
-    hasUnresolvedReferences &&
-    (rawStatus(reference.retrievalStatus) === "not_attempted" || !reference.sourceText?.trim())
-  ) {
-    return "detected / not checked";
-  }
-
-  return displayStatus(reference.retrievalStatus || "detected");
-}
-
-function hasSelectedUnresolvedReferences(selected: NavigatorBlock): boolean {
-  return selected.references.some(
-    (reference) =>
-      rawStatus(reference.retrievalStatus) === "not_attempted" || !reference.sourceText?.trim(),
+      includesSelectedId(ids, result.node_id) || sameSourceText(result.source_text, block.sourceText),
   );
 }
 
-function selectedMeaningText(data: PipelineResponse, layers: SelectedLayerContext): string {
+function meaningText(data: PipelineResponse, block: NavigatorBlock): string {
+  const meaning = meaningForBlock(data, block);
   const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
   const atomicReferenceLabel = hasUnresolvedReferences
     ? "source reference"
     : "source-backed result";
-  return hideAtomicReferences(layers.meaning?.plain_meaning || "", atomicReferenceLabel);
+  return hideAtomicReferences(meaning?.plain_meaning || "", atomicReferenceLabel);
 }
 
-function answerLanguageLabel(language: string): string {
-  return ANSWER_LANGUAGE_OPTIONS.find((option) => option.code === language)?.label || "English";
+function buildTranslatedBlocks(data: PipelineResponse, blocks: NavigatorBlock[]): TranslatedBlock[] {
+  return blocks.map((block) => {
+    const meaning = meaningForBlock(data, block);
+    return {
+      block,
+      meaning,
+      text: meaningText(data, block),
+      missingInformation: safeArray(meaning?.missing_information),
+    };
+  });
 }
 
-function WholeDocumentOverview({ data, itemCount }: { data: PipelineResponse; itemCount: number }) {
-  const hasUnresolvedReferences = hasUnresolvedReferencedSources(data);
-  const jurisdiction = data.jurisdiction_context;
-  const governanceStatus = hasUnresolvedReferences
-    ? "review_required"
-    : (data.governance?.status ?? data.output?.governance_status);
-
+function DocumentIntro({ data, itemCount }: { data: PipelineResponse; itemCount: number }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-        {DOCUMENT_NAVIGATOR_ZONES.whole_document_overview.label}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+    <section className="rounded-xl border border-border/70 bg-surface p-5 shadow-sm">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div>
-          <div className="text-lg font-semibold text-foreground">{sourceNameLabel(data)}</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <StatusPill label="source type" status={sourceTypeLabel(data)} />
-            <StatusPill label="source mapping" status={sourceMappingStatus(data)} />
-            <StatusPill label="governance" status={governanceStatus} />
+          <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-primary">
+            Meaning Buddy
           </div>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+            Translate the meaning
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            Read the original document beside a plain-language meaning version. The source text stays
+            unchanged; the translated side explains what the selected wording means.
+          </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <DetailRow label="document blocks" value={itemCount} />
-          <DetailRow
-            label="jurisdiction"
-            value={jurisdiction?.user_selected_state || "I don't know"}
-          />
-          <DetailRow label="processing" value={displayStatus(statusForDocumentFirst(data))} />
+        <div className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm leading-6 text-muted-foreground lg:min-w-64">
+          <div className="font-semibold text-foreground">{sourceNameLabel(data)}</div>
+          <div>{itemCount} passage{itemCount === 1 ? "" : "s"} available</div>
         </div>
       </div>
     </section>
   );
 }
 
-function SelectedMeaning({
-  data,
-  layers,
-}: {
-  data: PipelineResponse;
-  layers: SelectedLayerContext;
-}) {
-  const meaningText = selectedMeaningText(data, layers);
-  const paragraphs = splitParagraphs(meaningText);
-
-  if (!layers.meaning) {
-    return (
-      <EmptyState>
-        Meaning is not attached to this selected passage yet. Technical Trace keeps the raw
-        processing details.
-      </EmptyState>
-    );
-  }
-
-  if (layers.meaning.error || layers.meaning.message) {
-    const statusMessage = layers.meaning.error || layers.meaning.message;
-    return (
-      <div className="space-y-3">
-        {paragraphs.length > 0 ? (
-          <div className="space-y-3 text-sm leading-6 text-foreground">
-            {paragraphs.map((paragraph, index) => (
-              <p key={`selected-meaning-${index}`}>{paragraph}</p>
-            ))}
-          </div>
-        ) : (
-          <EmptyState>No plain meaning is attached to this selected passage yet.</EmptyState>
-        )}
-        <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
-          {statusMessage}
-        </div>
-      </div>
-    );
-  }
-
-  if (paragraphs.length === 0)
-    return <EmptyState>No plain meaning is attached to this selected passage yet.</EmptyState>;
-
-  return (
-    <div className="space-y-3 text-sm leading-6 text-foreground">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`selected-meaning-${index}`}>{paragraph}</p>
-      ))}
-    </div>
-  );
-}
-
-function ReferenceList({ selected }: { selected: NavigatorBlock }) {
-  const hasUnresolvedReferences = hasSelectedUnresolvedReferences(selected);
-  const references = selected.references;
-
-  if (references.length === 0)
-    return <EmptyState>No referenced sources are attached to this selection.</EmptyState>;
-
-  return (
-    <div className="space-y-3">
-      {references.map((reference, index) => (
-        <div
-          key={`${reference.name}-${index}`}
-          className="rounded-lg border border-border/50 bg-background/30 p-3"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{reference.name}</div>
-              {reference.referenceType && (
-                <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">
-                  {displayStatus(reference.referenceType)}
-                </div>
-              )}
-            </div>
-            <span
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ${toneClass(hasUnresolvedReferences ? "review" : "neutral")}`}
-            >
-              {referenceStatus(reference, hasUnresolvedReferences)}
-            </span>
-          </div>
-          {reference.detectedText && (
-            <div className="mt-3 text-sm leading-6 text-muted-foreground">
-              Detected text: {reference.detectedText}
-            </div>
-          )}
-          {reference.sourceText && (
-            <div className="mt-3">
-              <SourceQuote>{reference.sourceText}</SourceQuote>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatusPanel({
-  data,
+function DocumentMap({
+  blocks,
   selected,
-  layers,
+  query,
+  onQueryChange,
+  onSelect,
 }: {
-  data: PipelineResponse;
+  blocks: NavigatorBlock[];
   selected: NavigatorBlock;
-  layers: SelectedLayerContext;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (id: string) => void;
 }) {
-  const hasUnresolvedReferences = hasSelectedUnresolvedReferences(selected);
-  const selectedGovernanceStatus = layers.governanceIssues.length ? "needs_review" : "not_attached";
+  const normalizedQuery = normalizedText(query);
+  const visibleBlocks = normalizedQuery
+    ? blocks.filter((block) =>
+        normalizedText(`${block.label} ${block.sublabel} ${block.sourceText}`).includes(
+          normalizedQuery,
+        ),
+      )
+    : blocks;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <StatusPill label="selection" status={selected.status || selected.kind} />
-        <StatusPill label="meaning" status={layers.meaning?.status || "not_attached"} />
-        {layers.verification?.verification_path_available && (
-          <StatusPill label="path" status="available" />
-        )}
-        <StatusPill label="governance" status={selectedGovernanceStatus} />
+    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-sm">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+            Document map
+          </div>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Choose a passage to keep the original wording and plain meaning aligned.
+          </p>
+        </div>
+        <label className="block text-sm font-medium text-foreground">
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Search document
+          </span>
+          <input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search source text"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </label>
       </div>
 
-      {hasUnresolvedReferences && (
-        <div className={`rounded-lg border p-3 text-sm leading-6 ${toneClass("review")}`}>
-          Referenced sources are detected and not checked. Governance needs review until referenced
-          source text is retrieved.
-        </div>
-      )}
-
-      {layers.verification && (
-        <div className="space-y-2">
-          {layers.verification.assertion_type && (
-            <DetailRow
-              label="assertion"
-              value={displayStatus(layers.verification.assertion_type)}
-            />
-          )}
-          {safeArray(layers.verification.expected_record_systems).length > 0 && (
-            <DetailRow
-              label="record route"
-              value={safeArray(layers.verification.expected_record_systems).join(", ")}
-            />
-          )}
-          {layers.verification.verification_notes && (
-            <DetailRow
-              label="verification note"
-              value={hideAtomicReferences(
-                layers.verification.verification_notes,
-                hasUnresolvedReferences ? "source reference" : "source-backed result",
-              )}
-            />
-          )}
-        </div>
-      )}
-    </div>
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        {visibleBlocks.map((block, index) => {
+          const active = block.id === selected.id;
+          return (
+            <button
+              key={block.id}
+              type="button"
+              onClick={() => onSelect(block.id)}
+              aria-pressed={active}
+              className={`min-w-52 rounded-lg border p-3 text-left transition-colors ${
+                active
+                  ? "border-primary/50 bg-accent/65"
+                  : "border-border/60 bg-surface-raised/60 hover:border-border"
+              }`}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {block.navLabel || `Passage ${index + 1}`}
+              </div>
+              <div className="mt-2 text-sm font-medium leading-5 text-foreground">
+                {block.label}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">{block.sublabel}</div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-function SourceDocumentViewer({
+function OriginalDocument({
   pages,
   selected,
   onSelect,
@@ -583,20 +383,17 @@ function SourceDocumentViewer({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-            {DOCUMENT_NAVIGATOR_ZONES.source_document_viewer.label}
-          </div>
-          <div className="mt-1 text-sm leading-6 text-muted-foreground">
-            Original source text is shown unchanged. Select a block to inspect attached layers.
-          </div>
+    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
+      <div className="mb-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+          Original document
         </div>
-        {selected.sublabel && <StatusPill label="active" status={selected.sublabel} />}
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Exact document wording. Select any passage to align the meaning document.
+        </p>
       </div>
 
-      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-md bg-surface-raised/70 p-4 pr-2">
+      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-lg bg-surface-raised/70 p-4 pr-2">
         {pages.map((page) => (
           <section
             key={page.label}
@@ -640,231 +437,123 @@ function SourceDocumentViewer({
           </section>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
-function DocumentNavigation({
-  data,
-  blocks,
-  selected,
-  query,
-  onQueryChange,
+function MeaningPassage({
+  translated,
+  active,
   onSelect,
 }: {
-  data: PipelineResponse;
-  blocks: NavigatorBlock[];
-  selected: NavigatorBlock;
-  query: string;
-  onQueryChange: (value: string) => void;
+  translated: TranslatedBlock;
+  active: boolean;
   onSelect: (id: string) => void;
 }) {
-  const normalizedQuery = normalizedText(query);
-  const visibleBlocks = normalizedQuery
-    ? blocks.filter((block) =>
-        normalizedText(`${block.label} ${block.sublabel} ${block.sourceText}`).includes(
-          normalizedQuery,
-        ),
-      )
-    : blocks;
-  const pages = new Set(blocks.map(pageKey)).size;
-  const jurisdiction = data.jurisdiction_context;
+  const paragraphs = splitParagraphs(translated.text);
+  const statusMessage = translated.meaning?.error || translated.meaning?.message || "";
 
   return (
-    <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-        {DOCUMENT_NAVIGATOR_ZONES.document_navigation.label}
-      </div>
-
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <DetailRow label="pages" value={pages} />
-          <DetailRow label="blocks" value={blocks.length} />
-        </div>
-        <DetailRow
-          label="jurisdiction"
-          value={jurisdiction?.user_selected_state || "I don't know"}
-        />
-        <DetailRow label="source mapping" value={sourceMappingStatus(data)} />
-
-        <label className="block text-sm font-medium text-foreground">
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Search document
+    <button
+      type="button"
+      onClick={() => onSelect(translated.block.id)}
+      aria-pressed={active}
+      className={`w-full rounded-md border p-4 text-left transition-colors ${
+        active
+          ? "border-primary/60 bg-accent/50 shadow-[0_0_0_2px_rgba(43,129,157,0.14)]"
+          : "border-border/60 bg-white hover:border-border hover:bg-surface-raised/45"
+      }`}
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          {translated.block.sublabel}
+        </span>
+        {translated.block.sectionId && (
+          <span className="rounded-full border border-border/70 bg-surface-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Section {translated.block.sectionId}
           </span>
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search source text"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </label>
-
-        <div className="space-y-2">
-          {visibleBlocks.map((block, index) => {
-            const active = block.id === selected.id;
-            return (
-              <button
-                key={block.id}
-                type="button"
-                onClick={() => onSelect(block.id)}
-                aria-pressed={active}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                  active
-                    ? "border-primary/45 bg-accent/60"
-                    : "border-border/60 bg-surface-raised/60 hover:border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    {block.navLabel || `Block ${index + 1}`}
-                  </span>
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {displayStatus(block.status)}
-                  </span>
-                </div>
-                <div className="mt-2 break-words text-sm font-semibold leading-5 text-foreground">
-                  {block.label}
-                </div>
-                <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                  {block.sublabel}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        )}
       </div>
-    </aside>
+
+      {paragraphs.length > 0 ? (
+        <div className="space-y-3 text-sm leading-7 text-foreground">
+          {paragraphs.map((paragraph, index) => (
+            <p key={`${translated.block.id}-meaning-${index}`}>{paragraph}</p>
+          ))}
+        </div>
+      ) : (
+        <EmptyState>No plain meaning is attached to this passage yet.</EmptyState>
+      )}
+
+      {statusMessage && (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{statusMessage}</p>
+      )}
+
+      {translated.missingInformation.length > 0 && (
+        <div className="mt-3 rounded-md border border-border/60 bg-surface-raised/60 p-3 text-xs leading-5 text-muted-foreground">
+          Missing context: {translated.missingInformation.join(", ")}
+        </div>
+      )}
+    </button>
   );
 }
 
-function AttachedLayersInspector({
-  data,
+function TranslatedMeaningDocument({
+  translatedBlocks,
   selected,
-  layers,
-  answerLanguage,
+  onSelect,
 }: {
-  data: PipelineResponse;
+  translatedBlocks: TranslatedBlock[];
   selected: NavigatorBlock;
-  layers: SelectedLayerContext;
-  answerLanguage: string;
+  onSelect: (id: string) => void;
 }) {
-  const meaningText = selectedMeaningText(data, layers);
-  const supportItems = selected.support.filter(present).slice(0, 6);
-  const jurisdiction = data.jurisdiction_context;
+  const groups = new Map<string, { label: string; blocks: TranslatedBlock[] }>();
+
+  translatedBlocks.forEach((translated) => {
+    const key = pageKey(translated.block);
+    if (!groups.has(key)) groups.set(key, { label: pageLabel(translated.block), blocks: [] });
+    groups.get(key)?.blocks.push(translated);
+  });
+
+  const pages = Array.from(groups.values()).map((group) => ({
+    ...group,
+    blocks: group.blocks.sort((left, right) => left.block.order - right.block.order),
+  }));
 
   return (
-    <aside className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-        {DOCUMENT_NAVIGATOR_ZONES.attached_layers_panel.label}
+    <section className="rounded-xl border border-border/70 bg-surface p-4 shadow-md lg:min-h-[42rem]">
+      <div className="mb-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+          Translated meaning document
+        </div>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Plain-language meaning for the same passages, kept beside the original.
+        </p>
       </div>
 
-      <div className="space-y-5">
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Status
-          </div>
-          <StatusPanel data={data} selected={selected} layers={layers} />
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Meaning
-          </div>
-          <SelectedMeaning data={data} layers={layers} />
-          {meaningText && (
-            <div className="mt-3">
-              <PlainMeaningTranslation
-                text={meaningText}
-                hasUnresolvedReferences={hasSelectedUnresolvedReferences(selected)}
-                language={answerLanguage}
-                showLanguageControl={false}
-                embedded
-              />
+      <div className="max-h-[74vh] space-y-6 overflow-y-auto rounded-lg bg-surface-raised/70 p-4 pr-2">
+        {pages.map((page) => (
+          <section
+            key={page.label}
+            className="mx-auto max-w-3xl space-y-3 rounded-md border border-border/80 bg-white px-5 py-5 shadow-sm"
+          >
+            <div className="sticky top-0 z-10 border-b border-border/60 bg-white/95 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              {page.label}
             </div>
-          )}
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Source
-          </div>
-          <SourceQuote>{selected.sourceText}</SourceQuote>
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            References
-          </div>
-          <ReferenceList selected={selected} />
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Jurisdiction
-          </div>
-          <div className="space-y-2">
-            <DetailRow
-              label="selected context"
-              value={jurisdiction?.user_selected_state || "I don't know"}
-            />
-            <DetailRow
-              label="detected context"
-              value={jurisdiction?.document_detected_state || "Not returned"}
-            />
-            <DetailRow
-              label="status"
-              value={
-                jurisdiction?.jurisdiction_status
-                  ? displayStatus(jurisdiction.jurisdiction_status)
-                  : "Not returned"
-              }
-            />
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Governance
-          </div>
-          {layers.governanceIssues.length > 0 ? (
-            <div className="space-y-2">
-              {layers.governanceIssues.map((issue, index) => (
-                <DetailRow
-                  key={`selected-governance-${index}`}
-                  label={issue.checkName || "governance issue"}
-                  value={issue.issue || displayStatus(issue.status)}
+            <div className="space-y-3">
+              {page.blocks.map((translated) => (
+                <MeaningPassage
+                  key={translated.block.id}
+                  translated={translated}
+                  active={translated.block.id === selected.id}
+                  onSelect={onSelect}
                 />
               ))}
             </div>
-          ) : (
-            <EmptyState>No governance flags are attached to this selected passage yet.</EmptyState>
-          )}
-        </div>
-
-        {supportItems.length > 0 && (
-          <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Source support
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {supportItems.map((item, index) => (
-                <span
-                  key={`${item}-${index}`}
-                  className="rounded-full border border-border/60 bg-background/30 px-2.5 py-1 text-xs text-muted-foreground"
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className={`rounded-md border p-3 text-sm leading-6 ${toneClass("neutral")}`}>
-          Possible next checks can be generated in {answerLanguageLabel(answerLanguage)} from the
-          selected passage and its attached status. They are not legal advice.
-        </div>
+          </section>
+        ))}
       </div>
-    </aside>
+    </section>
   );
 }
 
@@ -877,6 +566,7 @@ export function DocumentNavigator({
 }) {
   const blocks = useMemo(() => buildDocumentBlocks(data), [data]);
   const pages = useMemo(() => groupBlocksByPage(blocks), [blocks]);
+  const translatedBlocks = useMemo(() => buildTranslatedBlocks(data, blocks), [data, blocks]);
   const [selectedId, setSelectedId] = useState(blocks[0]?.id || "");
   const [query, setQuery] = useState("");
 
@@ -885,42 +575,39 @@ export function DocumentNavigator({
   }, [blocks, selectedId]);
 
   const selected = blocks.find((block) => block.id === selectedId) || blocks[0];
+  void answerLanguage;
 
   if (!selected) {
     return (
-      <div className="space-y-4">
-        <WholeDocumentOverview data={data} itemCount={0} />
+      <section className="space-y-4">
+        <DocumentIntro data={data} itemCount={0} />
         <section className="rounded-xl border border-border/60 bg-surface p-4">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-gold-muted">
-            {DOCUMENT_NAVIGATOR_ZONES.source_document_viewer.label}
+          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+            Original document
           </div>
           <EmptyState>No source document text was returned.</EmptyState>
         </section>
-      </div>
+      </section>
     );
   }
 
-  const layers = resolveSelectedLayers(data, selected);
-
   return (
     <section className="space-y-4">
-      <WholeDocumentOverview data={data} itemCount={blocks.length} />
+      <DocumentIntro data={data} itemCount={blocks.length} />
+      <DocumentMap
+        blocks={blocks}
+        selected={selected}
+        query={query}
+        onQueryChange={setQuery}
+        onSelect={setSelectedId}
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1.55fr)_21rem]">
-        <DocumentNavigation
-          data={data}
-          blocks={blocks}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <OriginalDocument pages={pages} selected={selected} onSelect={setSelectedId} />
+        <TranslatedMeaningDocument
+          translatedBlocks={translatedBlocks}
           selected={selected}
-          query={query}
-          onQueryChange={setQuery}
           onSelect={setSelectedId}
-        />
-        <SourceDocumentViewer pages={pages} selected={selected} onSelect={setSelectedId} />
-        <AttachedLayersInspector
-          data={data}
-          selected={selected}
-          layers={layers}
-          answerLanguage={answerLanguage}
         />
       </div>
     </section>
