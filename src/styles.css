@@ -175,6 +175,34 @@
     white-space: nowrap;
   }
 
+  @media (max-width: 1023px) {
+    div:has(> aside + section + aside) {
+      min-height: auto !important;
+    }
+
+    div:has(> aside + section + aside) > section {
+      order: 1;
+      min-height: auto;
+      overflow: visible;
+    }
+
+    div:has(> aside + section + aside) > aside:last-child {
+      order: 2;
+      min-height: auto;
+      overflow: visible;
+    }
+
+    div:has(> aside + section + aside) > aside:first-child {
+      order: 3;
+      min-height: auto;
+      overflow: visible;
+    }
+
+    div:has(> aside + section + aside) > section > div:nth-child(2) {
+      overflow: visible;
+    }
+  }
+
   @media (max-width: 640px) {
     div:has(> button[aria-pressed]) {
       flex-wrap: nowrap !important;

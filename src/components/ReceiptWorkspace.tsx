@@ -21,6 +21,8 @@ export type { PipelineResponse } from "../types/pipeline";
 
 type ResultTab = "meaning" | "origin" | "verification" | "governance" | "issues";
 
+const WORKSPACE_TABS = ["Document", "Ask", "Compare", "References", "Timeline"] as const;
+
 function TabButton({
   tab,
   active,
@@ -75,21 +77,40 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
     : (data.governance?.status ?? data.output?.governance_status);
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="mx-auto max-w-[92rem] space-y-4 px-4 py-4 pb-12">
-        <section className="rounded-lg border border-border/70 bg-surface p-4 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+    <div className="bg-background md:h-full md:overflow-y-auto">
+      <div className="mx-auto max-w-[96rem] space-y-4 px-4 py-4 pb-12">
+        <section className="rounded-lg border border-border/70 bg-surface shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+            <div className="min-w-0">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-                Document workspace
+                Tetherpoint
               </div>
-              <h2 className="mt-2 text-2xl font-semibold text-foreground">Document Navigator</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Keep the document in the center. Select a page or section to see attached meaning,
-                source support, status, and review notes beside it.
-              </p>
+              <h2 className="mt-1 truncate text-xl font-semibold text-foreground">
+                Document Navigator
+              </h2>
             </div>
-            <div className="space-y-3">
+
+            <nav className="flex min-w-0 flex-1 flex-wrap justify-center gap-1 px-2">
+              {WORKSPACE_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  aria-pressed={tab === "Document"}
+                  className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                    tab === "Document"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                  {tab !== "Document" && (
+                    <span className="ml-2 text-[10px] font-medium text-muted-foreground">soon</span>
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            <div className="flex items-center gap-2">
               <label className="block min-w-56 text-sm font-medium text-foreground">
                 <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Answer language
@@ -106,11 +127,18 @@ export function ReceiptWorkspace({ data }: { data: PipelineResponse }) {
                   ))}
                 </select>
               </label>
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                <StatusPill label="meaning" status={data.meaning?.status} />
-                <StatusPill label="governance" status={governanceStatus} />
-              </div>
               <ResultActions data={data} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              Keep the document in the center. Select a page or section to see attached meaning,
+              source support, jurisdiction, local-law review status, and next checks beside it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <StatusPill label="meaning" status={data.meaning?.status} />
+              <StatusPill label="governance" status={governanceStatus} />
             </div>
           </div>
         </section>
