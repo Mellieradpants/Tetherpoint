@@ -12,6 +12,8 @@ from app.rule_units.handler import process_rule_units
 from app.rule_units_v2.handler import process_rule_units_v2_candidates
 from app.schemas.models import (
     AnalyzeRequest,
+    DocumentPacketBlockMetadata,
+    DocumentPacketMetadata,
     DocumentFirstV2Result,
     GovernanceCheckResult,
     GovernanceGateResult,
@@ -341,6 +343,42 @@ def _empty_legacy_response(request: AnalyzeRequest, document_first_v2: DocumentF
     )
 
 
+def _document_packet_metadata(packet) -> DocumentPacketMetadata:
+    block_metadata: list[DocumentPacketBlockMetadata] = []
+    extraction_warnings = list(packet.extraction_warnings)
+
+    for page in packet.pages:
+        for warning in page.extraction_warnings:
+            _append_unique(extraction_warnings, warning)
+
+        for block in page.blocks:
+            block_warnings = list(block.extraction_warnings)
+            for warning in block_warnings:
+                _append_unique(extraction_warnings, warning)
+
+            block_metadata.append(
+                DocumentPacketBlockMetadata(
+                    block_id=block.block_id,
+                    page_number=block.page_number,
+                    title=packet.title,
+                    source_name=packet.source_name,
+                    source_uri=packet.source_uri,
+                    source_path=block.source_anchor.source_path,
+                    extraction_warnings=block_warnings,
+                )
+            )
+
+    return DocumentPacketMetadata(
+        document_id=packet.document_id,
+        title=packet.title,
+        source_name=packet.source_name,
+        source_uri=packet.source_uri,
+        source_hash=packet.source_hash,
+        extraction_warnings=extraction_warnings,
+        block_metadata=block_metadata,
+    )
+
+
 def _run_document_packet_pipeline(request: AnalyzeRequest) -> PipelineResponse:
     packet = request.document_packet
     if packet is None:
@@ -365,6 +403,7 @@ def _run_document_packet_pipeline(request: AnalyzeRequest) -> PipelineResponse:
         request,
         DocumentFirstV2Result(
             status="executed",
+            document_metadata=_document_packet_metadata(packet),
             document_structure=document_structure,
             semantic_structure=semantic_structure,
             selection_v2=selection_v2,

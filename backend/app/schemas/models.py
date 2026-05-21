@@ -415,8 +415,29 @@ class HumanReviewHandoff(BaseModel):
     can_proceed: bool = False
 
 
+class DocumentPacketBlockMetadata(BaseModel):
+    block_id: str
+    page_number: int
+    title: Optional[str] = None
+    source_name: Optional[str] = None
+    source_uri: Optional[str] = None
+    source_path: Optional[str] = None
+    extraction_warnings: list[str] = Field(default_factory=list)
+
+
+class DocumentPacketMetadata(BaseModel):
+    document_id: str
+    title: Optional[str] = None
+    source_name: Optional[str] = None
+    source_uri: Optional[str] = None
+    source_hash: Optional[str] = None
+    extraction_warnings: list[str] = Field(default_factory=list)
+    block_metadata: list[DocumentPacketBlockMetadata] = Field(default_factory=list)
+
+
 class DocumentFirstV2Result(BaseModel):
     status: Literal["executed", "skipped", "error"]
+    document_metadata: Optional[DocumentPacketMetadata] = None
     document_structure: Optional[DocumentStructureResult] = None
     semantic_structure: Optional[SemanticStructureResult] = None
     selection_v2: Optional[SelectionV2Result] = None

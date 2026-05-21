@@ -232,8 +232,29 @@ export interface DocumentFirstRuleUnitCandidate {
   assembly_notes?: string[] | null;
 }
 
+export interface DocumentFirstBlockMetadata {
+  block_id?: string | null;
+  page_number?: number | null;
+  title?: string | null;
+  source_name?: string | null;
+  source_uri?: string | null;
+  source_path?: string | null;
+  extraction_warnings?: string[] | null;
+}
+
+export interface DocumentFirstDocumentMetadata {
+  document_id?: string | null;
+  title?: string | null;
+  source_name?: string | null;
+  source_uri?: string | null;
+  source_hash?: string | null;
+  extraction_warnings?: string[] | null;
+  block_metadata?: DocumentFirstBlockMetadata[] | null;
+}
+
 export interface DocumentFirstV2Result {
   status?: "executed" | "skipped" | "error" | string | null;
+  document_metadata?: DocumentFirstDocumentMetadata | null;
   document_structure?: {
     document_id?: string | null;
     nodes?: DocumentFirstStructureNode[] | null;
